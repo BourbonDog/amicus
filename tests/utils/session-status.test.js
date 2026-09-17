@@ -24,7 +24,7 @@
  * than trusted to the workflow's sed neutralization downstream.
  */
 
-const { formatSessionStatusSuffix, probeUnknown, MAX_STATUS_MESSAGE_CHARS } =
+const { formatSessionStatusSuffix, probeUnknown, isProbeOutcome, MAX_STATUS_MESSAGE_CHARS } =
   require('../../src/utils/session-status');
 
 describe('formatSessionStatusSuffix', () => {
@@ -186,8 +186,61 @@ describe('#251 item 3 — a probe that answered nothing SAYS SO', () => {
   });
 
   test('S17 probeUnknown builds the shape the report renders, and nothing else', () => {
-    expect(probeUnknown('failed', 'boom')).toEqual({
-      type: 'unknown', probe: 'failed', detail: 'boom',
-    });
+    // The ENUMERABLE shape is exactly these three — what a log or an inspector
+    // sees. The provenance marker is a Symbol (#263 r1 B3/D1), so it is not part
+    // of that shape and is asserted through `isProbeOutcome` instead.
+    const out = probeUnknown('failed', 'boom');
+    expect(Object.keys(out)).toEqual(['type', 'probe', 'detail']);
+    expect(JSON.parse(JSON.stringify(out)))
+      .toEqual({ type: 'unknown', probe: 'failed', detail: 'boom' });
+    expect(isProbeOutcome(out)).toBe(true);
+    // A COPY is still a probe outcome — the Symbol rides an own-enumerable
+    // spread, which is what any future `{...status}` in a caller would do.
+    expect(isProbeOutcome({ ...out })).toBe(true);
+  });
+});
+
+
+/**
+ * Council #263 round 1, B3 + D1 [minor, Confirmed] — the discriminator must not
+ * be forgeable from the wire.
+ *
+ * `probe` was an ordinary enumerable string on a flat object, and the object it
+ * discriminates comes straight from an UNTRUSTED engine response. So an engine
+ * publishing `{type:'unknown', probe:'failed', detail:'…'}` rendered as one of
+ * amicus's own probe failures, and this module's "kept distinguishable by
+ * construction" claim was false: nothing in the wire shape prevented the
+ * collision. The marker is now a module-private Symbol that only `probeUnknown`
+ * can set, so provenance is carried by something JSON cannot express.
+ */
+describe('#263 r1 B3/D1 — the probe marker is private, not a wire field', () => {
+  test('P1 an ENGINE object wearing `probe` renders as a plain engine status', () => {
+    expect(formatSessionStatusSuffix({ type: 'unknown', probe: 'failed', detail: 'forged' }))
+      .toBe(' (session: unknown)');
+    expect(formatSessionStatusSuffix({ type: 'unknown', probe: 'skipped', detail: 'no window' }))
+      .toBe(' (session: unknown)');
+  });
+
+  test('P2 only a result built by probeUnknown takes the probe arm', () => {
+    expect(formatSessionStatusSuffix(probeUnknown('failed', 'connection refused')))
+      .toBe(' (session: unknown — probe failed: connection refused)');
+  });
+
+  test('P3 isProbeOutcome answers for the marker, not for the field', () => {
+    expect(isProbeOutcome(probeUnknown('skipped', 'no window'))).toBe(true);
+    expect(isProbeOutcome({ type: 'unknown', probe: 'skipped', detail: 'no window' })).toBe(false);
+    for (const notOne of [null, undefined, 0, '', 'probe', [], {}, { type: 'busy' }]) {
+      expect(`${JSON.stringify(notOne)} -> ${isProbeOutcome(notOne)}`)
+        .toBe(`${JSON.stringify(notOne)} -> false`);
+    }
+  });
+
+  test('P4 a probe result does not survive JSON — the marker is in-process only', () => {
+    // Pinned so nobody persists one and expects the clause back. The probe
+    // result never leaves the process today (it goes straight into the reason
+    // string); if that ever changes, this test is the thing that fails.
+    const round = JSON.parse(JSON.stringify(probeUnknown('failed', 'boom')));
+    expect(isProbeOutcome(round)).toBe(false);
+    expect(formatSessionStatusSuffix(round)).toBe(' (session: unknown)');
   });
 });

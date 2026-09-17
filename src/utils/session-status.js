@@ -38,11 +38,21 @@
  * read timed out. Each points at a different fix; all three looked identical.
  * `probeUnknown()` below builds the one shape that says so, and it renders as
  * `unknown` — NEVER `idle`/`busy`/`retry`. A probe that timed out on a loaded
- * engine is not evidence about the session (#219); the clause reports the
- * PROBE's outcome and is marked as such by the `probe` field, which no engine
- * status carries. An engine that one day publishes a real `{type:'unknown'}`
- * arm still renders as the plain identifier — the opposite meaning, kept
- * distinguishable by construction.
+ * engine is not evidence about the session (#219).
+ *
+ * ⚠️ HOW PROVENANCE IS CARRIED (council #263 r1, B3 + D1). It was the `probe`
+ * FIELD — an ordinary enumerable string on a flat object whose siblings come
+ * straight off an untrusted engine response. An engine publishing
+ * `{type:'unknown', probe:'failed', detail:'…'}` therefore rendered as one of
+ * amicus's own probe failures, and the "distinguishable by construction" claim
+ * was false: nothing in the wire shape stopped the collision. The marker is now
+ * the module-private Symbol below, which only `probeUnknown` can set and no
+ * JSON document can express. An engine `{type:'unknown'}` — with or without a
+ * `probe` field — renders as the plain identifier, the opposite meaning.
+ * ⚠️ A probe outcome therefore does NOT survive serialization. It never leaves
+ * the process today (it goes straight into the reason string); if it ever must,
+ * the marker has to become something a document can carry, and `isProbeOutcome`
+ * is the one place to change.
  *
  * ⚠️ `message` is UNTRUSTED third-party text: it originates at the provider,
  * lands in run.json, and on CI is rendered into a sticky PR comment. It goes
@@ -57,18 +67,58 @@ const { collapseExcerpt } = require('./text-sanitize');
 
 /** Short cap: this is a clause on a one-line death report, not a log dump. */
 const MAX_STATUS_MESSAGE_CHARS = 200;
+/** An identifier's cap — a `type` or a probe arm, not a sentence. One home for
+ *  the number so the render guard and `isRenderableStatus` cannot disagree. */
+const MAX_STATUS_TYPE_CHARS = 40;
 
 /**
- * #251 item 3: the PROBE's own outcome, in the shape the clause renders.
- * The `probe` field is the marker that separates "we could not read the
- * session" from "the engine said X" — nothing on the wire carries it, so the
- * two can never be confused for one another.
+ * Council #263 r1 (B3/D1): the provenance marker. A Symbol, not a field — the
+ * object it distinguishes is UNTRUSTED engine output, and a string field on it
+ * is forgeable by whatever the engine happens to publish. Module-private: only
+ * `probeUnknown` sets it, and `isProbeOutcome` is the only reader.
+ */
+const PROBE_OUTCOME = Symbol('amicus.probeOutcome');
+
+/**
+ * #251 item 3: the PROBE's own outcome, in the shape the clause renders —
+ * marked as amicus's own by `PROBE_OUTCOME`, so it can never be confused with
+ * "the engine said X".
  * @param {'skipped'|'failed'|'no-status'} probe - which of the three happened
  * @param {*} detail - why, verbatim; sanitized at RENDER time, never here
  * @returns {{type: 'unknown', probe: string, detail: *}}
  */
 function probeUnknown(probe, detail) {
-  return { type: 'unknown', probe, detail };
+  return { [PROBE_OUTCOME]: true, type: 'unknown', probe, detail };
+}
+
+/**
+ * Did amicus build this, or did the engine? Exported so a caller (and a test)
+ * can ask without reaching for the Symbol.
+ * @param {*} status
+ * @returns {boolean}
+ */
+function isProbeOutcome(status) {
+  return !!status && typeof status === 'object' && status[PROBE_OUTCOME] === true;
+}
+
+/**
+ * Council #263 r1 (B2/D2): can this object be rendered as an ENGINE observation?
+ *
+ * B2: a `type` that is a string but renders to NOTHING — `''`, whitespace, a
+ * lone control char — passed every guard the probe had and then rendered `''`:
+ * the exact silence #251 item 3 exists to remove, reached through another door.
+ * D2: the death-report unwrap took the top-level object whenever `raw.type` was
+ * any string INCLUDING `''`, where the poll loop takes it only on a TRUTHY
+ * `.type` — so `{type:'', [sessionId]:{type:'busy'}}` dropped a real answer.
+ * One predicate now answers both: renderable = an object whose `type` is a
+ * string that survives `collapseExcerpt`. It is what the render arms below
+ * require, so a caller cannot believe a status is usable when they are not.
+ * @param {*} status
+ * @returns {boolean}
+ */
+function isRenderableStatus(status) {
+  return !!status && typeof status === 'object' && typeof status.type === 'string'
+    && collapseExcerpt(status.type, MAX_STATUS_TYPE_CHARS) !== '';
 }
 
 /**
@@ -87,13 +137,14 @@ function formatSessionStatusSuffix(status) {
   // normalisation decide the arm — anything collapsing to 'retry' took the retry
   // path — so a future SDK identifier could be misclassified by a function whose
   // job is display, not semantics. Only the exact published identifier routes.
-  const type = collapseExcerpt(status.type, 40);
+  const type = collapseExcerpt(status.type, MAX_STATUS_TYPE_CHARS);
   if (!type) { return ''; }
   // #251 item 3, BEFORE the generic arm: a probe result reports on the PROBE,
   // so it must not render as the bare identifier an engine observation renders
-  // as. Gated on the `probe` marker, not on the type alone — see the docblock.
-  if (status.type === 'unknown' && typeof status.probe === 'string') {
-    const probe = collapseExcerpt(status.probe, 40);
+  // as. Gated on the private marker (#263 r1 B3/D1), never on a wire field —
+  // see the docblock; an engine object carrying `probe` falls straight through.
+  if (isProbeOutcome(status) && status.type === 'unknown') {
+    const probe = collapseExcerpt(status.probe, MAX_STATUS_TYPE_CHARS);
     // A probe arm that collapses to nothing would render ` — probe : …`, which
     // names no arm at all; fall through to the plain identifier rather than emit
     // a malformed clause. Same discipline as the empty-`type` guard above.
@@ -113,4 +164,7 @@ function formatSessionStatusSuffix(status) {
   return ` (session: retry${attempt}${raw ? ` — ${raw}` : ''})`;
 }
 
-module.exports = { formatSessionStatusSuffix, probeUnknown, MAX_STATUS_MESSAGE_CHARS };
+module.exports = {
+  formatSessionStatusSuffix, probeUnknown, isProbeOutcome, isRenderableStatus,
+  MAX_STATUS_MESSAGE_CHARS, MAX_STATUS_TYPE_CHARS,
+};

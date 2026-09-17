@@ -28,13 +28,18 @@ All notable changes to Amicus are documented here. Format follows
   <detail>)`. The type is always `unknown`, never `idle`/`busy` — a probe that timed out on a
   loaded engine is not an observation about the session (#219) — so an artifact now separates
   "the engine reported X" from "nobody asked". A session-keyed status answer is unwrapped the
-  same way the poll-loop probe already unwraps it, so that shape is no longer reported as
-  "the engine returned no status". (#251 item 3, #202)
-- **The `thin-cross-review` note names how many judges died vs answered unusably** instead of
-  always claiming "the other judges produced no parseable Stage-2 block" — on PR #254 round 1
-  all three missing judges had died at the backstop and none had returned an unparseable block,
-  which pointed the reader of `run.json` at the wrong fix. A bench too small to cross-review at
-  all now says that, rather than blaming judges that never existed. (#202)
+  same way the poll-loop probe already unwraps it — on RENDERABILITY, so an empty top-level
+  `type` can no longer hide a real keyed answer — and the `no-status` detail names which of the
+  three shapes came back (empty status / unrenderable status type / a map with no entry for this
+  session). The clause's provenance marker is a private Symbol, so an engine status that happens
+  to carry a `probe` field renders as the engine status it is. (#251 item 3, #202)
+- **The `thin-cross-review` note counts judges that died, answered empty, answered unusably and
+  predate the marker** instead of always claiming "the other judges produced no parseable Stage-2
+  block" — on PR #254 round 1 all three missing judges had died at the backstop and none had
+  returned an unparseable block, which pointed the reader of `run.json` at the wrong fix. A judge
+  that ran to completion and said nothing is no longer reported as a dead process, a judge result
+  from a pre-#251 checkpoint is reported as outcome-unknown rather than as a claim, and a bench
+  too small to cross-review at all says that rather than blaming judges that never existed. (#202)
 
 ## [4.11.0] - 2026-09-16
 

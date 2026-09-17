@@ -27,25 +27,43 @@ const MIN_CROSS_REVIEW_JUDGES = 2;
 /**
  * Why fewer than two judges came back usable, in the judges' own terms.
  *
- * ⚠️ `died` is STAMPED by `run-stage2.js` from its own `legDied` predicate and
- * never re-derived here. That predicate is `!(leg.status === 'complete' &&
- * leg.summary)` (`run-stage2.js:181`) — died = NOT (complete WITH a non-empty
- * summary), so a leg that completes with an EMPTY summary died too. It is the
- * one this codebase already shares between the DEAD_LEG classification and the
- * `stage2-judge` degrade; spelling it a third time is how the three
- * would drift into disagreeing about which judges died. An entry that carries
- * no `died` flag therefore counts as "answered, unusably" — the conservative
- * reading, and the only claim a bare `{ok:false}` supports.
- * @param {Array<{ok: boolean, died?: boolean}>} judgeResults
+ * ⚠️ `died` and `emptyAnswer` are STAMPED by `run-stage2.js` beside its own
+ * `legDied` predicate (`run-stage2.js:181`) and never re-derived here. That
+ * predicate is `!(leg.status === 'complete' && leg.summary)` — died = NOT
+ * (complete WITH a non-empty summary) — and it is the one this codebase already
+ * shares between the DEAD_LEG classification and the `stage2-judge` degrade;
+ * spelling it a third time is how the three would drift into disagreeing about
+ * which judges died.
+ *
+ * FOUR buckets, not two (council #263 r1, D3 + A1):
+ *   · died        — the leg never came back at all.
+ *   · emptyAnswer — it ran to 'complete' and said NOTHING. `legDied` is true for
+ *                   this too, but "died before answering" points a CI reader at
+ *                   a dead process when the process finished (D3).
+ *   · unparseable — it answered, unusably.
+ *   · pre-marker  — `died` is ABSENT: a Stage-2 checkpoint written by a build
+ *                   older than #251 and resumed by this one. Absent is not
+ *                   false; counting it as "no parseable block" would be a claim
+ *                   about a judge that may well have died — the same wrong-cause
+ *                   defect this note exists to remove (A1). It gets a bucket
+ *                   that says only what is known: nothing.
+ * @param {Array<{ok: boolean, died?: boolean, emptyAnswer?: boolean}>} judgeResults
  * @returns {string}
  */
 function thinCrossReviewWhy(judgeResults) {
   const failed = judgeResults.filter(j => !j.ok);
-  const died = failed.filter(j => j.died === true).length;
-  const unparseable = failed.length - died;
+  const preMarker = failed.filter(j => j.died === undefined).length;
+  const empty = failed.filter(j => j.died === true && j.emptyAnswer === true).length;
+  const died = failed.filter(j => j.died === true).length - empty;
+  const unparseable = failed.filter(j => j.died === false).length;
   const clauses = [];
   if (died > 0) { clauses.push(`${died} judge leg${died === 1 ? '' : 's'} died before answering`); }
+  if (empty > 0) { clauses.push(`${empty} returned an empty answer`); }
   if (unparseable > 0) { clauses.push(`${unparseable} returned no parseable Stage-2 block`); }
+  if (preMarker > 0) {
+    clauses.push(`${preMarker} judge result${preMarker === 1 ? '' : 's'} `
+      + `predate${preMarker === 1 ? 's' : ''} the died marker (outcome unknown)`);
+  }
   // Neither: every judge that ran came back usable and there were simply not
   // enough of them. The old sentence asserted a failure of judges that never
   // existed — a one-judge bench is a BENCH fact, not a judging fact.

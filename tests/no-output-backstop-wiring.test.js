@@ -55,7 +55,7 @@ jest.mock('../src/opencode-client', () => ({
 const mockLogger = { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() };
 jest.mock('../src/utils/logger', () => ({ logger: mockLogger }));
 
-const { runHeadless, formatNoOutputBackstopReason } = require('../src/headless');
+const { runHeadless, formatNoOutputBackstopReason, sessionStatusSafe } = require('../src/headless');
 const { statusFromResult } = require('../src/utils/result-schema');
 
 const MODEL = 'openrouter/qwen/qwen3.7-max';
@@ -176,9 +176,9 @@ describe('runHeadless no-output backstop wiring', () => {
  * alongside result.error = 'NO_OUTPUT_BACKSTOP: ...'. That mattered because
  * result-schema.js :: statusFromResult checks `timedOut` BEFORE `error`,
  * so a backstop-killed leg read as an ordinary 'timeout'.
- * NO LONGER REACHABLE: headless.js:1491 now also requires `!backstopFired`
- * and headless.js:1509 requires `backstopFired`, so the two guards are
- * mutually exclusive by construction — see headless.js:1477-1490 for the
+ * NO LONGER REACHABLE: headless.js:1522 now also requires `!backstopFired`
+ * and headless.js:1540 requires `backstopFired`, so the two guards are
+ * mutually exclusive by construction — see headless.js:1508-1521 for the
  * race they close. The test below pins it: exactly one abort, never both.
  *
  * ⚠️ These three citations were RE-DERIVED a THIRD time, against this tree
@@ -1031,7 +1031,7 @@ describe('v4.9 W13 Task A: the TTFT probe', () => {
    * beside `sessionId`/`watchdog`, outside that try, and the catch-all return
    * carries it emit-when-set like the two sibling returns.
    *
-   * The throw seam is `server.close()` on the success path (src/headless.js:1699
+   * The throw seam is `server.close()` on the success path (src/headless.js:1730
    * — the one UNGUARDED close, deliberately so per v4.4.1 M2's note on the
    * guarded one in the handler; RE-DERIVED #251 item 3 — 1343 had rotted onto a
    * `stuck()` comment): the leg polls, streams 'hello', its message
@@ -1285,7 +1285,60 @@ describe('#202 — a zero-output death names the engine session status', () => {
     mockGetSessionStatus.mockResolvedValue({});
     const result = await run('sstatus10');
     expect(result.error).toBe(
-      `${base()} (session: unknown — probe no-status: the engine returned no status)`);
+      `${base()} (session: unknown — probe no-status: the engine returned an empty status)`);
+  }, 20000);
+
+  /**
+   * Council #263 round 1, B2 [major] + D2 [minor] + A2 [minor] — the residual
+   * silences and the one fixed detail.
+   *
+   * B2: a `type` that IS a string but renders to nothing ('', whitespace, a
+   * control char) passed every guard and then rendered '' — the exact silence
+   * this PR exists to remove, reachable again through a different door.
+   * D2: the unwrap took the top level whenever `raw.type` was ANY string, where
+   * the poll loop takes it only on a TRUTHY `.type`. So a real keyed answer
+   * hiding behind an empty top-level `type` was dropped on the floor.
+   * A2: "the engine returned no status" was one sentence for two different wire
+   * shapes, and they point at different things.
+   */
+  test('S-W13 an EMPTY string type is unrenderable, and says so', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({ type: '' });
+    const result = await run('sstatus13');
+    expect(result.error).toBe(`${base()} (session: unknown — probe no-status: `
+      + 'the engine returned an unrenderable status type)');
+  }, 20000);
+
+  test('S-W14 a whitespace/control-char type is the same fact', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({ type: ' 	  ' });
+    const result = await run('sstatus14');
+    expect(result.error).toBe(`${base()} (session: unknown — probe no-status: `
+      + 'the engine returned an unrenderable status type)');
+  }, 20000);
+
+  test('S-W15 an empty top-level type no longer HIDES a keyed answer (D2)', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockImplementation(async (_c, sessionId) => (
+      { type: '', [sessionId]: { type: 'busy' } }));
+    const result = await run('sstatus15');
+    expect(result.error).toBe(`${base()} (session: busy)`);
+  }, 20000);
+
+  test('S-W16 a status map with no entry for THIS session is its own detail (A2)', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({ ses_someone_else: { type: 'busy' } });
+    const result = await run('sstatus16');
+    expect(result.error).toBe(`${base()} (session: unknown — probe no-status: `
+      + 'the engine returned a status map with no entry for this session)');
+  }, 20000);
+
+  test('S-W17 an ENGINE status wearing `probe` is reported as the engine status (B3/D1)', async () => {
+    // The wire cannot forge amicus's own provenance marker.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({ type: 'unknown', probe: 'failed', detail: 'forged' });
+    const result = await run('sstatus17');
+    expect(result.error).toBe(`${base()} (session: unknown)`);
   }, 20000);
 
   test('S-W11 a SESSION-KEYED status is unwrapped, exactly as the poll loop unwraps it', async () => {
@@ -1301,22 +1354,29 @@ describe('#202 — a zero-output death names the engine session status', () => {
     expect(result.error).toBe(`${base()} (session: busy)`);
   }, 20000);
 
-  test('S-W12 no status READER at all is its own skip reason', async () => {
-    // A client module without `getSessionStatus` (an older or partial engine
-    // client) never asked — and the report says so rather than looking like an
-    // engine that answered nothing. runHeadless destructures the reader from
-    // the module at CALL time, so removing it here reaches the real branch.
-    const clientModule = require('../src/opencode-client');
-    const saved = clientModule.getSessionStatus;
-    clientModule.getSessionStatus = undefined;
-    try {
-      mockGetMessages.mockResolvedValue([]);
-      const result = await run('sstatus12');
-      expect(result.error).toBe(`${base()} (session: unknown — probe skipped: no status reader)`);
-    } finally {
-      clientModule.getSessionStatus = saved;
+  test('S-W12 no status READER at all is its own skip reason', () => {
+    // #263 r1 A3 [nit, solid]: this used to delete `getSessionStatus` off the
+    // REAL `opencode-client` export and restore it in a finally — a global
+    // mutation of a module every other test in this file shares, which survives
+    // as a landmine if the restore is ever skipped (an early return, a throw
+    // outside the try). The reader is already a PARAMETER of the helper for
+    // exactly this reason, so the branch is reached by injection instead.
+    return expect(sessionStatusSafe(undefined, {}, 'ses_parent', [], 50))
+      .resolves.toEqual(expect.objectContaining({
+        type: 'unknown', probe: 'skipped', detail: 'no status reader' }));
+  });
+
+  test('S-W12b a non-function reader is the same skip, not a crash', async () => {
+    for (const notAReader of [null, 0, 'getSessionStatus', {}]) {
+      await expect(sessionStatusSafe(notAReader, {}, 'ses_parent', [], 50))
+        .resolves.toEqual(expect.objectContaining({ probe: 'skipped', detail: 'no status reader' }));
     }
-  }, 20000);
+  });
+
+  test('S-W12c no session id is its own skip reason', async () => {
+    await expect(sessionStatusSafe(async () => ({ type: 'busy' }), {}, '', [], 50))
+      .resolves.toEqual(expect.objectContaining({ probe: 'skipped', detail: 'no session id' }));
+  });
 
   test('S-W6 the PRE-SEND firing site gets the clause too (it dies upstream of the poll loop)', async () => {
     mockSendPromptAsync.mockImplementation(() => new Promise(() => {}));

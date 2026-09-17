@@ -26,7 +26,8 @@ const { engineErrorForSession } = require('./utils/engine-log');
 // v4.9 W10 (#133 piece 3): the standing engine version-skew record, if any.
 const { currentEngineSkew, formatSkewSuffix } = require('./utils/engine-skew');
 // #202: the session-status clause on a death report (see utils/session-status.js).
-const { formatSessionStatusSuffix, probeUnknown } = require('./utils/session-status');
+const { formatSessionStatusSuffix, probeUnknown, isRenderableStatus } =
+  require('./utils/session-status');
 // v4.9 W13 Task A (PR #207 round 3, B3): the one honesty predicate every ttftMs
 // emit gate shares — see src/utils/ttft.js for why `typeof` was not it.
 const { isMeasuredTtft } = require('./utils/ttft');
@@ -101,7 +102,7 @@ const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 3000
 const STATUS_PROBE_MS = 5000;
 /**
  * v4.4 B1 — bounded post-loop usage reconciliation. The fold-marker fast path
- * (headless.js:1208) and the SDK-idle break (headless.js:1293) exit
+ * (headless.js:1239) and the SDK-idle break (headless.js:1324) exit
  * WITHOUT requiring `info.time.completed`, but OpenCode stamps
  * `info.tokens`/`info.cost` at message finalization — so those
  * exits can win the race against the provider's usage payload and report a leg
@@ -300,6 +301,34 @@ function engineErrorExcerptSafe(sessionId, engineLogOptions) {
 }
 
 /**
+ * Council #263 r1 (A2 + B2): WHICH "the engine said nothing usable" happened.
+ *
+ * One fixed sentence — 'the engine returned no status' — covered three shapes
+ * a reader has to tell apart: an answer with nothing in it (`getSessionStatus`
+ * returns `result.data || {}`, so `{}` is a real wire shape), a status object
+ * whose `type` cannot be rendered (B2: `''`, whitespace, a control char — or a
+ * non-string), and a session-keyed map that simply has no entry for this leg's
+ * session (A2: the engine answered about other sessions, which is a different
+ * thing from answering nothing). Each points somewhere else.
+ * @param {*} raw - whatever the reader resolved
+ * @param {string} sessionId
+ * @returns {string}
+ */
+function noStatusDetail(raw, sessionId) {
+  // An own `type` key at either level means the engine DID describe this
+  // session — amicus just cannot render what it said.
+  const describesStatus = (v) => !!v && typeof v === 'object'
+    && Object.prototype.hasOwnProperty.call(v, 'type');
+  if (describesStatus(raw) || describesStatus(raw && raw[sessionId])) {
+    return 'the engine returned an unrenderable status type';
+  }
+  if (!raw || typeof raw !== 'object' || Object.keys(raw).length === 0) {
+    return 'the engine returned an empty status';
+  }
+  return 'the engine returned a status map with no entry for this session';
+}
+
+/**
  * #202: read the engine's session status FOR A DEATH REPORT — best-effort and
  * bounded, with the same "never become the failure it reports on" discipline as
  * `engineErrorExcerptSafe` above, and one more constraint that read does not
@@ -334,20 +363,22 @@ async function sessionStatusSafe(readStatus, client, sessionId, dirArgs, ms) {
   try {
     const raw = await withTimeout(
       readStatus(client, sessionId, ...(dirArgs || [])), ms, 'getSessionStatus(death-report)');
-    // The same READ the poll-loop probe does at headless.js:1264, with a
-    // STRICTER type check: that site takes `statusData` whenever `.type` is
-    // truthy, this one only when it is a STRING. A truthy non-string `type`
-    // therefore diverges — deliberately, because the renderer drops a
-    // non-string type and would render '' for it. The engine answers either
-    // with the status or with a map keyed by session id; without the unwrap a
-    // keyed answer would be reported as "the engine returned no status" — a
-    // false statement about the engine, which is the defect class this change
-    // exists to remove, only inverted.
-    const status = (raw && typeof raw.type === 'string') ? raw : (raw && raw[sessionId]);
-    if (!status || typeof status !== 'object' || typeof status.type !== 'string') {
-      // `getSessionStatus` returns `result.data || {}` (opencode-client.js), so
-      // an empty answer is a real wire shape and a DIFFERENT fact from a throw.
-      return probeUnknown('no-status', 'the engine returned no status');
+    // The same READ the poll-loop probe does at headless.js:1295 — the
+    // engine answers either with the status or with a map keyed by session id,
+    // and without the unwrap a keyed answer would be reported as "the engine
+    // returned no status", a false statement about the engine.
+    //
+    // ⚠️ The test is RENDERABILITY, not "has a string type" (council #263 r1,
+    // D2). It was the latter, which accepted `type: ''` — so a real keyed
+    // answer hiding behind an empty top-level `type` was taken and then rendered
+    // nothing. `isRenderableStatus` requires a `type` that SURVIVES the
+    // sanitizer, which is exactly what the render arms require, so this site
+    // cannot believe a status is usable when the renderer will not use it. It
+    // is therefore no longer merely stricter than the poll loop's truthiness
+    // test on `.type` — it is the renderer's own bar, applied here.
+    const status = isRenderableStatus(raw) ? raw : (raw && raw[sessionId]);
+    if (!isRenderableStatus(status)) {
+      return probeUnknown('no-status', noStatusDetail(raw, sessionId));
     }
     return status;
   } catch (err) {
@@ -772,7 +803,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     //
     // #202 (piece 4): the closure is now ASYNC, because the third clause costs
     // one bounded HTTP call. The engine's session status is asked for at
-    // headless.js:1264 only when `mirror.output.length > 0` — a gate a
+    // headless.js:1295 only when `mirror.output.length > 0` — a gate a
     // zero-output leg never satisfies — so the leg that most needs diagnosing
     // was the only one that never asked, and every silent death reported a
     // window with no cause.
@@ -2056,6 +2087,10 @@ module.exports = {
   findTrailingFoldMarker,
   formatFoldOutput,
   formatNoOutputBackstopReason,
+  // #263 r1 A3: exported so the probe's branches are reached by INJECTING the
+  // reader (its first parameter), instead of a test mutating the real
+  // `opencode-client` export out from under every other test in the file.
+  sessionStatusSafe,
   readOutputBudgetSafe,
   DEFAULT_TIMEOUT,
   FOLD_MARKER,

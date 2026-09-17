@@ -204,15 +204,60 @@ describe('thin cross-review channel', () => {
    * wrong cause — the two have different fixes (a window/retry vs the judge
    * output contract).
    */
+  const died = { ok: false, died: true, emptyAnswer: false };
+  const emptyAnswer = { ok: false, died: true, emptyAnswer: true };
+  const unparseable = { ok: false, died: false, emptyAnswer: false };
+  const preMarker = { ok: false };        // a pre-#251 checkpoint, resumed
+
   test('the why is DERIVED: judges that died are not judges that answered badly', () => {
-    const died = { ok: false, died: true };
-    const unparseable = { ok: false, died: false };
     expect(thinCrossReviewNote([{ ok: true }, died, died, died]).why)
       .toBe('3 judge legs died before answering');
     expect(thinCrossReviewNote([{ ok: true }, unparseable, unparseable]).why)
       .toBe('2 returned no parseable Stage-2 block');
     expect(thinCrossReviewNote([{ ok: true }, died, unparseable]).why)
       .toBe('1 judge leg died before answering; 1 returned no parseable Stage-2 block');
+  });
+
+  /**
+   * Council #263 round 1, D3 [minor, Confirmed] — `legDied` is
+   * `!(status === 'complete' && summary)`, so it is TRUE for two different legs:
+   * one whose process never came back, and one that completed and answered with
+   * an EMPTY summary. Reporting the second as "died before answering" sends a CI
+   * reader at a dead process when the leg ran to completion and said nothing —
+   * the same wrong-cause defect this PR removes, one level down.
+   */
+  test('D3 a judge that COMPLETED with an empty summary did not die — it answered nothing', () => {
+    expect(thinCrossReviewNote([{ ok: true }, emptyAnswer, emptyAnswer]).why)
+      .toBe('2 returned an empty answer');
+    expect(thinCrossReviewNote([{ ok: true }, died, emptyAnswer]).why)
+      .toBe('1 judge leg died before answering; 1 returned an empty answer');
+    expect(thinCrossReviewNote([{ ok: true }, died, emptyAnswer, unparseable]).why)
+      .toBe('1 judge leg died before answering; 1 returned an empty answer; '
+        + '1 returned no parseable Stage-2 block');
+  });
+
+  /**
+   * Council #263 round 1, A1 [minor, Singleton] — a `judgeResults` entry with
+   * NO `died` field at all (a Stage-2 checkpoint written by a pre-#251 build and
+   * resumed by this one) fell into the `died === false` bucket and was reported
+   * as "returned no parseable Stage-2 block" — which may be a false statement
+   * about a judge that in fact died. Absent is not false.
+   */
+  test('A1 an entry that PREDATES the died marker is its own bucket, never a claim', () => {
+    expect(thinCrossReviewNote([{ ok: true }, preMarker]).why)
+      .toBe('1 judge result predates the died marker (outcome unknown)');
+    expect(thinCrossReviewNote([{ ok: true }, preMarker, preMarker]).why)
+      .toBe('2 judge results predate the died marker (outcome unknown)');
+    expect(thinCrossReviewNote([{ ok: true }, died, preMarker]).why)
+      .toBe('1 judge leg died before answering; '
+        + '1 judge result predates the died marker (outcome unknown)');
+  });
+
+  test('every zero clause is omitted, and the four buckets sum to the failures', () => {
+    expect(thinCrossReviewNote([died, emptyAnswer, unparseable, preMarker]).why)
+      .toBe('1 judge leg died before answering; 1 returned an empty answer; '
+        + '1 returned no parseable Stage-2 block; '
+        + '1 judge result predates the died marker (outcome unknown)');
   });
 
   test('a bench too small to cross-review says THAT, not something about the judges', () => {
@@ -226,7 +271,7 @@ describe('thin cross-review channel', () => {
   });
 
   test('two usable judges is not thin — no note at all', () => {
-    expect(thinCrossReviewNote([{ ok: true }, { ok: true }, { ok: false, died: true }])).toBeNull();
+    expect(thinCrossReviewNote([{ ok: true }, { ok: true }, died])).toBeNull();
   });
 });
 
