@@ -245,6 +245,7 @@ src/
 │   ├── env-loader.js  # Credential Loader
 │   ├── env-num.js
 │   ├── env-raw-store.js  # Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6).
+│   ├── env-write-guard.js  # Issue 212 — refuse a write to the REAL user's amicus key store from inside a
 │   ├── error-classify.js
 │   ├── error-doc.js
 │   ├── fold-marker.js  # Fold marker construction/parsing helpers — shared by prompt-builder.js
@@ -735,7 +736,8 @@ evals/
 | `utils/engine-variants.js` | The effort lever (#218 PR 4): --thinking sent as the engine's variant field, validated against the engine's own declaration. | `VARIANT_LEVELS()`, `VariantRefusedError()`, `readModelDeclaration()`, `checkVariant()`, `formatUnverifiedVariantNote()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/env-num.js` |  | `envNumber()` |
-| `utils/env-raw-store.js` | Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6). | `saveRawEnv()`, `removeRawEnv()`, `upsertEnvLine()`, `deleteEnvLine()` |
+| `utils/env-raw-store.js` | Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6). | `saveRawEnv()`, `removeRawEnv()`, `upsertEnvLine()`, `deleteEnvLine()`, `isBlankSecret()` |
+| `utils/env-write-guard.js` | Issue 212 — refuse a write to the REAL user's amicus key store from inside a | `isWithin()`, `realHomedir()`, `realpathOrSelf()`, `isTestWriteToRealKeyStore()`, `assertNotTestWriteToRealKeyStore()` |
 | `utils/error-classify.js` |  | `classifyLegError()`, `isRetryable()` |
 | `utils/error-doc.js` |  | `ERROR_CODES()`, `buildErrorDoc()`, `failJson()` |
 | `utils/fold-marker.js` | Fold marker construction/parsing helpers — shared by prompt-builder.js | `FOLD_MARKER_PREFIX()`, `generateFoldNonce()`, `buildFoldMarker()`, `trailingFoldMarkerRegex()`, `extractNonceFromText()` |

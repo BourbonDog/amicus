@@ -3,7 +3,6 @@
  * Keys stored in ~/.config/amicus/.env with 0o600 permissions.
  */
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { validateApiKey, validateOpenRouterKey, VALIDATION_ENDPOINTS } = require('./api-key-validation');
 const { PROVIDER_ENV_MAP } = require('./provider-registry');
@@ -12,7 +11,14 @@ const { PROVIDER_ENV_MAP } = require('./provider-registry');
 // (arbitrary-name local-provider bearer writes) are re-exported so every documented
 // `require('./api-key-store').saveRawEnv` call site keeps working. No load-time cycle:
 // env-raw-store requires THIS module only lazily, inside its functions.
-const { saveRawEnv, removeRawEnv, upsertEnvLine, deleteEnvLine } = require('./env-raw-store');
+// Issue 212's test-run write guard and the blank-secret predicate live in
+// env-raw-store.js too, beside upsertEnvLine/deleteEnvLine — the chokepoint every
+// .env writer funnels through (council review of PR 262, A2/D4). Re-exported
+// below so `require('./api-key-store').isTestWriteToRealKeyStore` keeps working.
+const {
+  saveRawEnv, removeRawEnv, upsertEnvLine, deleteEnvLine,
+  isBlankSecret, isTestWriteToRealKeyStore, assertNotTestWriteToRealKeyStore,
+} = require('./env-raw-store');
 
 /** Legacy key names that have been renamed (old -> new) */
 const LEGACY_KEY_NAMES = {
@@ -31,69 +37,6 @@ function getEnvPath() {
   }
   const homeDir = process.env.HOME || process.env.USERPROFILE;
   return path.join(homeDir, '.config', 'amicus', '.env');
-}
-
-/**
- * The REAL user's home, immune to a redirected HOME/USERPROFILE.
- *
- * ⚠️ NOT os.homedir(): libuv reads HOME (POSIX) / USERPROFILE (Windows) before
- * it asks the OS, so os.homedir() follows exactly the redirect a test performs
- * — measured, both platforms' code paths. os.userInfo() reads the account
- * record instead (getpwuid_r / GetUserProfileDirectoryW) and does not move.
- * Returns null when there is no account record to read (containers without a
- * passwd entry); the caller then declines to guard rather than guessing, since
- * this is a backstop and a false refusal would break honest writes.
- * @returns {string|null}
- */
-function realHomedir() {
-  try {
-    const home = os.userInfo().homedir;
-    return typeof home === 'string' && home.length > 0 ? home : null;
-  } catch (_err) {
-    return null;
-  }
-}
-
-/** True when `child` is `parent` or lives inside it (case/separator-normalised). */
-function isWithin(child, parent) {
-  const rel = path.relative(parent, child);
-  return !rel.startsWith('..') && !path.isAbsolute(rel);
-}
-
-/**
- * Would this write land in the REAL user's amicus key store from inside a
- * test run? Issue #212: a fixture-shaped key reached a real
- * ~/.config/amicus/.env, and "a test suite should never be ABLE to write a
- * real key store" is half the ask (the other half is the save-key IPC gate in
- * electron/ipc-keys.js). Converting invisible credential data loss into a loud
- * throw is the whole point, so this is deliberately narrow — it must never
- * refuse an honest write.
- *
- * Three conditions, all required:
- *   1. inside jest (JEST_WORKER_ID);
- *   2. AMICUS_ENV_DIR unset — tests/setup/hermetic-config-dir.js sets it for
- *      every unit file, so the guard only has work to do where a test DELETED
- *      it (several in tests/api-key-store.test.js do, to exercise the HOME
- *      fallback) and then reached a write;
- *   3. the resolved path is in the real home's `.config/amicus` directory.
- *
- * ⚠️ Condition 3 is the amicus CONFIG DIR, not the home dir. On Windows
- * os.tmpdir() is C:\Users\<user>\AppData\Local\Temp — inside the real home —
- * so "is it under the home dir" would refuse every legitimately
- * HOME-redirected test on that platform. Measured, not assumed.
- *
- * @param {string} envPath the .env path the write would target
- * @param {object} [deps] injected for tests — never touch the real home in one
- * @param {object} [deps.env] environment to read (default process.env)
- * @param {function(): (string|null)} [deps.homedir] the real home (default realHomedir)
- * @returns {boolean}
- */
-function isTestWriteToRealKeyStore(envPath, { env = process.env, homedir = realHomedir } = {}) {
-  if (!env.JEST_WORKER_ID) { return false; }
-  if (env.AMICUS_ENV_DIR) { return false; }
-  const home = homedir();
-  if (!home) { return false; }
-  return isWithin(path.resolve(envPath), path.join(home, '.config', 'amicus'));
 }
 
 /** Parse a .env file into a key-value map (comments/blanks excluded) */
@@ -116,9 +59,23 @@ function parseEnvContent(content) {
   return entries;
 }
 
-/** Migrate a legacy key name in a .env file (best-effort, one-time) */
-function migrateEnvFileKey(envPath, oldName, newName) {
+/**
+ * Migrate a legacy key name in a .env file (best-effort, one-time).
+ *
+ * ⚠️ This writes with fs.writeFileSync and does NOT go through
+ * upsertEnvLine/deleteEnvLine, so the chokepoint guard does not reach it — it
+ * asserts for itself (issue 212 / council review of PR 262, A2/D4). The throw
+ * lands in this function's own best-effort catch, so a refused migration is a
+ * SKIPPED migration: inside a test run against the real store, not rewriting it
+ * is the outcome we want, and the read path above still serves the legacy value.
+ * @param {string} envPath
+ * @param {string} oldName
+ * @param {string} newName
+ * @param {object} [deps] see isTestWriteToRealKeyStore
+ */
+function migrateEnvFileKey(envPath, oldName, newName, deps) {
   try {
+    assertNotTestWriteToRealKeyStore(envPath, deps);
     const content = fs.readFileSync(envPath, 'utf-8');
     const re = new RegExp(`^${oldName}=`, 'm');
     const updated = content.replace(re, `${newName}=`);
@@ -132,8 +89,11 @@ function migrateEnvFileKey(envPath, oldName, newName) {
   }
 }
 
-/** Load .env file entries (auto-migrates legacy key names) */
-function loadEnvEntries() {
+/**
+ * Load .env file entries (auto-migrates legacy key names).
+ * @param {object} [deps] forwarded to the migration's issue-212 write guard
+ */
+function loadEnvEntries(deps) {
   const envPath = getEnvPath();
   let fileEntries = new Map();
   try {
@@ -145,7 +105,7 @@ function loadEnvEntries() {
         if (fileEntries.has(oldName) && !fileEntries.has(newName)) {
           fileEntries.set(newName, fileEntries.get(oldName));
           fileEntries.delete(oldName);
-          migrateEnvFileKey(envPath, oldName, newName);
+          migrateEnvFileKey(envPath, oldName, newName, deps);
         }
       }
     }
@@ -220,37 +180,38 @@ function saveApiKey(provider, key, deps) {
   if (!envVar) {
     return { success: false, error: `Unknown provider: ${provider}` };
   }
-  const envPath = getEnvPath();
-  // #212: never write the real key store from inside a test run. THROWS rather
-  // than returning { success: false } on purpose — the failure this replaces
-  // was a silent overwrite of a user credential that masqueraded as a missing
-  // product feature for an unknown period.
-  if (isTestWriteToRealKeyStore(envPath, deps)) {
-    const err = new Error(
-      `Refusing to write the real API key store from a test run: ${envPath}. `
-      + 'Set AMICUS_ENV_DIR to a temp dir (tests/setup/hermetic-config-dir.js does '
-      + 'this for every unit file) before calling saveApiKey. See issue #212.'
-    );
-    err.code = 'TEST_ENV_WRITE_REFUSED';
-    throw err;
+  // Council #262 r1 (C1/D1/B4): an empty-after-trim key is a WIPE, not a save —
+  // upsertEnvLine rewrites the stored `<ENVVAR>=<real key>` line with a blank
+  // value and reports success. Refused at the FUNCTION boundary, not only in the
+  // callers, so `amicus key <provider> "   "`, the save-key IPC and every future
+  // caller are covered by one check. (The issue-212 test-run guard lives one
+  // level down, in upsertEnvLine.)
+  if (isBlankSecret(key)) {
+    return { success: false, error: 'API key is required' };
   }
   // Shared merge helper (preserves comments/other lines, dedups, 0600, trailing NL;
-  // strips CR/LF and returns the cleaned value).
-  const clean = upsertEnvLine(envPath, envVar, key);
+  // strips CR/LF and returns the cleaned value). It carries issue 212's test-run
+  // write guard, which THROWS before any write.
+  const clean = upsertEnvLine(getEnvPath(), envVar, key, deps);
   // Also set process.env so the key is immediately available (sanitized to match disk)
   process.env[envVar] = clean;
   return { success: true };
 }
 
-/** Remove an API key for a provider from the .env file */
-function removeApiKey(provider) {
+/**
+ * Remove an API key for a provider from the .env file
+ * @param {string} provider
+ * @param {object} [deps] injected for tests — see isTestWriteToRealKeyStore
+ */
+function removeApiKey(provider, deps) {
   const envVar = PROVIDER_ENV_MAP[provider];
   if (!envVar) {
     return { success: false, error: `Unknown provider: ${provider}` };
   }
 
-  // Shared merge helper (no-op when the file is absent; preserves other lines, 0600).
-  deleteEnvLine(getEnvPath(), envVar);
+  // Shared merge helper (no-op when the file is absent; preserves other lines,
+  // 0600). Carries issue 212's test-run write guard, which THROWS before any write.
+  deleteEnvLine(getEnvPath(), envVar, deps);
   delete process.env[envVar];
 
   // Check if key also exists in auth.json (caller decides whether to clean)

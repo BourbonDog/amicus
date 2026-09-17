@@ -154,6 +154,29 @@ describe('sidecar:save-key validates in the MAIN process before persisting (#212
     expect(refreshCatalog).not.toHaveBeenCalled();
   });
 
+  // Council #262 r1 (C1/D1): a WHITESPACE-only key is deliberately NOT caught by
+  // the fast path above — `!key` is false for `'   '`. The defence lives one
+  // level down, at the store boundary (api-key-store.js :: saveApiKey refuses an
+  // empty-after-trim key), so the CLI is covered by the same check. What this
+  // handler owes is to pass the store's refusal through rather than reporting a
+  // save: saveApiKey is mocked here, so the assertion is the division of labour.
+  it('a whitespace-only key reaches the store, and the store\'s refusal is passed through', async () => {
+    const { handlers, saveApiKey, validateApiKey, refreshCatalog, buildProviderDefaultChoices } =
+      registerKeys({
+        validation: { valid: false, status: null, error: 'API key is required' },
+        saveResult: { success: false, error: 'API key is required' },
+      });
+
+    const result = await handlers['sidecar:save-key']({}, 'anthropic', '   ');
+    await drainImmediates();
+
+    expect(validateApiKey).toHaveBeenCalledWith('anthropic', '   ');
+    expect(saveApiKey).toHaveBeenCalledWith('anthropic', '   ');
+    expect(result).toEqual({ success: false, error: 'API key is required' });
+    expect(refreshCatalog).not.toHaveBeenCalled();
+    expect(buildProviderDefaultChoices).not.toHaveBeenCalled();
+  });
+
   it('a valid key is persisted and warms the catalog (pre-#212 behaviour, unchanged)', async () => {
     const { handlers, saveApiKey, refreshCatalog } = registerKeys({ validation: { valid: true, status: 200 } });
     const result = await handlers['sidecar:save-key']({}, 'openrouter', 'sk-or-good');

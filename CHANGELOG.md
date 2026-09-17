@@ -25,10 +25,17 @@ All notable changes to Amicus are documented here. Format follows
   could persist an arbitrary unvalidated string into `~/.config/amicus/.env` — or, with an empty
   key, silently blank out a stored one. A refused save is now reported in the key step instead of
   being shown as "Saved ✓". (#212)
-- `saveApiKey` refuses to write the real `~/.config/amicus/.env` from inside a test run
+- **`amicus key <provider> "   "` now refuses a whitespace-only key instead of storing a blank
+  value.** The key store rewrites the existing `<PROVIDER>_API_KEY=` line in place, so a
+  whitespace-only key silently WIPED a working credential and reported success — the CLI's
+  `if (!keyArg)` guard let it through, and the probe (which trims first) came back as an
+  unverified `null` status rather than a 401. Refused at the store boundary, so `amicus key`, the
+  setup window and every other caller are covered by one check. `amicus provider add`'s bearer
+  (`saveRawEnv`) is refused the same way. (#212)
+- The `.env` writers refuse to write the real `~/.config/amicus/.env` from inside a test run
   (`JEST_WORKER_ID` set, `AMICUS_ENV_DIR` unset, and the path inside the real user's amicus config
   dir), throwing `TEST_ENV_WRITE_REFUSED` before any write instead of silently overwriting a
-  user's credential. (#212)
+  user's credential. `AMICUS_ENV_DIR` is the opt-out. (#212)
 
 ## [4.11.0] - 2026-09-16
 

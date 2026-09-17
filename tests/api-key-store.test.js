@@ -488,7 +488,97 @@ describe('saveRawEnv / removeRawEnv (local-provider bearers)', () => {
 });
 
 /**
- * #212 — the key store refuses test-run writes to the REAL key store.
+ * Save/restore ONLY the env keys a test touches (council #262 r1, A5).
+ * `process.env = {...}` replaces the object REFERENCE, which breaks any module
+ * that captured it and, on Node, re-materialises the whole environment — a
+ * blunt instrument for four keys.
+ * @param {string[]} keys
+ * @returns {function(): void} restore
+ */
+function stashEnv(keys) {
+  const saved = keys.map((k) => [k, Object.prototype.hasOwnProperty.call(process.env, k) ? process.env[k] : undefined]);
+  return () => {
+    for (const [k, v] of saved) {
+      if (v === undefined) { delete process.env[k]; } else { process.env[k] = v; }
+    }
+  };
+}
+
+/**
+ * #212 / council #262 r1 — an empty-after-trim key is refused at the STORE
+ * boundary, not just at the IPC's.
+ *
+ * C1/D1/B4. The IPC's `!key` fast path let `'   '` through: validateApiKey trims
+ * before probing, so a whitespace-only key resolves to
+ * { valid: false, status: null }, null is not in BLOCKS_SAVE, and it reached
+ * upsertEnvLine — which rewrites a stored `ANTHROPIC_API_KEY=<real key>` line as
+ * a blank value and returns success. The CLI has the SAME hole (`if (!keyArg)`
+ * passes `'   '`), so mirroring the CLI faithfully reproduced a wipe; the
+ * controller's ruling overrides "mirror the CLI" here and fixes the shared
+ * boundary instead, which covers the CLI, the IPC and every future caller.
+ */
+describe('empty-after-trim keys are refused at the store boundary (council #262 r1)', () => {
+  let sandbox;
+  let restoreEnv;
+
+  beforeEach(() => {
+    sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-262-boundary-'));
+    restoreEnv = stashEnv(['AMICUS_ENV_DIR', 'ANTHROPIC_API_KEY', 'LAB_API_KEY']);
+    process.env.AMICUS_ENV_DIR = sandbox;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.LAB_API_KEY;
+  });
+
+  afterEach(() => {
+    restoreEnv();
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  });
+
+  const envFile = () => fs.readFileSync(path.join(sandbox, '.env'), 'utf-8');
+
+  it.each([
+    ['whitespace only', '   '],
+    ['a tab', '\t'],
+    ['a bare CRLF', '\r\n'],
+    ['an empty string', ''],
+    ['undefined', undefined],
+    ['null', null],
+  ])('saveApiKey refuses %s and leaves the stored credential intact', (_label, key) => {
+    expect(saveApiKey('anthropic', 'sk-ant-REAL-KEY')).toEqual({ success: true });
+    expect(envFile()).toContain('ANTHROPIC_API_KEY=sk-ant-REAL-KEY');
+
+    expect(saveApiKey('anthropic', key)).toEqual({ success: false, error: 'API key is required' });
+
+    // The wipe this exists to prevent: the real key is still on disk and still
+    // in process.env, untouched.
+    expect(envFile()).toContain('ANTHROPIC_API_KEY=sk-ant-REAL-KEY');
+    expect(process.env.ANTHROPIC_API_KEY).toBe('sk-ant-REAL-KEY');
+  });
+
+  it('saveRawEnv refuses a whitespace-only bearer and leaves the stored one intact', () => {
+    const { saveRawEnv } = require('../src/utils/api-key-store');
+    expect(saveRawEnv('LAB_API_KEY', 'sk-lab-REAL')).toEqual({ success: true });
+
+    expect(saveRawEnv('LAB_API_KEY', '   ')).toEqual({ success: false, error: 'API key is required' });
+
+    expect(envFile()).toContain('LAB_API_KEY=sk-lab-REAL');
+    expect(process.env.LAB_API_KEY).toBe('sk-lab-REAL');
+  });
+
+  it('a key with surrounding whitespace is NOT rejected — only empty-after-trim is', () => {
+    expect(saveApiKey('anthropic', '  sk-ant-padded  ')).toEqual({ success: true });
+    // Stored as given (minus CR/LF): trimming what is PERSISTED would be a
+    // separate behaviour change, and is not what this rules on.
+    expect(envFile()).toContain('ANTHROPIC_API_KEY=  sk-ant-padded  ');
+  });
+
+  it('the unknown-provider refusal still wins its own shape', () => {
+    expect(saveApiKey('nope', '   ')).toEqual({ success: false, error: 'Unknown provider: nope' });
+  });
+});
+
+/**
+ * #212 — the .env writers refuse test-run writes to the REAL key store.
  *
  * Defence in depth, not the primary fix: a fixture-shaped key
  * (`sk-deepseek-test-456`, the literal at :349 above) reached a real
@@ -497,11 +587,20 @@ describe('saveRawEnv / removeRawEnv (local-provider bearers)', () => {
  * covers the OTHER half of the ask: a test suite should never be ABLE to write
  * a real key store, whatever the vector.
  *
+ * A2/D4 (council #262 r1): the guard lives at the CHOKEPOINT —
+ * env-raw-store.js's upsertEnvLine/deleteEnvLine, which saveApiKey,
+ * removeApiKey, saveRawEnv and removeRawEnv all funnel through — plus
+ * migrateEnvFileKey, which writes with fs.writeFileSync and is therefore NOT a
+ * chokepoint consumer (measured; it is guarded on its own).
+ *
  * jest.config.js's setupFiles pin (tests/setup/hermetic-config-dir.js) already
  * sets AMICUS_ENV_DIR for every unit file — but several tests in this very file
- * DELETE it to exercise getEnvPath()'s HOME fallback, and any saveApiKey
- * reached while it is deleted would land on the developer's real key store.
- * This converts that invisible data loss into a loud throw.
+ * DELETE it to exercise getEnvPath()'s HOME fallback, and any write reached
+ * while it is deleted would land on the developer's real key store. This
+ * converts that invisible data loss into a loud throw. AMICUS_ENV_DIR IS the
+ * opt-out (B2/D2/D4): setting it is an explicit redirect, so the guard stands
+ * down — including when it points at the real store, which is a caller asking
+ * for exactly that.
  *
  * MEASURED, and why the predicate keys on the amicus config dir rather than on
  * "somewhere under the home dir":
@@ -529,6 +628,15 @@ describe('test-run write guard (#212)', () => {
     expect(isTestWriteToRealKeyStore(REAL_STORE, { env, homedir })).toBe(false);
   });
 
+  // B2/D2, ACCEPTED by design: AMICUS_ENV_DIR is the explicit redirect and the
+  // opt-out D4 asks for. Pointing it AT the real store is a caller asking to
+  // write the real store, so the guard stands down. Pinned so the behaviour is
+  // a decision on the record rather than an oversight.
+  it('allows AMICUS_ENV_DIR pointed at the real store — that is the opt-out, by design', () => {
+    const env = { ...IN_JEST, AMICUS_ENV_DIR: path.join(REAL_HOME, '.config', 'amicus') };
+    expect(isTestWriteToRealKeyStore(REAL_STORE, { env, homedir })).toBe(false);
+  });
+
   it('allows a HOME redirected to a tmpdir', () => {
     const redirected = path.join(os.tmpdir(), 'amicus-212-fake-home', '.config', 'amicus', '.env');
     expect(isTestWriteToRealKeyStore(redirected, { env: { ...IN_JEST }, homedir })).toBe(false);
@@ -550,11 +658,70 @@ describe('test-run write guard (#212)', () => {
     expect(isTestWriteToRealKeyStore(sibling, { env: { ...IN_JEST }, homedir })).toBe(false);
   });
 
+  // D3: the `!rel.startsWith('..')` heuristic misread a CHILD whose name begins
+  // with two dots as an escape. Such a child is inside the config dir and must
+  // be refused.
+  it.each([
+    ['..secret'],
+    ['...hidden'],
+  ])('refuses a child whose name starts with two dots (%s) — not an escape (D3)', (name) => {
+    const child = path.join(REAL_HOME, '.config', 'amicus', name);
+    expect(isTestWriteToRealKeyStore(child, { env: { ...IN_JEST }, homedir })).toBe(true);
+  });
+
+  it('still allows a real escape one level up (the sibling of the config dir)', () => {
+    const escaped = path.join(REAL_HOME, '.config', '.env');
+    expect(isTestWriteToRealKeyStore(escaped, { env: { ...IN_JEST }, homedir })).toBe(false);
+  });
+
+  // A3/B1: path.relative case-folds on win32 but NOT on darwin, whose default
+  // filesystem is case-INSENSITIVE — so a path differing only in case IS the
+  // real store there and must be refused. Platform is injected so both arms run
+  // on every CI host.
+  describe('case folding on case-insensitive filesystems (A3/B1)', () => {
+    const variant = path.join(REAL_HOME, '.CONFIG', 'AMICUS', '.env');
+
+    it.each(['win32', 'darwin'])('%s: a case-variant path IS the real store', (platform) => {
+      expect(isTestWriteToRealKeyStore(variant, { env: { ...IN_JEST }, homedir, platform })).toBe(true);
+    });
+
+    it('linux: a case-variant path is a DIFFERENT directory', () => {
+      expect(isTestWriteToRealKeyStore(variant, { env: { ...IN_JEST }, homedir, platform: 'linux' })).toBe(false);
+    });
+  });
+
+  // C2: a redirected home whose .config/amicus is a SYMLINK to the real config
+  // dir resolved to a tmpdir path lexically and sailed through. Both sides are
+  // realpath-resolved now. Windows junctions need no elevation, so this runs
+  // everywhere (measured).
+  it('refuses a redirected home that symlinks into the real config dir (C2)', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-262-symlink-'));
+    try {
+      const realHome = path.join(root, 'realhome');
+      const realCfg = path.join(realHome, '.config', 'amicus');
+      fs.mkdirSync(realCfg, { recursive: true });
+
+      const fakeCfgParent = path.join(root, 'fakehome', '.config');
+      fs.mkdirSync(fakeCfgParent, { recursive: true });
+      const link = path.join(fakeCfgParent, 'amicus');
+      fs.symlinkSync(realCfg, link, process.platform === 'win32' ? 'junction' : 'dir');
+
+      // The leaf does not exist yet — resolution must still follow the symlinked
+      // PARENT, which is the whole point of the deepest-existing-ancestor walk.
+      const attack = path.join(link, '.env');
+      expect(fs.existsSync(attack)).toBe(false);
+
+      expect(isTestWriteToRealKeyStore(attack, { env: { ...IN_JEST }, homedir: () => realHome })).toBe(true);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('saveApiKey throws TEST_ENV_WRITE_REFUSED, names the path, and writes nothing', () => {
     // The "real home" is INJECTED as a tmpdir, so the developer's actual key
     // store is never a candidate for this test — only the tmpdir shaped like it.
     const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-212-home-'));
-    const originalEnv = { ...process.env };
+    const restore = stashEnv(['AMICUS_ENV_DIR', 'HOME', 'USERPROFILE', 'DEEPSEEK_API_KEY']);
     try {
       delete process.env.AMICUS_ENV_DIR;      // hermetic-config-dir.js set it
       delete process.env.DEEPSEEK_API_KEY;
@@ -574,21 +741,83 @@ describe('test-run write guard (#212)', () => {
       expect(fs.existsSync(path.join(fakeHome, '.config', 'amicus', '.env'))).toBe(false);
       expect(process.env.DEEPSEEK_API_KEY).toBeUndefined();
     } finally {
-      process.env = originalEnv;
+      restore();
       fs.rmSync(fakeHome, { recursive: true, force: true });
     }
   });
 
+  // A2/D4: the four writers that funnel through upsertEnvLine/deleteEnvLine.
+  // Before this round only saveApiKey was guarded.
+  describe('every .env writer is guarded, not just saveApiKey (A2/D4)', () => {
+    let fakeHome;
+    let restore;
+    let storePath;
+
+    beforeEach(() => {
+      fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-262-writers-'));
+      storePath = path.join(fakeHome, '.config', 'amicus', '.env');
+      // Seed a store to prove a REMOVE is refused too, not just a create.
+      fs.mkdirSync(path.dirname(storePath), { recursive: true });
+      fs.writeFileSync(storePath, 'ANTHROPIC_API_KEY=sk-ant-REAL\nLAB_API_KEY=sk-lab-REAL\n');
+      restore = stashEnv(['AMICUS_ENV_DIR', 'HOME', 'USERPROFILE', 'ANTHROPIC_API_KEY', 'LAB_API_KEY']);
+      delete process.env.AMICUS_ENV_DIR;
+      process.env.HOME = fakeHome;
+      process.env.USERPROFILE = fakeHome;
+    });
+
+    afterEach(() => {
+      restore();
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    });
+
+    const deps = () => ({ homedir: () => fakeHome });
+    const untouched = () => {
+      const body = fs.readFileSync(storePath, 'utf-8');
+      expect(body).toContain('ANTHROPIC_API_KEY=sk-ant-REAL');
+      expect(body).toContain('LAB_API_KEY=sk-lab-REAL');
+    };
+
+    it('removeApiKey refuses and deletes nothing', () => {
+      const { removeApiKey } = require('../src/utils/api-key-store');
+      expect(() => removeApiKey('anthropic', deps())).toThrow(/Refusing to write/);
+      untouched();
+    });
+
+    it('saveRawEnv refuses and writes nothing', () => {
+      const { saveRawEnv } = require('../src/utils/api-key-store');
+      expect(() => saveRawEnv('LAB_API_KEY', 'sk-lab-NEW', deps())).toThrow(/Refusing to write/);
+      untouched();
+    });
+
+    it('removeRawEnv refuses and deletes nothing', () => {
+      const { removeRawEnv } = require('../src/utils/api-key-store');
+      expect(() => removeRawEnv('LAB_API_KEY', deps())).toThrow(/Refusing to write/);
+      untouched();
+    });
+
+    // migrateEnvFileKey writes with fs.writeFileSync and does NOT go through the
+    // chokepoint (measured), so it carries the guard itself. Its caller swallows
+    // errors by design, so the observable is that the legacy line is NOT rewritten.
+    it('the legacy-name migration does not rewrite the real store', () => {
+      fs.writeFileSync(storePath, 'GEMINI_API_KEY=AIza-legacy\n');
+      const { loadEnvEntries } = require('../src/utils/api-key-store');
+      loadEnvEntries(deps());
+      const body = fs.readFileSync(storePath, 'utf-8');
+      expect(body).toContain('GEMINI_API_KEY=AIza-legacy');
+      expect(body).not.toContain('GOOGLE_GENERATIVE_AI_API_KEY=');
+    });
+  });
+
   it('still writes normally when AMICUS_ENV_DIR points at a sandbox', () => {
     const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-212-sandbox-'));
-    const originalEnv = { ...process.env };
+    const restore = stashEnv(['AMICUS_ENV_DIR', 'DEEPSEEK_API_KEY']);
     try {
       process.env.AMICUS_ENV_DIR = sandbox;
       expect(saveApiKey('deepseek', 'sk-deepseek-test-456')).toEqual({ success: true });
       expect(fs.readFileSync(path.join(sandbox, '.env'), 'utf-8'))
         .toContain('DEEPSEEK_API_KEY=sk-deepseek-test-456');
     } finally {
-      process.env = originalEnv;
+      restore();
       fs.rmSync(sandbox, { recursive: true, force: true });
     }
   });
