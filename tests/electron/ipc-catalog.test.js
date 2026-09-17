@@ -17,7 +17,11 @@ function registerWithFakes({ catalogInfo, refreshImpl, saveImpl } = {}) {
   }));
   jest.doMock('../../src/utils/api-key-store', () => ({
     saveApiKey: saveImpl || jest.fn(() => ({ success: true })),
-    validateApiKey: jest.fn(),
+    // #212: save-key now validates in the main process before persisting, so
+    // this stub must RESOLVE a passing validation (it returned undefined) or
+    // every save below is refused before it reaches saveApiKey. The refusal
+    // itself is covered in tests/electron/ipc-keys.test.js.
+    validateApiKey: jest.fn(async () => ({ valid: true, status: 200 })),
     removeApiKey: jest.fn(),
     readApiKeys: jest.fn(() => ({})),
     readApiKeyHints: jest.fn(() => ({})),

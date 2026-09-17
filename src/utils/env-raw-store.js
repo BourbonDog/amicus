@@ -10,9 +10,36 @@
 
 const fs = require('fs');
 const path = require('path');
+// Issue 212's test-run write guard. upsertEnvLine/deleteEnvLine below are the
+// chokepoint every .env writer funnels through, so the assertion belongs on
+// them (council review of PR 262, A2/D4). Its own module because these two files
+// are both near the 300-line gate; it requires only fs/os/path, so no cycle.
+const { isTestWriteToRealKeyStore, assertNotTestWriteToRealKeyStore } = require('./env-write-guard');
 
 /** Env-var names are UPPER_SNAKE, leading letter (mirrors POSIX + saveApiKey inputs). */
 const ENV_VAR_RE = /^[A-Z][A-Z0-9_]*$/;
+
+/**
+ * Is this secret empty once trimmed? Council review of PR 262 (C1/D1/B4).
+ *
+ * Persisting one is never a save — upsertEnvLine rewrites the stored
+ * `<ENVVAR>=<real key>` line with a blank value and returns success, so a
+ * whitespace-only key WIPES a working credential silently. The CLI had the same
+ * hole (`if (!keyArg)` lets `'   '` through, and validateApiKey trims before
+ * probing, so it resolves to `{valid:false, status:null}` — not a 401, so not a
+ * refusal). Both entry points are fixed by refusing here.
+ *
+ * Coerces rather than type-checking: a non-string value was accepted before
+ * (upsertEnvLine does `String(value)`), and narrowing that is a separate change.
+ * null/undefined are blank; `String(undefined)` is NOT — that is the trap this
+ * avoids.
+ * @param {*} value
+ * @returns {boolean}
+ */
+function isBlankSecret(value) {
+  if (value === null || value === undefined) { return true; }
+  return String(value).trim() === '';
+}
 
 /**
  * Upsert `envVar=value` into the .env at envPath: preserve comments/other lines,
@@ -21,8 +48,10 @@ const ENV_VAR_RE = /^[A-Z][A-Z0-9_]*$/;
  * @param {string} envPath
  * @param {string} envVar
  * @param {string} value
+ * @param {object} [deps] see isTestWriteToRealKeyStore (issue 212 guard)
  */
-function upsertEnvLine(envPath, envVar, value) {
+function upsertEnvLine(envPath, envVar, value, deps) {
+  assertNotTestWriteToRealKeyStore(envPath, deps);
   // Strip CR/LF: a newline in the value corrupts the line-based .env (splits it,
   // or bakes a trailing CR into the persisted/served token). Bearer/API-key schemes
   // never contain newlines, so stripping cannot damage a legitimate token.
@@ -66,8 +95,12 @@ function upsertEnvLine(envPath, envVar, value) {
  * empty file when nothing remains). No-op when the file is absent.
  * @param {string} envPath
  * @param {string} envVar
+ * @param {object} [deps] see isTestWriteToRealKeyStore (issue 212 guard)
  */
-function deleteEnvLine(envPath, envVar) {
+function deleteEnvLine(envPath, envVar, deps) {
+  // OUTSIDE the try: this function is best-effort and swallows its own errors,
+  // which would eat the refusal and let the caller believe the delete happened.
+  assertNotTestWriteToRealKeyStore(envPath, deps);
   try {
     if (fs.existsSync(envPath)) {
       const lines = fs.readFileSync(envPath, 'utf-8').split('\n')
@@ -91,14 +124,21 @@ function deleteEnvLine(envPath, envVar) {
  * config entry that references a rejected name. Mirrors the value into process.env.
  * @param {string} envVar e.g. 'LAB_API_KEY'
  * @param {string} value bearer token
+ * @param {object} [deps] see isTestWriteToRealKeyStore (issue 212 guard)
  * @returns {{success: boolean, error?: string}}
  */
-function saveRawEnv(envVar, value) {
+function saveRawEnv(envVar, value, deps) {
   if (typeof envVar !== 'string' || !ENV_VAR_RE.test(envVar)) {
     return { success: false, error: `Invalid env var name: ${envVar}` };
   }
+  // Council #262 r1 (C1/D1/B4): an empty-after-trim value is a WIPE, not a save
+  // — upsertEnvLine would rewrite the stored line with a blank value and report
+  // success. Refused at this boundary so every caller is covered at once.
+  if (isBlankSecret(value)) {
+    return { success: false, error: 'API key is required' };
+  }
   const { getEnvPath } = require('./api-key-store'); // lazy: avoids a load-time cycle
-  const clean = upsertEnvLine(getEnvPath(), envVar, value);
+  const clean = upsertEnvLine(getEnvPath(), envVar, value, deps);
   process.env[envVar] = clean; // mirror the sanitized on-disk value
   return { success: true };
 }
@@ -108,13 +148,17 @@ function saveRawEnv(envVar, value) {
  * No auth.json reconciliation — that store is keyed on the 5 static vendors, and a
  * local provider never has an entry there.
  * @param {string} envVar e.g. 'LAB_API_KEY'
+ * @param {object} [deps] see isTestWriteToRealKeyStore (issue 212 guard)
  * @returns {{success: boolean}}
  */
-function removeRawEnv(envVar) {
+function removeRawEnv(envVar, deps) {
   const { getEnvPath } = require('./api-key-store'); // lazy: avoids a load-time cycle
-  deleteEnvLine(getEnvPath(), envVar);
+  deleteEnvLine(getEnvPath(), envVar, deps);
   delete process.env[envVar];
   return { success: true };
 }
 
-module.exports = { saveRawEnv, removeRawEnv, upsertEnvLine, deleteEnvLine };
+module.exports = {
+  saveRawEnv, removeRawEnv, upsertEnvLine, deleteEnvLine,
+  isBlankSecret, isTestWriteToRealKeyStore, assertNotTestWriteToRealKeyStore,
+};

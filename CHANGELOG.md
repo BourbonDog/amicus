@@ -33,6 +33,12 @@ All notable changes to Amicus are documented here. Format follows
   35143585179, where a low remaining limit had the provider refuse four of seven legs in 2–3 s,
   consume their once-only retries and lose the round's quorum for $0.003. (#256)
 
+### Changed
+
+- The setup window's key IPC handlers (`sidecar:validate-key`, `sidecar:save-key`) moved from
+  `electron/ipc-setup.js` to `electron/ipc-keys.js` (300-line size gate). Channel names, return
+  shapes and behaviour are unchanged. (#212)
+
 ### Fixed
 
 - **The shipped `second-opinion` skill's `MODEL-NOTES.md` `NO_OUTPUT_BACKSTOP` bullet said 120s
@@ -48,6 +54,24 @@ All notable changes to Amicus are documented here. Format follows
   object is left untouched until then, so a failed write no longer reports conversions that did not
   happen nor diverges memory from disk; a dead stderr after a committed write no longer makes the
   save throw. (#258)
+- The setup window's `sidecar:save-key` IPC now validates the key in the MAIN process before it
+  persists anything, mirroring `amicus key`'s rule exactly (only a 401 blocks a save; 403, 429,
+  5xx, an unexpected status and an unanswered probe still save). The renderer's validate-then-save
+  order was advisory — a direct IPC call, such as a CDP automation session on `AMICUS_DEBUG_PORT`,
+  could persist an arbitrary unvalidated string into `~/.config/amicus/.env` — or, with an empty
+  key, silently blank out a stored one. A refused save is now reported in the key step instead of
+  being shown as "Saved ✓". (#212)
+- **`amicus key <provider> "   "` now refuses a whitespace-only key instead of storing a blank
+  value.** The key store rewrites the existing `<PROVIDER>_API_KEY=` line in place, so a
+  whitespace-only key silently WIPED a working credential and reported success — the CLI's
+  `if (!keyArg)` guard let it through, and the probe (which trims first) came back as an
+  unverified `null` status rather than a 401. Refused at the store boundary, so `amicus key`, the
+  setup window and every other caller are covered by one check. `amicus provider add`'s bearer
+  (`saveRawEnv`) is refused the same way. (#212)
+- The `.env` writers refuse to write the real `~/.config/amicus/.env` from inside a test run
+  (`JEST_WORKER_ID` set, `AMICUS_ENV_DIR` unset, and the path inside the real user's amicus config
+  dir), throwing `TEST_ENV_WRITE_REFUSED` before any write instead of silently overwriting a
+  user's credential. `AMICUS_ENV_DIR` is the opt-out. (#212)
 - **The still-dead note names the retry's OWN cause** when it differs from the first failure's.
   `run.json`'s dead-leg prose read `the leg ended 'error': NO_OUTPUT_BACKSTOP …; its once-only
   retry also ended 'error'` for a seat whose retry was in fact REFUSED by the provider two
