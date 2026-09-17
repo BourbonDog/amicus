@@ -1,0 +1,462 @@
+{
+ "engine": {
+  "binary": "C:\\Users\\sendt\\code\\amicus-wave3-boundary\\node_modules\\opencode-windows-x64\\bin\\opencode.exe",
+  "packageVersion": "1.18.15",
+  "sdkVersion": "1.18.15",
+  "amicus": "4.11.0"
+ },
+ "cases": [
+  {
+   "id": "D2-1",
+   "what": "v4.9.8 judge leg at CI's 64000",
+   "agent": "council-support",
+   "registered": [
+    "chat",
+    "council-support",
+    "council-seat"
+   ],
+   "preQuery": false,
+   "model": "moonshotai/kimi-k3",
+   "budget": "64000",
+   "maxTokens": 64000,
+   "bodyKeys": [
+    "max_tokens",
+    "messages",
+    "model",
+    "stream",
+    "usage"
+   ],
+   "tools": "ABSENT",
+   "toolChoice": "(absent)",
+   "systemTextChars": 9134,
+   "sampling": {
+    "usage": {
+     "include": true
+    }
+   },
+   "requestOrder": [
+    "title",
+    "main"
+   ],
+   "titleRequest": {
+    "maxTokens": 64000,
+    "sampling": {
+     "temperature": 0.5,
+     "reasoning": {
+      "effort": "minimal"
+     }
+    },
+    "systemJsonChars": 2251,
+    "tools": 0
+   }
+  },
+  {
+   "id": "D2-2",
+   "what": "control \u2014 the same leg with NO budget (Read B's 32000)",
+   "agent": "council-support",
+   "registered": [
+    "chat",
+    "council-support",
+    "council-seat"
+   ],
+   "preQuery": false,
+   "model": "moonshotai/kimi-k3",
+   "budget": null,
+   "maxTokens": 32000,
+   "bodyKeys": [
+    "max_tokens",
+    "messages",
+    "model",
+    "stream",
+    "usage"
+   ],
+   "tools": "ABSENT",
+   "toolChoice": "(absent)",
+   "systemTextChars": 9134,
+   "sampling": {
+    "usage": {
+     "include": true
+    }
+   },
+   "requestOrder": [
+    "title",
+    "main"
+   ],
+   "titleRequest": {
+    "maxTokens": 32000,
+    "sampling": {
+     "temperature": 0.5,
+     "reasoning": {
+      "effort": "low"
+     }
+    },
+    "systemJsonChars": 2251,
+    "tools": 0
+   }
+  },
+  {
+   "id": "D2-3",
+   "what": "v4.9.7 judge \u2014 plan, NO council agents registered",
+   "agent": "plan",
+   "registered": [
+    "chat"
+   ],
+   "preQuery": false,
+   "model": "moonshotai/kimi-k3",
+   "budget": "64000",
+   "maxTokens": 64000,
+   "bodyKeys": [
+    "max_tokens",
+    "messages",
+    "model",
+    "stream",
+    "tool_choice",
+    "tools",
+    "usage"
+   ],
+   "tools": 11,
+   "toolChoice": "auto",
+   "systemTextChars": 17651,
+   "sampling": {
+    "usage": {
+     "include": true
+    }
+   },
+   "requestOrder": [
+    "title",
+    "main"
+   ],
+   "titleRequest": {
+    "maxTokens": 64000,
+    "sampling": {
+     "temperature": 0.5,
+     "reasoning": {
+      "effort": "low"
+     }
+    },
+    "systemJsonChars": 2251,
+    "tools": 0
+   }
+  },
+  {
+   "id": "D2-4",
+   "what": "NEVER MEASURED \u2014 plan WITH the council agents registered",
+   "agent": "plan",
+   "registered": [
+    "chat",
+    "council-support",
+    "council-seat"
+   ],
+   "preQuery": false,
+   "model": "moonshotai/kimi-k3",
+   "budget": "64000",
+   "maxTokens": 64000,
+   "bodyKeys": [
+    "max_tokens",
+    "messages",
+    "model",
+    "stream",
+    "tool_choice",
+    "tools",
+    "usage"
+   ],
+   "tools": 11,
+   "toolChoice": "auto",
+   "systemTextChars": 17651,
+   "sampling": {
+    "usage": {
+     "include": true
+    }
+   },
+   "requestOrder": [
+    "title",
+    "main"
+   ],
+   "titleRequest": {
+    "maxTokens": 64000,
+    "sampling": {
+     "temperature": 0.5,
+     "reasoning": {
+      "effort": "low"
+     }
+    },
+    "systemJsonChars": 2251,
+    "tools": 0
+   }
+  },
+  {
+   "id": "D2-5",
+   "what": "default agent (promptAsync sends none), v4.9.7 server",
+   "agent": "(default)",
+   "registered": [
+    "chat"
+   ],
+   "preQuery": false,
+   "model": "moonshotai/kimi-k3",
+   "budget": "64000",
+   "maxTokens": 64000,
+   "bodyKeys": [
+    "max_tokens",
+    "messages",
+    "model",
+    "stream",
+    "tool_choice",
+    "tools",
+    "usage"
+   ],
+   "tools": 11,
+   "toolChoice": "auto",
+   "systemTextChars": 17651,
+   "sampling": {
+    "usage": {
+     "include": true
+    }
+   },
+   "requestOrder": [
+    "title",
+    "main"
+   ],
+   "titleRequest": {
+    "maxTokens": 64000,
+    "sampling": {
+     "temperature": 0.5,
+     "reasoning": {
+      "effort": "low"
+     }
+    },
+    "systemJsonChars": 2251,
+    "tools": 0
+   }
+  },
+  {
+   "id": "D2-6",
+   "what": "default agent, v4.9.8 server",
+   "agent": "(default)",
+   "registered": [
+    "chat",
+    "council-support",
+    "council-seat"
+   ],
+   "preQuery": false,
+   "model": "moonshotai/kimi-k3",
+   "budget": "64000",
+   "maxTokens": 64000,
+   "bodyKeys": [
+    "max_tokens",
+    "messages",
+    "model",
+    "stream",
+    "tool_choice",
+    "tools",
+    "usage"
+   ],
+   "tools": 11,
+   "toolChoice": "auto",
+   "systemTextChars": 17651,
+   "sampling": {
+    "usage": {
+     "include": true
+    }
+   },
+   "requestOrder": [
+    "title",
+    "main"
+   ],
+   "titleRequest": {
+    "maxTokens": 64000,
+    "sampling": {
+     "temperature": 0.5,
+     "reasoning": {
+      "effort": "low"
+     }
+    },
+    "systemJsonChars": 2251,
+    "tools": 0
+   }
+  },
+  {
+   "id": "D2-7",
+   "what": "council-support AFTER the two app.agents pre-queries",
+   "agent": "council-support",
+   "registered": [
+    "chat",
+    "council-support",
+    "council-seat"
+   ],
+   "preQuery": true,
+   "model": "moonshotai/kimi-k3",
+   "budget": "64000",
+   "maxTokens": 64000,
+   "bodyKeys": [
+    "max_tokens",
+    "messages",
+    "model",
+    "stream",
+    "usage"
+   ],
+   "tools": "ABSENT",
+   "toolChoice": "(absent)",
+   "systemTextChars": 9134,
+   "sampling": {
+    "usage": {
+     "include": true
+    }
+   },
+   "requestOrder": [
+    "title",
+    "main"
+   ],
+   "titleRequest": {
+    "maxTokens": 64000,
+    "sampling": {
+     "temperature": 0.5,
+     "reasoning": {
+      "effort": "low"
+     }
+    },
+    "systemJsonChars": 2251,
+    "tools": 0
+   }
+  },
+  {
+   "id": "D2-8",
+   "what": "council-seat, no tools opted in",
+   "agent": "council-seat",
+   "registered": [
+    "chat",
+    "council-support",
+    "council-seat"
+   ],
+   "preQuery": false,
+   "model": "moonshotai/kimi-k3",
+   "budget": "64000",
+   "maxTokens": 64000,
+   "bodyKeys": [
+    "max_tokens",
+    "messages",
+    "model",
+    "stream",
+    "usage"
+   ],
+   "tools": "ABSENT",
+   "toolChoice": "(absent)",
+   "systemTextChars": 9134,
+   "sampling": {
+    "usage": {
+     "include": true
+    }
+   },
+   "requestOrder": [
+    "title",
+    "main"
+   ],
+   "titleRequest": {
+    "maxTokens": 64000,
+    "sampling": {
+     "temperature": 0.5,
+     "reasoning": {
+      "effort": "low"
+     }
+    },
+    "systemJsonChars": 2251,
+    "tools": 0
+   }
+  },
+  {
+   "id": "D2-9",
+   "what": "D2-1 on a second CI bench id",
+   "agent": "council-support",
+   "registered": [
+    "chat",
+    "council-support",
+    "council-seat"
+   ],
+   "preQuery": false,
+   "model": "qwen/qwen3.8-27b",
+   "budget": "64000",
+   "maxTokens": 64000,
+   "bodyKeys": [
+    "max_tokens",
+    "messages",
+    "model",
+    "stream",
+    "temperature",
+    "top_p",
+    "usage"
+   ],
+   "tools": "ABSENT",
+   "toolChoice": "(absent)",
+   "systemTextChars": 8975,
+   "sampling": {
+    "temperature": 0.55,
+    "top_p": 1,
+    "usage": {
+     "include": true
+    }
+   },
+   "requestOrder": [
+    "title",
+    "main"
+   ],
+   "titleRequest": {
+    "maxTokens": 64000,
+    "sampling": {
+     "temperature": 0.5,
+     "reasoning": {
+      "effort": "low"
+     }
+    },
+    "systemJsonChars": 2251,
+    "tools": 0
+   }
+  },
+  {
+   "id": "D2-10",
+   "what": "D2-3 on the same second bench id",
+   "agent": "plan",
+   "registered": [
+    "chat"
+   ],
+   "preQuery": false,
+   "model": "qwen/qwen3.8-27b",
+   "budget": "64000",
+   "maxTokens": 64000,
+   "bodyKeys": [
+    "max_tokens",
+    "messages",
+    "model",
+    "stream",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_p",
+    "usage"
+   ],
+   "tools": 11,
+   "toolChoice": "auto",
+   "systemTextChars": 17493,
+   "sampling": {
+    "temperature": 0.55,
+    "top_p": 1,
+    "usage": {
+     "include": true
+    }
+   },
+   "requestOrder": [
+    "title",
+    "main"
+   ],
+   "titleRequest": {
+    "maxTokens": 64000,
+    "sampling": {
+     "temperature": 0.5,
+     "reasoning": {
+      "effort": "low"
+     }
+    },
+    "systemJsonChars": 2251,
+    "tools": 0
+   }
+  }
+ ]
+}

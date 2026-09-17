@@ -1,0 +1,1333 @@
+{
+ "engine": {
+  "binary": "C:\\Users\\sendt\\code\\amicus-wave3-boundary\\node_modules\\opencode-windows-x64\\bin\\opencode.exe",
+  "packageVersion": "1.18.15",
+  "sdkVersion": "1.18.15",
+  "amicus": "4.11.0"
+ },
+ "holdMs": 90000,
+ "arms": [
+  {
+   "arm": "A",
+   "sessionDirectory": "C:\\Users\\sendt\\AppData\\Local\\Temp\\amicus-probe-home-t3ISqa\\project\\run-A\\_scratch",
+   "heldMarker": "PROBE-LEG-3",
+   "holdMs": 90000,
+   "renderQueries": [
+    "T0_baseline_nodir",
+    "T1_runDir",
+    "T2_scratch",
+    "T3_scratch_again",
+    "T4_baseline_again",
+    "T5_sessionDir"
+   ],
+   "legs": [
+    {
+     "i": 0,
+     "marker": "PROBE-LEG-0",
+     "createMs": 10,
+     "createAt": 0,
+     "promptMs": 246,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebe2619ffep1AgvDzWil8TnE",
+     "createError": null,
+     "promptError": null
+    },
+    {
+     "i": 1,
+     "marker": "PROBE-LEG-1",
+     "createMs": 13,
+     "createAt": 0,
+     "promptMs": 23,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebe2613ffedicD3bqYNTpGkj",
+     "createError": null,
+     "promptError": null
+    },
+    {
+     "i": 2,
+     "marker": "PROBE-LEG-2",
+     "createMs": 15,
+     "createAt": 0,
+     "promptMs": 26,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebe2611ffe16IMDBNbolXzfq",
+     "createError": null,
+     "promptError": null
+    },
+    {
+     "i": 3,
+     "marker": "PROBE-LEG-3",
+     "createMs": 17,
+     "createAt": 0,
+     "promptMs": 244,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebe260effeYOHaYrGbQG2DrV",
+     "createError": null,
+     "promptError": null
+    }
+   ],
+   "requests": [
+    {
+     "at": 414,
+     "nth": 1,
+     "kind": "title",
+     "marker": "PROBE-LEG-2",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 416,
+     "nth": 2,
+     "kind": "title",
+     "marker": "PROBE-LEG-0",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 416,
+     "nth": 3,
+     "kind": "title",
+     "marker": "PROBE-LEG-3",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 416,
+     "nth": 4,
+     "kind": "title",
+     "marker": "PROBE-LEG-1",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 694,
+     "nth": 5,
+     "kind": "main",
+     "marker": "PROBE-LEG-2",
+     "served": "sse",
+     "sysChars": 9271,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 695,
+     "nth": 6,
+     "kind": "main",
+     "marker": "PROBE-LEG-3",
+     "served": "HELD",
+     "sysChars": 9271,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 697,
+     "nth": 7,
+     "kind": "main",
+     "marker": "PROBE-LEG-0",
+     "served": "sse",
+     "sysChars": 9271,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 708,
+     "nth": 8,
+     "kind": "main",
+     "marker": "PROBE-LEG-1",
+     "served": "sse",
+     "sysChars": 9271,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 92723,
+     "nth": 9,
+     "kind": "main",
+     "marker": "PROBE-LEG-3",
+     "served": "HELD",
+     "sysChars": 9271,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    }
+   ],
+   "timeline": [
+    [
+     {
+      "t": 287,
+      "tEnd": null,
+      "repeat": null,
+      "n": 1,
+      "parts": "user[]",
+      "own": null,
+      "mapKeys": 0,
+      "topLevelType": null
+     },
+     {
+      "t": 2505,
+      "tEnd": 108939,
+      "repeat": 51,
+      "n": 2,
+      "parts": "user[text] | assistant[step-start,text,step-finish] finish=length",
+      "own": null,
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ],
+    [
+     {
+      "t": 342,
+      "tEnd": null,
+      "repeat": null,
+      "n": 1,
+      "parts": "user[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 4,
+      "topLevelType": null
+     },
+     {
+      "t": 2537,
+      "tEnd": 108967,
+      "repeat": 51,
+      "n": 2,
+      "parts": "user[text] | assistant[step-start,text,step-finish] finish=length",
+      "own": null,
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ],
+    [
+     {
+      "t": 435,
+      "tEnd": null,
+      "repeat": null,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 4,
+      "topLevelType": null
+     },
+     {
+      "t": 2553,
+      "tEnd": 109001,
+      "repeat": 51,
+      "n": 2,
+      "parts": "user[text] | assistant[step-start,text,step-finish] finish=length",
+      "own": null,
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ],
+    [
+     {
+      "t": 457,
+      "tEnd": null,
+      "repeat": null,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 4,
+      "topLevelType": null
+     },
+     {
+      "t": 2585,
+      "tEnd": 89856,
+      "repeat": 42,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     },
+     {
+      "t": 91990,
+      "tEnd": null,
+      "repeat": null,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "retry",
+       "attempt": 1,
+       "message": "Cannot connect to API: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()",
+       "next": 1789680370699
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     },
+     {
+      "t": 94129,
+      "tEnd": 109029,
+      "repeat": 8,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ]
+   ]
+  },
+  {
+   "arm": "B",
+   "sessionDirectory": "C:\\Users\\sendt\\AppData\\Local\\Temp\\amicus-probe-home-t3ISqa\\project\\run-B\\_scratch",
+   "heldMarker": "PROBE-LEG-3",
+   "holdMs": 90000,
+   "renderQueries": [
+    "T0_baseline_nodir",
+    "T4_baseline_again",
+    "T5_sessionDir"
+   ],
+   "legs": [
+    {
+     "i": 0,
+     "marker": "PROBE-LEG-0",
+     "createMs": 8,
+     "createAt": 0,
+     "promptMs": 29,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebc6dd7ffeLUYfEa5r0nst56",
+     "createError": null,
+     "promptError": null
+    },
+    {
+     "i": 1,
+     "marker": "PROBE-LEG-1",
+     "createMs": 16,
+     "createAt": 0,
+     "promptMs": 16,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebc6dcbffeGuu9rIUCoJUUxH",
+     "createError": null,
+     "promptError": null
+    },
+    {
+     "i": 2,
+     "marker": "PROBE-LEG-2",
+     "createMs": 19,
+     "createAt": 0,
+     "promptMs": 214,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebc6dc9ffeDazyrPjnYDosI4",
+     "createError": null,
+     "promptError": null
+    },
+    {
+     "i": 3,
+     "marker": "PROBE-LEG-3",
+     "createMs": 21,
+     "createAt": 0,
+     "promptMs": 216,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebc6dc6ffe35aJq4VGWPhsAh",
+     "createError": null,
+     "promptError": null
+    }
+   ],
+   "requests": [
+    {
+     "at": 379,
+     "nth": 1,
+     "kind": "title",
+     "marker": "PROBE-LEG-0",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 379,
+     "nth": 2,
+     "kind": "title",
+     "marker": "PROBE-LEG-2",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 379,
+     "nth": 3,
+     "kind": "title",
+     "marker": "PROBE-LEG-3",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 379,
+     "nth": 4,
+     "kind": "title",
+     "marker": "PROBE-LEG-1",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 664,
+     "nth": 5,
+     "kind": "main",
+     "marker": "PROBE-LEG-0",
+     "served": "sse",
+     "sysChars": 9271,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 664,
+     "nth": 6,
+     "kind": "main",
+     "marker": "PROBE-LEG-3",
+     "served": "HELD",
+     "sysChars": 9271,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 665,
+     "nth": 7,
+     "kind": "main",
+     "marker": "PROBE-LEG-1",
+     "served": "sse",
+     "sysChars": 9271,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 697,
+     "nth": 8,
+     "kind": "main",
+     "marker": "PROBE-LEG-2",
+     "served": "sse",
+     "sysChars": 9271,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 92691,
+     "nth": 9,
+     "kind": "main",
+     "marker": "PROBE-LEG-3",
+     "served": "HELD",
+     "sysChars": 9271,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    }
+   ],
+   "timeline": [
+    [
+     {
+      "t": 300,
+      "tEnd": null,
+      "repeat": null,
+      "n": 1,
+      "parts": "user[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 4,
+      "topLevelType": null
+     },
+     {
+      "t": 2503,
+      "tEnd": 109026,
+      "repeat": 51,
+      "n": 2,
+      "parts": "user[text] | assistant[step-start,text,step-finish] finish=length",
+      "own": null,
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ],
+    [
+     {
+      "t": 372,
+      "tEnd": null,
+      "repeat": null,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 4,
+      "topLevelType": null
+     },
+     {
+      "t": 2528,
+      "tEnd": 109063,
+      "repeat": 51,
+      "n": 2,
+      "parts": "user[text] | assistant[step-start,text,step-finish] finish=length",
+      "own": null,
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ],
+    [
+     {
+      "t": 398,
+      "tEnd": null,
+      "repeat": null,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 4,
+      "topLevelType": null
+     },
+     {
+      "t": 2564,
+      "tEnd": 109089,
+      "repeat": 51,
+      "n": 2,
+      "parts": "user[text] | assistant[step-start,text,step-finish] finish=length",
+      "own": null,
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ],
+    [
+     {
+      "t": 453,
+      "tEnd": null,
+      "repeat": null,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 4,
+      "topLevelType": null
+     },
+     {
+      "t": 2591,
+      "tEnd": 89957,
+      "repeat": 42,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     },
+     {
+      "t": 92086,
+      "tEnd": null,
+      "repeat": null,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "retry",
+       "attempt": 1,
+       "message": "Cannot connect to API: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()",
+       "next": 1789680483364
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     },
+     {
+      "t": 94188,
+      "tEnd": 109105,
+      "repeat": 8,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ]
+   ]
+  },
+  {
+   "arm": "C",
+   "sessionDirectory": "C:\\Users\\sendt\\AppData\\Local\\Temp\\amicus-probe-home-t3ISqa\\project\\run-C",
+   "heldMarker": "PROBE-LEG-3",
+   "holdMs": 90000,
+   "renderQueries": [
+    "T0_baseline_nodir",
+    "T1_runDir",
+    "T2_scratch",
+    "T3_scratch_again",
+    "T4_baseline_again",
+    "T5_sessionDir"
+   ],
+   "legs": [
+    {
+     "i": 0,
+     "marker": "PROBE-LEG-0",
+     "createMs": 11,
+     "createAt": 0,
+     "promptMs": 225,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebab4fbffevD0FXnGTH9v6rn",
+     "createError": null,
+     "promptError": null
+    },
+    {
+     "i": 1,
+     "marker": "PROBE-LEG-1",
+     "createMs": 13,
+     "createAt": 0,
+     "promptMs": 23,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebab4f5ffefl34hJTZT7PMcD",
+     "createError": null,
+     "promptError": null
+    },
+    {
+     "i": 2,
+     "marker": "PROBE-LEG-2",
+     "createMs": 16,
+     "createAt": 0,
+     "promptMs": 25,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebab4f2ffe7DUEOkjRisIRHD",
+     "createError": null,
+     "promptError": null
+    },
+    {
+     "i": 3,
+     "marker": "PROBE-LEG-3",
+     "createMs": 18,
+     "createAt": 0,
+     "promptMs": 222,
+     "promptStatus": 204,
+     "sessionId": "ses_f4ebab4f0ffeZEr6FiJ6jKgQnR",
+     "createError": null,
+     "promptError": null
+    }
+   ],
+   "requests": [
+    {
+     "at": 387,
+     "nth": 1,
+     "kind": "title",
+     "marker": "PROBE-LEG-2",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 387,
+     "nth": 2,
+     "kind": "title",
+     "marker": "PROBE-LEG-0",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 387,
+     "nth": 3,
+     "kind": "title",
+     "marker": "PROBE-LEG-3",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 387,
+     "nth": 4,
+     "kind": "title",
+     "marker": "PROBE-LEG-1",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 672,
+     "nth": 5,
+     "kind": "main",
+     "marker": "PROBE-LEG-2",
+     "served": "sse",
+     "sysChars": 9261,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 673,
+     "nth": 6,
+     "kind": "main",
+     "marker": "PROBE-LEG-1",
+     "served": "sse",
+     "sysChars": 9261,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 693,
+     "nth": 7,
+     "kind": "main",
+     "marker": "PROBE-LEG-0",
+     "served": "sse",
+     "sysChars": 9261,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 694,
+     "nth": 8,
+     "kind": "main",
+     "marker": "PROBE-LEG-3",
+     "served": "HELD",
+     "sysChars": 9261,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 92726,
+     "nth": 9,
+     "kind": "main",
+     "marker": "PROBE-LEG-3",
+     "served": "HELD",
+     "sysChars": 9261,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user"
+     ]
+    }
+   ],
+   "timeline": [
+    [
+     {
+      "t": 265,
+      "tEnd": null,
+      "repeat": null,
+      "n": 1,
+      "parts": "user[]",
+      "own": null,
+      "mapKeys": 0,
+      "topLevelType": null
+     },
+     {
+      "t": 2486,
+      "tEnd": 108921,
+      "repeat": 51,
+      "n": 2,
+      "parts": "user[text] | assistant[step-start,text,step-finish] finish=length",
+      "own": null,
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ],
+    [
+     {
+      "t": 359,
+      "tEnd": null,
+      "repeat": null,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 4,
+      "topLevelType": null
+     },
+     {
+      "t": 2518,
+      "tEnd": 108952,
+      "repeat": 51,
+      "n": 2,
+      "parts": "user[text] | assistant[step-start,text,step-finish] finish=length",
+      "own": null,
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ],
+    [
+     {
+      "t": 388,
+      "tEnd": null,
+      "repeat": null,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 4,
+      "topLevelType": null
+     },
+     {
+      "t": 2549,
+      "tEnd": 108984,
+      "repeat": 51,
+      "n": 2,
+      "parts": "user[text] | assistant[step-start,text,step-finish] finish=length",
+      "own": null,
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ],
+    [
+     {
+      "t": 445,
+      "tEnd": null,
+      "repeat": null,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 4,
+      "topLevelType": null
+     },
+     {
+      "t": 2558,
+      "tEnd": 89817,
+      "repeat": 42,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     },
+     {
+      "t": 91952,
+      "tEnd": null,
+      "repeat": null,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "retry",
+       "attempt": 1,
+       "message": "Cannot connect to API: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()",
+       "next": 1789680596261
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     },
+     {
+      "t": 94094,
+      "tEnd": 109019,
+      "repeat": 8,
+      "n": 2,
+      "parts": "user[text] | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ]
+   ]
+  },
+  {
+   "arm": "D3",
+   "sessionDirectory": "C:\\Users\\sendt\\AppData\\Local\\Temp\\amicus-probe-home-t3ISqa\\project\\run-D3\\_scratch",
+   "heldMarker": null,
+   "holdMs": 90000,
+   "renderQueries": [],
+   "legs": [
+    {
+     "i": 0,
+     "marker": "PROBE-LEG-0",
+     "createMs": 14,
+     "createAt": 0,
+     "promptMs": 13,
+     "promptStatus": 204,
+     "sessionId": "ses_f4eb8fd1affeRqhnaXtWBdE7At",
+     "createError": null,
+     "promptError": null
+    }
+   ],
+   "requests": [
+    {
+     "at": 306,
+     "nth": 1,
+     "kind": "title",
+     "marker": "PROBE-LEG-0",
+     "served": "sse-title",
+     "sysChars": 2251,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "reasoning",
+      "stream",
+      "temperature"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 0,
+     "roles": [
+      "system",
+      "user",
+      "user"
+     ]
+    },
+    {
+     "at": 583,
+     "nth": 2,
+     "kind": "main",
+     "marker": "PROBE-LEG-0",
+     "served": "tool_call",
+     "sysChars": 17999,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "tool_choice",
+      "tools",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 11,
+     "roles": [
+      "system",
+      "user"
+     ]
+    },
+    {
+     "at": 653,
+     "nth": 3,
+     "kind": "main",
+     "marker": "PROBE-LEG-0",
+     "served": "HELD",
+     "sysChars": 17999,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "tool_choice",
+      "tools",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 11,
+     "roles": [
+      "system",
+      "user",
+      "assistant",
+      "tool"
+     ]
+    },
+    {
+     "at": 92695,
+     "nth": 4,
+     "kind": "main",
+     "marker": "PROBE-LEG-0",
+     "served": "HELD",
+     "sysChars": 17999,
+     "bodyKeys": [
+      "max_tokens",
+      "messages",
+      "model",
+      "stream",
+      "tool_choice",
+      "tools",
+      "usage"
+     ],
+     "maxTokens": 64000,
+     "toolCount": 11,
+     "roles": [
+      "system",
+      "user",
+      "assistant",
+      "tool"
+     ]
+    }
+   ],
+   "timeline": [
+    [
+     {
+      "t": 228,
+      "tEnd": null,
+      "repeat": null,
+      "n": 1,
+      "parts": "user[]",
+      "own": null,
+      "mapKeys": 0,
+      "topLevelType": null
+     },
+     {
+      "t": 2266,
+      "tEnd": 90041,
+      "repeat": 44,
+      "n": 3,
+      "parts": "user[text] | assistant[step-start,tool:read:completed,step-finish] finish=tool-calls | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     },
+     {
+      "t": 92077,
+      "tEnd": null,
+      "repeat": null,
+      "n": 3,
+      "parts": "user[text] | assistant[step-start,tool:read:completed,step-finish] finish=tool-calls | assistant[]",
+      "own": {
+       "type": "retry",
+       "attempt": 1,
+       "message": "Cannot connect to API: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()",
+       "next": 1789680708830
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     },
+     {
+      "t": 94115,
+      "tEnd": 108425,
+      "repeat": 8,
+      "n": 3,
+      "parts": "user[text] | assistant[step-start,tool:read:completed,step-finish] finish=tool-calls | assistant[]",
+      "own": {
+       "type": "busy"
+      },
+      "mapKeys": 1,
+      "topLevelType": null
+     }
+    ]
+   ]
+  }
+ ]
+}

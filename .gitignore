@@ -82,9 +82,10 @@ test_output*.txt
 # on the next incremental rebuild). Deleting this directory is not free.
 graphify-out/
 
-# Probe 3 (#202 Lever 2) raw wire capture -- `scripts/probe-provider-routing.js`'s default
-# --out, ~1.4 MB because every captured body carries the engine's whole system prompt and
-# tool schemas. Regenerable in ~4 minutes by the script itself. Root-anchored and named
-# exactly, NOT `probe-3/`: the few-KB `probe-3/wire-capture-digest.json` beside it is the
-# committed record and must stay tracked.
-/probe-3/wire-capture.json
+# Wave 3.0 Read D probe output: the DIGESTS beside the two probe scripts are
+# committed (read-D/*-digest.json, a few KB each); the full request/response
+# captures they are derived from are ~1 MB each and live only in the evidence
+# store under .superpowers/. This line keeps one from ever landing here if a
+# probe is run with --out pointing at the repo.
+read-D/*-capture.json
+read-D/wire64k.json
