@@ -351,9 +351,10 @@ jobs:
           # FOUR OUTCOMES, and only one stops the job (src/utils/council-credit-preflight.js
           # :: decideCreditPreflight owns the ruling, and is unit-tested per branch
           # in tests/utils/council-credit-preflight.test.js):
-          #   refuse  -> ::error:: + exit 1. Only for a key that can fund NOTHING
-          #              (free tier, or a monthly limit at or below zero). Zero
-          #              spend, no seat dispatched.
+          #   refuse  -> ::error:: + exit 1. Only for a key that can fund NOTHING:
+          #              free tier, a monthly limit at or below zero, or a limit
+          #              below one cent (it would floor to a `--max-cost 0` the
+          #              CLI rejects outright). Zero spend, no seat dispatched.
           #   clamp   -> ::warning:: + exit 0, and `effective_max_cost` carries a
           #              SMALLER ceiling the key can actually fund.
           #   warn    -> ::warning:: + exit 0. A network blip must never cost the

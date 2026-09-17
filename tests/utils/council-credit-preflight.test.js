@@ -16,8 +16,10 @@
  * is a whole-run CEILING, not the expected spend. A key with $0.50 left can
  * still fund several cheap seats. So a remaining limit below the ceiling now
  * CLAMPS the run's ceiling to what the key has, and the run's own cost gate
- * (exit 2 + degrade notes, loud) bounds the spend. Only two states refuse:
- * a free-tier key, and a limit that is actually exhausted (`<= 0`).
+ * (exit 2 + degrade notes, loud) bounds the spend. THREE states refuse — a
+ * free-tier key, a limit that is actually exhausted (`<= 0`), and a limit below
+ * one cent, which would floor to a `--max-cost 0` the CLI rejects outright
+ * (council #264 r1 round 2).
  *
  * The workflow step is a shell heredoc and cannot be unit-tested; the ruling it
  * makes can be, so the ruling lives here as a pure function and the step only
@@ -101,7 +103,7 @@ describe('#256 decideCreditPreflight', () => {
     });
   });
 
-  describe('refuse — zero spend, loud, and only for the two states that cannot fund anything', () => {
+  describe('refuse — zero spend, loud, and only for the three states that cannot fund a run', () => {
     test('a free-tier key is refused whatever the limit says', () => {
       const d = decideCreditPreflight(checked({ isFreeTier: true }), 2);
       expect(d.outcome).toBe('refuse');
@@ -135,6 +137,29 @@ describe('#256 decideCreditPreflight', () => {
       const d = decideCreditPreflight(checked({ limitRemaining: 0 }), '');
       expect(d.outcome).toBe('refuse');
     });
+
+    /**
+     * The THIRD refuse state (council #264 r1 round 2) — MEASURED, and it
+     * reverses what the first clamp asserted. A sub-cent limit floors to `0`,
+     * `finish` writes `effective_max_cost=0`, `'0'` is non-empty so the
+     * `${VAR:-$MAX_COST}` fallback does not fire, and the paid step runs
+     * `--max-cost "0"` — which `src/cli-handlers-council-run.js` rejects outright
+     * (`--max-cost must be a positive number`, BAD_ARGS, exit 1) long before
+     * `createBudget` is reached. The workflow then reports `::error::council run
+     * failed`: zero reviews, the exact outcome the clamp exists to prevent.
+     *
+     * Filed here, not under `clamp`, because the outcome IS a refusal — the
+     * clamp block carries the boundary invariant that keeps the two consistent.
+     */
+    test('a sub-cent remainder REFUSES — a $0 ceiling is rejected by the CLI, not bounded by it', () => {
+      for (const limitRemaining of [0.004, 0.009, 0.0001]) {
+        const d = decideCreditPreflight(checked({ limitRemaining }), 2);
+        expect(d.outcome).toBe('refuse');
+        expect(d.effectiveMaxCost).toBeNull();
+        expect(d.message).toContain('below one cent');
+        expect(d.message).toContain('no seat was dispatched');
+      }
+    });
   });
 
   /**
@@ -163,26 +188,10 @@ describe('#256 decideCreditPreflight', () => {
       }
     });
 
-    /**
-     * Council #264 r1 round 2 — MEASURED, and it reverses what the first clamp
-     * asserted. A sub-cent limit floors to `0`, `finish` writes
-     * `effective_max_cost=0`, `'0'` is non-empty so the `${VAR:-$MAX_COST}`
-     * fallback does not fire, and the paid step runs `--max-cost "0"` — which
-     * `src/cli-handlers-council-run.js` rejects outright (`--max-cost must be a
-     * positive number`, BAD_ARGS, exit 1) long before `createBudget` is reached.
-     * The workflow then reports `::error::council run failed`: zero reviews, the
-     * exact outcome the clamp exists to prevent.
-     */
-    test('a sub-cent remainder REFUSES — a $0 ceiling is rejected by the CLI, not bounded by it', () => {
-      for (const limitRemaining of [0.004, 0.009, 0.0001]) {
-        const d = decideCreditPreflight(checked({ limitRemaining }), 2);
-        expect(d.outcome).toBe('refuse');
-        expect(d.effectiveMaxCost).toBeNull();
-        expect(d.message).toContain('below one cent');
-        expect(d.message).toContain('no seat was dispatched');
-      }
-    });
-
+    // The sub-cent case is the lower BOUNDARY of this range, but its outcome is
+    // `refuse`, so it is filed under the refuse block above — see
+    // `a sub-cent remainder REFUSES …`. The invariant that keeps the two blocks
+    // consistent is the sweep below.
     test('effectiveMaxCost is NEVER zero on a clamp — a zero ceiling would fail the job', () => {
       // The whole-range guard, not three examples: anything that survives as a
       // clamp must be a ceiling the CLI will accept.
