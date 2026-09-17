@@ -140,6 +140,17 @@ The council is the hero — start with the everyday way, and reach for the more 
 
 The same pipeline runs with no Claude runtime at all: `amicus council run --prompt-file briefing.md --models gemini,glm --chair deepseek --json` executes the review waves, the anonymized cross-review, the tally, and the chair verdict in one command, and writes the full run directory (`verdict.json` with the chair's parsed `overallVerdict`, `report.html`, every review and judge output). That is what powers the repo's own **Council Review GitHub Action v2** — on PRs labeled `council-review` it posts an adjudicated verdict as a check run plus a sticky comment, uploads the run directory as an evidence artifact, and gates merges by default via its `fail_on` input (fails only on a `Fundamental rethink` verdict; pass `fail_on: fix` to require `Ship it`, or `fail_on: none` for report-only). Reference: [docs/council.md](./docs/council.md#amicus-council-run).
 
+**Running in that action right now: a routing experiment (#202).** OpenRouter serves one model from
+several upstream providers, and nothing a run records says which one served a leg — so a slow
+upstream is indistinguishable from a slow model. Before the paid step, the workflow writes an
+`opencode.json` into the run directory pinning one bench model to a single upstream
+(`provider.openrouter.models.<id>.options.provider.only`), which makes that model's legs
+attributable by construction. To read a run, open its `council-run` evidence artifact: the
+`opencode.json` inside it is the routing that was in force, and a wrong provider slug shows up as an
+OpenRouter 4xx on that model's legs rather than as a stall — check for one before reading a run's
+timings. To turn it off, blank the workflow's `COUNCIL_PROVIDER_ROUTING` value; the step is then
+skipped and nothing is written.
+
 <p align="center"><img src="./docs/cards/ship-gate.svg" alt="A council gating a release pipeline: exit 0 ships it, exit 1 sends it back"></p>
 
 ### Free council (zero-cost)

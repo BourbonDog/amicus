@@ -124,6 +124,55 @@ jobs:
       # path at 120000 and looked like a fix that changed nothing.
       DIFF_CAP: ${{ inputs.diff_cap_bytes || '240000' }}
       RUN_DIR: council-run
+      # ⚠️ AN EXPERIMENT, running on live council rounds (#202, Lever 2). #202 is
+      # the council's frequency record: CI legs die at the 480 s no-output
+      # backstop on a heavy time-to-first-token tail. Its one untried
+      # cause-level lever is OpenRouter PROVIDER PINNING — OpenRouter fans a
+      # model out across several upstreams, and a slow one is indistinguishable
+      # from a slow model. This pins ONE bench model (qwen) to ONE upstream and
+      # rides the ordinary rounds; it costs no extra spend. Scope note: the pin
+      # is on the MODEL ID, and the engine walks up from the session directory,
+      # so it governs every call qwen makes in the run — its Stage-1 review, its
+      # Stage-1 retry, and its Stage-2 judge leg (which runs in $RUN_DIR/_scratch,
+      # a child) alike. No other seat's routing is touched.
+      #
+      # THE MEASUREMENT IT RIDES ON (PR #265, keyless, on the pinned engine):
+      # a per-model `options.provider` block reaches the OpenRouter request body
+      # verbatim, and an `opencode.json` written into the PER-CALL directory is
+      # live — the engine walks UP from the session directory, so a file in
+      # $RUN_DIR reaches a Stage-1 seat (case R12) and one in a judge's
+      # `_scratch` child reaches a support leg (R14).
+      #
+      # WHY `only` AND NOT `order`. `only: ["reka"]` leaves exactly one upstream
+      # able to serve the leg, which is what makes the result SELF-ATTRIBUTING
+      # (see below). It also makes `allow_fallbacks` inert — there is nothing to
+      # fall back to. So if reka is down or drops the model, the qwen leg simply
+      # FAILS, and its Stage-1 retry runs under the same pin and fails the same
+      # way. That is the accepted cost of an attributable measurement.
+      #
+      # WHAT THE RUN RECORDS: nothing. No amicus artifact names the serving
+      # upstream — not run.json, not the spend ledger — which is exactly why the
+      # single-upstream form is the only honest one: attribution here is BY
+      # CONSTRUCTION, not by a field anyone can read back. And the engine
+      # validates none of this: a wrong provider slug ships silently and the leg
+      # is refused by OpenRouter. So READ THE FIRST RUN'S LEG ERRORS for a 4xx
+      # from OpenRouter before any later run's death counts mean anything — a
+      # typo here looks exactly like the stall it is meant to measure.
+      #
+      # TO TURN IT OFF: blank this value. The step below is skipped, no
+      # opencode.json is written, and the council runs exactly as before.
+      #
+      # THE INVARIANT ("PR code is never executed"). This file lands inside the
+      # surface the launch-time agent tripwire polices (verifyAgentRendering /
+      # verifyAgentFields, rulings P2-R33/R44/R53): a tree's opencode.json CAN
+      # move a council agent's permission rules. Three things hold it: the
+      # document carries ONLY the routing key (the step below asserts that shape
+      # with jq and fails the job otherwise); scripts/probe-council-agents.js's
+      # PROBE_TREE_ROUTING_JSON case MEASURED on this engine that a document of
+      # exactly this shape moves no rule, no rule order and none of the fields
+      # verifyAgentFields reads; and the tripwire still reads every rendered
+      # agent back at launch, so a rendering that did move is refused there.
+      COUNCIL_PROVIDER_ROUTING: '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"only":["reka"]}}}}}}}'
       # A runner has no user config, so every alias would otherwise resolve from
       # amicus's SHIPPED table (src/utils/curated-models.js :: toDefaultAliases).
       # Pointing the config dir at the workspace lets the provisioning step below
@@ -763,6 +812,49 @@ jobs:
               cat env-context.md
             fi
           } > briefing.md
+
+      - name: Write the provider-routing experiment into the run directory
+        # #202 Lever 2. See the COUNCIL_PROVIDER_ROUTING block in this job's
+        # `env:` for what the experiment is, what it rides on, and how to stop
+        # it. This step only places the document where the engine will read it:
+        # $RUN_DIR is the per-call directory PR #265 case R12 measured as live.
+        #
+        # It must run BEFORE the paid step below — a file written afterwards
+        # reaches nothing — and it writes into $RUN_DIR, which the "Upload
+        # evidence artifact" step ships wholesale as `council-run`. That is how
+        # a reader of an archived run knows what routing was in force for it:
+        # the document travels with the run, not with this file's history.
+        #
+        # Gated on the secret like every other step in this job: a soft-skipped
+        # fork PR must not announce an experiment that no council ran.
+        if: ${{ steps.gate.outputs.available == 'true' && env.COUNCIL_PROVIDER_ROUTING != '' }}
+        run: |
+          mkdir -p "$RUN_DIR"
+          # VALIDATE BEFORE WRITING. A malformed document is written, ignored by
+          # the engine, and then read back later as "the experiment ran and
+          # changed nothing" — a silent degrade that would poison every death
+          # count taken while it was in force. Loud and dead instead.
+          if ! jq -e . >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::COUNCIL_PROVIDER_ROUTING is not valid JSON — nothing was written and no seat was dispatched; fix the value or blank it to disable the experiment"
+            exit 1
+          fi
+          # The two shape assertions the invariant argument rests on. The
+          # measured claim (PROBE_TREE_ROUTING_JSON) is about a document that
+          # carries the routing key and NOTHING else; a document carrying an
+          # `agent` block, a prompt or a permission block would sit inside the
+          # agent-rendering surface with nothing measured about it at all.
+          if ! jq -e 'keys == ["provider"]' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::COUNCIL_PROVIDER_ROUTING carries a top-level key other than 'provider' — refused: the #202 Lever 2 invariant is measured only for a routing-ONLY document"
+            exit 1
+          fi
+          if ! jq -e '[.provider[].models[] | (keys == ["options"]) and (.options | keys == ["provider"])] | (length > 0) and all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::every COUNCIL_PROVIDER_ROUTING model entry must carry options.provider and nothing else, and there must be at least one — refused"
+            exit 1
+          fi
+          printf '%s' "$COUNCIL_PROVIDER_ROUTING" > "$RUN_DIR/opencode.json"
+          PINNED=$(jq -r '[.provider[].models | keys[]] | join(", ")' <<< "$COUNCIL_PROVIDER_ROUTING")
+          ROUTING=$(jq -c '[.provider[].models[].options.provider] | add' <<< "$COUNCIL_PROVIDER_ROUTING")
+          echo "::notice::#202 Lever 2 — OpenRouter provider routing in force for ${PINNED}: ${ROUTING}. Written to ${RUN_DIR}/opencode.json and shipped in the council-run evidence artifact. Nothing records the serving upstream, so read this run's leg errors for an OpenRouter 4xx before reading its stalls."
 
       - name: Run the adjudicated council (amicus council run, headless)
         if: steps.gate.outputs.available == 'true'

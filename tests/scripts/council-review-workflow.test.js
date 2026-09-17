@@ -816,6 +816,104 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
   });
 
   /**
+   * #202 Lever 2 — the provider-routing experiment.
+   *
+   * The one untried cause-level lever on #202's heavy TTFT tail is OpenRouter
+   * PROVIDER pinning: OpenRouter fans a model out across several upstreams, and
+   * a run records nothing about which one served a leg. PR #265 measured on the
+   * pinned engine (keyless) that a per-model `options.provider` block reaches
+   * the OpenRouter request body verbatim, and that an `opencode.json` placed in
+   * the per-call directory is live (cases R12/R14 — the engine walks up from
+   * the session directory). `only: ["<one-slug>"]` is the only SELF-ATTRIBUTING
+   * form, because nothing in the run names the serving upstream: if exactly one
+   * upstream can serve the leg, the leg's outcome is that upstream's.
+   *
+   * The document is written into `$RUN_DIR`, which is the surface the launch-
+   * time agent tripwire (`verifyAgentRendering`/`verifyAgentFields`, rulings
+   * P2-R33/R44/R53) polices — a tree's opencode.json CAN move a council agent's
+   * permission rules. That it does not here is MEASURED, not argued:
+   * scripts/probe-council-agents.js's `PROBE_TREE_ROUTING_JSON` case, run by
+   * tests/council-agents-engine.integration.test.js.
+   */
+  describe('provider-routing experiment (#202 Lever 2)', () => {
+    const ROUTING_STEP = 'Write the provider-routing experiment into the run directory';
+    const routingStep = () => {
+      const y = yml();
+      return y.slice(y.indexOf(`- name: ${ROUTING_STEP}`), y.indexOf('- name: Run the adjudicated council'));
+    };
+    const routingValue = () => {
+      const y = yml();
+      return /^\s*COUNCIL_PROVIDER_ROUTING:\s*'(.*)'\s*$/m.exec(y)[1];
+    };
+
+    test('the step exists and runs BEFORE the paid council step', () => {
+      const y = yml();
+      expect(y.indexOf(`- name: ${ROUTING_STEP}`)).toBeGreaterThan(-1);
+      expect(y.indexOf(`- name: ${ROUTING_STEP}`))
+        .toBeLessThan(y.indexOf('- name: Run the adjudicated council'));
+      // A file written AFTER the run starts reaches nothing.
+      expect(routingStep()).toContain('$RUN_DIR/opencode.json');
+    });
+
+    test('blanking the value turns the experiment off — the step is skipped', () => {
+      const step = routingStep();
+      expect(step).toContain("env.COUNCIL_PROVIDER_ROUTING != ''");
+      // Gated on the secret like every other step in this job: a soft-skipped
+      // fork PR must not announce an experiment that no council ran.
+      expect(step).toContain("steps.gate.outputs.available == 'true'");
+    });
+
+    test('the value reaches the shell through env:, never spliced into run:', () => {
+      const step = routingStep();
+      const runBlock = step.slice(step.indexOf('run: |'));
+      // The established rule from #256/#264: a `${{ }}` splice inside run: is a
+      // script-injection seam, and this value is a JSON document full of quotes.
+      expect(runBlock).not.toContain('${{');
+      expect(step).toContain('"$COUNCIL_PROVIDER_ROUTING"');
+    });
+
+    test('a malformed document fails the job loudly instead of running as "no experiment"', () => {
+      const step = routingStep();
+      expect(step).toContain('jq -e .');
+      expect(step).toContain('::error::');
+      expect(step).toContain('exit 1');
+      // The shape assertions the invariant argument rests on, not merely a
+      // parse: a document carrying anything but the routing key would be inside
+      // the agent-rendering surface with nothing measured about it.
+      expect(step).toContain('mkdir -p "$RUN_DIR"');
+      expect(step).toContain('::notice::');
+    });
+
+    test('the shipped default is a routing-ONLY document — the shape the probe measured', () => {
+      const doc = JSON.parse(routingValue());
+      expect(Object.keys(doc)).toEqual(['provider']);
+      const models = doc.provider.openrouter.models;
+      expect(Object.keys(models).length).toBeGreaterThan(0);
+      for (const entry of Object.values(models)) {
+        // ONLY options.provider. Anything else (a prompt, a model override, a
+        // permission block) would be exactly the P2-R33/R44/R53 attack shape.
+        expect(Object.keys(entry)).toEqual(['options']);
+        expect(Object.keys(entry.options)).toEqual(['provider']);
+        expect(Array.isArray(entry.options.provider.only)).toBe(true);
+        expect(entry.options.provider.only).toHaveLength(1);
+      }
+    });
+
+    test('every pinned model id is one the CI alias map actually seats', () => {
+      // If the alias map drops qwen (or re-pins it to another id), this pin
+      // silently stops applying to any seat — a routing experiment nobody is
+      // running. Read the map rather than restating its ids here.
+      const map = JSON.parse(fs.readFileSync(
+        path.join(__dirname, '..', '..', '.github', 'amicus-ci-aliases.json'), 'utf-8'));
+      const openrouterIds = Object.values(map.aliases)
+        .filter((id) => String(id).startsWith('openrouter/'))
+        .map((id) => String(id).slice('openrouter/'.length));
+      const models = JSON.parse(routingValue()).provider.openrouter.models;
+      for (const id of Object.keys(models)) { expect(openrouterIds).toContain(id); }
+    });
+  });
+
+  /**
    * #256 — the OpenRouter credit preflight.
    *
    * MEASURED (run 35143585179, `309862bf`, 2026-09-16): the key's remaining

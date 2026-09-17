@@ -52,6 +52,13 @@ All notable changes to Amicus are documented here. Format follows
 - The setup window's key IPC handlers (`sidecar:validate-key`, `sidecar:save-key`) moved from
   `electron/ipc-setup.js` to `electron/ipc-keys.js` (300-line size gate). Channel names, return
   shapes and behaviour are unchanged. (#212)
+- **The CI council now pins qwen's OpenRouter upstream to `reka`** — the Lever 2 experiment on the
+  heavy time-to-first-token tail. `.github/workflows/council-review.yml` writes an `opencode.json`
+  carrying only `provider.openrouter.models.<id>.options.provider` into the run directory before
+  the paid step, so one bench model is served by one upstream and its outcomes are attributable by
+  construction (nothing in a run records the serving upstream). Blank `COUNCIL_PROVIDER_ROUTING`
+  to turn it off; the file ships inside the `council-run` evidence artifact, so an archived run
+  says what routing was in force for it. (#202)
 
 ### Fixed
 
