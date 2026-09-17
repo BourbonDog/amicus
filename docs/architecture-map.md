@@ -461,6 +461,7 @@ scripts/
 ├── probe-council-agents.js  # Spec 2026-09-11 §4 — the ENGINE side of the council agents (ruling P2-R21).
 ├── probe-darwin-extract.js
 ├── probe-max-tokens.js  # Wire probe for issue #218: what max_tokens / reasoning / thinking does the
+├── probe-provider-routing.js  # Wire probe for issue #202 Lever 2: does an OpenRouter PROVIDER-ROUTING
 ├── run-integration-keyless.js
 ├── setup-hooks.js  # Configure git to run the version-controlled hooks in .husky/.
 ├── test-tools.sh

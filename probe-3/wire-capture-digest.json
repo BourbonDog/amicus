@@ -1,0 +1,879 @@
+{
+  "engine": {
+    "binary": "C:\\Users\\sendt\\code\\amicus-wave2-probe3\\node_modules\\opencode-windows-x64\\bin\\opencode.exe",
+    "packageVersion": "1.18.15",
+    "sdkVersion": "1.18.15"
+  },
+  "userAgent": "opencode/1.18.15 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.14",
+  "cases": [
+    {
+      "id": "R0",
+      "path": "control — bare {} descriptor",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {}
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": null,
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R1",
+      "path": "(a) models.<id>.options.provider",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {
+              "options": {
+                "provider": {
+                  "order": [
+                    "Fireworks"
+                  ],
+                  "allow_fallbacks": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": {
+        "order": [
+          "Fireworks"
+        ],
+        "allow_fallbacks": false
+      },
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "provider",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [
+        "body.provider.order.0 = Fireworks"
+      ],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R2",
+      "path": "(b) an invented per-request body key providerOptions.openrouter.provider",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {}
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": null,
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R3",
+      "path": "(c) provider.openrouter.options.provider (the baseURL block)",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key",
+            "provider": {
+              "order": [
+                "Fireworks"
+              ],
+              "allow_fallbacks": false
+            }
+          },
+          "models": {
+            "moonshotai/kimi-k3": {}
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": null,
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R4",
+      "path": "(a) options.provider.ignore",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {
+              "options": {
+                "provider": {
+                  "ignore": [
+                    "DeepInfra"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": {
+        "ignore": [
+          "DeepInfra"
+        ]
+      },
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "provider",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [
+        "body.provider.ignore.0 = DeepInfra"
+      ],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R5",
+      "path": "(a) options.provider.only",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {
+              "options": {
+                "provider": {
+                  "only": [
+                    "Fireworks"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": {
+        "only": [
+          "Fireworks"
+        ]
+      },
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "provider",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [
+        "body.provider.only.0 = Fireworks"
+      ],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R6",
+      "path": "(a) options.provider.sort",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {
+              "options": {
+                "provider": {
+                  "sort": "latency"
+                }
+              }
+            }
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": {
+        "sort": "latency"
+      },
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "provider",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [
+        "body.provider.sort = latency"
+      ],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R7",
+      "path": "(a) options.provider.require_parameters",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {
+              "options": {
+                "provider": {
+                  "require_parameters": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": {
+        "require_parameters": true
+      },
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "provider",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R8",
+      "path": "(a) options.provider.data_collection",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {
+              "options": {
+                "provider": {
+                  "data_collection": "deny"
+                }
+              }
+            }
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": {
+        "data_collection": "deny"
+      },
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "provider",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [
+        "body.provider.data_collection = deny"
+      ],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R9",
+      "path": "(a) the full shape on a REAL CI bench id (sentinel values, not usable names)",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "qwen/qwen3.8-27b": {
+              "options": {
+                "provider": {
+                  "order": [
+                    "Fireworks",
+                    "Together"
+                  ],
+                  "allow_fallbacks": false,
+                  "sort": "latency"
+                }
+              }
+            }
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": {
+        "order": [
+          "Fireworks",
+          "Together"
+        ],
+        "allow_fallbacks": false,
+        "sort": "latency"
+      },
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "temperature",
+        "top_p",
+        "messages",
+        "usage",
+        "provider",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [
+        "body.provider.order.0 = Fireworks",
+        "body.provider.order.1 = Together",
+        "body.provider.sort = latency"
+      ],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R10",
+      "path": "(a) an unknown options key (allowlist vs pass-through)",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {
+              "options": {
+                "zz_probe_unknown": "zz_probe_unknown"
+              }
+            }
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": null,
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "tools",
+        "tool_choice",
+        "zz_probe_unknown",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [
+        "body.zz_probe_unknown (key)",
+        "body.zz_probe_unknown = zz_probe_unknown"
+      ],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R11",
+      "path": "(e) an opencode.json at the engine cwd, amicus config untouched",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {}
+          }
+        }
+      },
+      "scopedAt": null,
+      "status": 204,
+      "error": null,
+      "provider": {
+        "order": [
+          "Fireworks"
+        ],
+        "allow_fallbacks": false
+      },
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "provider",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [
+        "body.provider.order.0 = Fireworks"
+      ],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R12",
+      "path": "(f) an opencode.json in the per-call query.directory ONLY, cwd clean — the CI shape",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {}
+          }
+        }
+      },
+      "scopedAt": "scope-R12-WOO6ZV",
+      "status": 204,
+      "error": null,
+      "provider": {
+        "order": [
+          "Fireworks"
+        ],
+        "allow_fallbacks": false
+      },
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "provider",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [
+        "body.provider.order.0 = Fireworks"
+      ],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R13",
+      "path": "(g) the mirror: opencode.json at cwd, calls scoped at an empty directory",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {}
+          }
+        }
+      },
+      "scopedAt": "scope-R13-Bqs5rt",
+      "status": 204,
+      "error": null,
+      "provider": {
+        "order": [
+          "Fireworks"
+        ],
+        "allow_fallbacks": false
+      },
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "provider",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [
+        "body.provider.order.0 = Fireworks"
+      ],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    },
+    {
+      "id": "R14",
+      "path": "(h) opencode.json at the scoped dir, calls scoped at its _scratch CHILD (the judge shape)",
+      "config": {
+        "openrouter": {
+          "options": {
+            "baseURL": "<capture>/api/v1",
+            "apiKey": "probe-key"
+          },
+          "models": {
+            "moonshotai/kimi-k3": {}
+          }
+        }
+      },
+      "scopedAt": "scope-R14-XB8QP5\\_scratch",
+      "status": 204,
+      "error": null,
+      "provider": {
+        "order": [
+          "Fireworks"
+        ],
+        "allow_fallbacks": false
+      },
+      "bodyKeys": [
+        "model",
+        "max_tokens",
+        "messages",
+        "usage",
+        "provider",
+        "tools",
+        "tool_choice",
+        "stream"
+      ],
+      "maxTokens": 32000,
+      "sentinels": [
+        "body.provider.order.0 = Fireworks"
+      ],
+      "assistantKeys": [
+        "id",
+        "sessionID",
+        "role",
+        "time",
+        "parentID",
+        "modelID",
+        "providerID",
+        "mode",
+        "agent",
+        "path",
+        "cost",
+        "tokens",
+        "finish"
+      ],
+      "assistantFinish": "length",
+      "servedByInMessage": false,
+      "servedByPaths": []
+    }
+  ]
+}
