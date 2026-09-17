@@ -2,10 +2,11 @@
  * Key IPC handlers for the setup window: `sidecar:validate-key` and
  * `sidecar:save-key`.
  *
- * Split out of electron/ipc-setup.js for issue #212. That file was at 294 of
- * the 300-line gate, and #212's fix — save-key validating in the MAIN process
- * before it persists — does not fit there. The two handlers are the pair the
- * issue is about, so they move together rather than being carved arbitrarily.
+ * Split out of electron/ipc-setup.js for issue 212. That file was at 294 of
+ * the 300-line gate, and issue 212's fix — save-key validating in the MAIN
+ * process before it persists — does not fit there. The two handlers are the
+ * pair the issue is about, so they move together rather than being carved
+ * arbitrarily.
  * Everything here arrived VERBATIM from electron/ipc-setup.js@3cc8cbe7:33-84
  * (channel names, return shapes, the F5 catalog warm-up and the Task 8
  * providerDefault picker logic are unchanged); the validation gate below is
@@ -22,7 +23,7 @@ const { logger: defaultLogger } = require('../src/utils/logger');
 /**
  * The statuses that BLOCK a save, mirroring the CLI (src/cli-handlers.js ::
  * handleKey) rather than inventing a second rule for the same credential
- * store — the asymmetry between the two entry points IS issue #212.
+ * store — the asymmetry between the two entry points IS issue 212.
  *
  * An ALLOWLIST of what blocks, deliberately: 401 is the only status that
  * means "this credential is not accepted". 403 (a disabled API, a quota, a
@@ -62,7 +63,23 @@ function registerKeyHandlers({ ipcMain, offerCatalogs, logger = defaultLogger })
 
   ipcMain.handle('sidecar:save-key', async (_event, provider, key) => {
     try {
-      const { saveApiKey } = require('../src/utils/api-key-store');
+      const { saveApiKey, validateApiKey } = require('../src/utils/api-key-store');
+      // Issue 212: validate HERE, in the main process, before anything is written.
+      // sidecar:validate-key is a sibling handler the RENDERER calls first
+      // (setup-ui-keys-script.js), which made the wizard's validate-then-save
+      // order discipline rather than enforcement: anything with renderer
+      // access -- notably a CDP automation session on AMICUS_DEBUG_PORT, how
+      // the GUI smoke runs are driven -- could invoke this channel directly
+      // and land an arbitrary unvalidated string in the real
+      // ~/.config/amicus/.env. That is the demonstrated bypass in issue 212,
+      // and it fits the fixture-shaped deepseek key found in a real key store.
+      const validation = await validateApiKey(provider, key);
+      if (blocksSave(validation)) {
+        logger.warn('save-key refused: the provider rejected the credential', {
+          provider, status: validation.status,
+        });
+        return { success: false, error: validation.error || 'Invalid API key', validation };
+      }
       const result = saveApiKey(provider, key);
       // F5: warm the model catalog as soon as a key lands so the Step 2
       // picker renders instantly. Fire-and-forget; failures are silent

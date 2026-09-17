@@ -486,3 +486,110 @@ describe('saveRawEnv / removeRawEnv (local-provider bearers)', () => {
     expect(fs.statSync(envPath).mode & 0o777).toBe(0o600);
   });
 });
+
+/**
+ * #212 — the key store refuses test-run writes to the REAL key store.
+ *
+ * Defence in depth, not the primary fix: a fixture-shaped key
+ * (`sk-deepseek-test-456`, the literal at :349 above) reached a real
+ * ~/.config/amicus/.env, and the entry point that could do it was the
+ * unvalidated sidecar:save-key IPC (fixed in electron/ipc-keys.js). This guard
+ * covers the OTHER half of the ask: a test suite should never be ABLE to write
+ * a real key store, whatever the vector.
+ *
+ * jest.config.js's setupFiles pin (tests/setup/hermetic-config-dir.js) already
+ * sets AMICUS_ENV_DIR for every unit file — but several tests in this very file
+ * DELETE it to exercise getEnvPath()'s HOME fallback, and any saveApiKey
+ * reached while it is deleted would land on the developer's real key store.
+ * This converts that invisible data loss into a loud throw.
+ *
+ * MEASURED, and why the predicate keys on the amicus config dir rather than on
+ * "somewhere under the home dir":
+ *   - On Windows os.tmpdir() is C:\Users\<user>\AppData\Local\Temp — INSIDE the
+ *     real home. A plain containment test would refuse every legitimately
+ *     HOME-redirected test on this platform.
+ *   - os.homedir() cannot supply "the real home" either: libuv reads
+ *     HOME/USERPROFILE first, so a redirected test moves it too (measured:
+ *     homedir() followed the redirect, os.userInfo().homedir did not).
+ */
+describe('test-run write guard (#212)', () => {
+  const { isTestWriteToRealKeyStore } = require('../src/utils/api-key-store');
+
+  const REAL_HOME = path.join(os.tmpdir(), 'amicus-212-real-home');
+  const REAL_STORE = path.join(REAL_HOME, '.config', 'amicus', '.env');
+  const homedir = () => REAL_HOME;
+  const IN_JEST = { JEST_WORKER_ID: '1' };
+
+  it('refuses under jest with no AMICUS_ENV_DIR and the real key-store path', () => {
+    expect(isTestWriteToRealKeyStore(REAL_STORE, { env: { ...IN_JEST }, homedir })).toBe(true);
+  });
+
+  it('allows when AMICUS_ENV_DIR is set (the hermetic pin every unit file gets)', () => {
+    const env = { ...IN_JEST, AMICUS_ENV_DIR: path.join(os.tmpdir(), 'amicus-hermetic-w1') };
+    expect(isTestWriteToRealKeyStore(REAL_STORE, { env, homedir })).toBe(false);
+  });
+
+  it('allows a HOME redirected to a tmpdir', () => {
+    const redirected = path.join(os.tmpdir(), 'amicus-212-fake-home', '.config', 'amicus', '.env');
+    expect(isTestWriteToRealKeyStore(redirected, { env: { ...IN_JEST }, homedir })).toBe(false);
+  });
+
+  it('allows outside a jest run (JEST_WORKER_ID absent)', () => {
+    expect(isTestWriteToRealKeyStore(REAL_STORE, { env: {}, homedir })).toBe(false);
+  });
+
+  it('allows a tmpdir that itself lives under the real home (the measured Windows shape)', () => {
+    const underHomeTmp = path.join(
+      REAL_HOME, 'AppData', 'Local', 'Temp', 'amicus-hermetic-w3', '.config', 'amicus', '.env'
+    );
+    expect(isTestWriteToRealKeyStore(underHomeTmp, { env: { ...IN_JEST }, homedir })).toBe(false);
+  });
+
+  it('allows a sibling that merely shares the config dir name as a prefix', () => {
+    const sibling = path.join(REAL_HOME, '.config', 'amicus-test', '.env');
+    expect(isTestWriteToRealKeyStore(sibling, { env: { ...IN_JEST }, homedir })).toBe(false);
+  });
+
+  it('saveApiKey throws TEST_ENV_WRITE_REFUSED, names the path, and writes nothing', () => {
+    // The "real home" is INJECTED as a tmpdir, so the developer's actual key
+    // store is never a candidate for this test — only the tmpdir shaped like it.
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-212-home-'));
+    const originalEnv = { ...process.env };
+    try {
+      delete process.env.AMICUS_ENV_DIR;      // hermetic-config-dir.js set it
+      delete process.env.DEEPSEEK_API_KEY;
+      process.env.HOME = fakeHome;
+      process.env.USERPROFILE = fakeHome;
+
+      let thrown = null;
+      try {
+        saveApiKey('deepseek', 'sk-deepseek-test-456', { homedir: () => fakeHome });
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(Error);
+      expect(thrown.code).toBe('TEST_ENV_WRITE_REFUSED');
+      expect(thrown.message).toContain(path.join(fakeHome, '.config', 'amicus', '.env'));
+      expect(fs.existsSync(path.join(fakeHome, '.config', 'amicus', '.env'))).toBe(false);
+      expect(process.env.DEEPSEEK_API_KEY).toBeUndefined();
+    } finally {
+      process.env = originalEnv;
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  it('still writes normally when AMICUS_ENV_DIR points at a sandbox', () => {
+    const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-212-sandbox-'));
+    const originalEnv = { ...process.env };
+    try {
+      process.env.AMICUS_ENV_DIR = sandbox;
+      expect(saveApiKey('deepseek', 'sk-deepseek-test-456')).toEqual({ success: true });
+      expect(fs.readFileSync(path.join(sandbox, '.env'), 'utf-8'))
+        .toContain('DEEPSEEK_API_KEY=sk-deepseek-test-456');
+    } finally {
+      process.env = originalEnv;
+      fs.rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+});

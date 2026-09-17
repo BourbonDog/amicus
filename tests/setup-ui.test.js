@@ -181,6 +181,15 @@ describe('setup-ui wizard', () => {
       expect(html).toContain('sidecar:get-config');
       expect(html).toContain('sidecar:get-api-keys');
     });
+
+    // #212: save-key can now REFUSE (the main process validates before it
+    // persists), and the key step used to report 'Saved' for every save
+    // outcome — a refused credential rendered as a green check. The script
+    // must branch on the save result before it claims success.
+    it('branches on the save-key result instead of always reporting Saved (#212)', () => {
+      expect(html).toContain('saveResult.success === false');
+      expect(html).toContain("saveResult.error || 'Save failed'");
+    });
   });
 
   describe('routing state', () => {

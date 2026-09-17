@@ -4,7 +4,7 @@
  * Extracted from main.js to keep file sizes under 300 lines.
  * Registers all setup-mode IPC handlers: remove-key, setup-done, save-config,
  * get-config, get-api-keys, get-catalog, refresh-catalog, plus the key pair
- * validate-key/save-key (ipc-keys.js, split out for issue #212) and
+ * validate-key/save-key (ipc-keys.js, split out for issue 212) and
  * get-alias-review (ipc-aliases.js).
  * (sidecar:fetch-models was retired in B33/#12 — Step 3's alias editor now
  * shares the TTL-cached get-catalog data Step 2 loads instead of a second,
@@ -33,7 +33,7 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   const offerCatalogs = require('./offer-session').createOfferSessions();
 
   // sidecar:validate-key + sidecar:save-key. Extracted to ipc-keys.js for
-  // issue #212 (this file was at 294 of the 300-line gate and the fix did not
+  // issue 212 (this file was at 294 of the 300-line gate and the fix did not
   // fit); registered on the SAME (possibly injected) ipcMain, in the place
   // they used to occupy, so registration order is unchanged.
   registerKeyHandlers({ ipcMain, offerCatalogs });
@@ -179,7 +179,14 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
       const status = readApiKeys();
       const hints = readApiKeyHints();
 
-      // Auto-import keys from auth.json that sidecar doesn't have yet
+      // Auto-import keys from auth.json that sidecar doesn't have yet.
+      // Issue 212 deliberately does NOT gate this second saveApiKey call: it
+      // takes no caller input (this channel has no key argument), so it is not a
+      // bypass — importFromAuthJson only migrates credentials the user already
+      // stored locally via OpenCode. Probing them here would also put up to
+      // five 10s network calls in front of the wizard's first render and would
+      // silently drop a key that answered 401 for reasons of the moment. The
+      // key-auth doctor row (issue 210) is where stored keys get re-checked.
       const { imported } = importFromAuthJson(status);
       for (const entry of imported) {
         const result = saveApiKey(entry.provider, entry.key);

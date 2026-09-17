@@ -2,7 +2,7 @@
  * Setup UI — Per-provider default model picker (Part 2, Task 8).
  *
  * Rendered inline in the key step (Step 1), beneath the just-saved key, once
- * `sidecar:save-key` (ipc-keys.js, split out of ipc-setup.js for issue #212)
+ * `sidecar:save-key` (ipc-keys.js, split out of ipc-setup.js for issue 212)
  * returns a non-null `providerDefault` for a DIRECT provider
  * (google/openai/anthropic/deepseek — never the openrouter gateway; see
  * ipc-keys.js's own isDirectProvider guard, mirroring the skip rule in

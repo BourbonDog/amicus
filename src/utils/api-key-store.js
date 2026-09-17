@@ -3,6 +3,7 @@
  * Keys stored in ~/.config/amicus/.env with 0o600 permissions.
  */
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { validateApiKey, validateOpenRouterKey, VALIDATION_ENDPOINTS } = require('./api-key-validation');
 const { PROVIDER_ENV_MAP } = require('./provider-registry');
@@ -30,6 +31,69 @@ function getEnvPath() {
   }
   const homeDir = process.env.HOME || process.env.USERPROFILE;
   return path.join(homeDir, '.config', 'amicus', '.env');
+}
+
+/**
+ * The REAL user's home, immune to a redirected HOME/USERPROFILE.
+ *
+ * ⚠️ NOT os.homedir(): libuv reads HOME (POSIX) / USERPROFILE (Windows) before
+ * it asks the OS, so os.homedir() follows exactly the redirect a test performs
+ * — measured, both platforms' code paths. os.userInfo() reads the account
+ * record instead (getpwuid_r / GetUserProfileDirectoryW) and does not move.
+ * Returns null when there is no account record to read (containers without a
+ * passwd entry); the caller then declines to guard rather than guessing, since
+ * this is a backstop and a false refusal would break honest writes.
+ * @returns {string|null}
+ */
+function realHomedir() {
+  try {
+    const home = os.userInfo().homedir;
+    return typeof home === 'string' && home.length > 0 ? home : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+/** True when `child` is `parent` or lives inside it (case/separator-normalised). */
+function isWithin(child, parent) {
+  const rel = path.relative(parent, child);
+  return !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+/**
+ * Would this write land in the REAL user's amicus key store from inside a
+ * test run? Issue #212: a fixture-shaped key reached a real
+ * ~/.config/amicus/.env, and "a test suite should never be ABLE to write a
+ * real key store" is half the ask (the other half is the save-key IPC gate in
+ * electron/ipc-keys.js). Converting invisible credential data loss into a loud
+ * throw is the whole point, so this is deliberately narrow — it must never
+ * refuse an honest write.
+ *
+ * Three conditions, all required:
+ *   1. inside jest (JEST_WORKER_ID);
+ *   2. AMICUS_ENV_DIR unset — tests/setup/hermetic-config-dir.js sets it for
+ *      every unit file, so the guard only has work to do where a test DELETED
+ *      it (several in tests/api-key-store.test.js do, to exercise the HOME
+ *      fallback) and then reached a write;
+ *   3. the resolved path is in the real home's `.config/amicus` directory.
+ *
+ * ⚠️ Condition 3 is the amicus CONFIG DIR, not the home dir. On Windows
+ * os.tmpdir() is C:\Users\<user>\AppData\Local\Temp — inside the real home —
+ * so "is it under the home dir" would refuse every legitimately
+ * HOME-redirected test on that platform. Measured, not assumed.
+ *
+ * @param {string} envPath the .env path the write would target
+ * @param {object} [deps] injected for tests — never touch the real home in one
+ * @param {object} [deps.env] environment to read (default process.env)
+ * @param {function(): (string|null)} [deps.homedir] the real home (default realHomedir)
+ * @returns {boolean}
+ */
+function isTestWriteToRealKeyStore(envPath, { env = process.env, homedir = realHomedir } = {}) {
+  if (!env.JEST_WORKER_ID) { return false; }
+  if (env.AMICUS_ENV_DIR) { return false; }
+  const home = homedir();
+  if (!home) { return false; }
+  return isWithin(path.resolve(envPath), path.join(home, '.config', 'amicus'));
 }
 
 /** Parse a .env file into a key-value map (comments/blanks excluded) */
@@ -145,15 +209,34 @@ function readApiKeyValues() {
   return result;
 }
 
-/** Save an API key for a provider to the .env file */
-function saveApiKey(provider, key) {
+/**
+ * Save an API key for a provider to the .env file
+ * @param {string} provider
+ * @param {string} key
+ * @param {object} [deps] injected for tests — see isTestWriteToRealKeyStore
+ */
+function saveApiKey(provider, key, deps) {
   const envVar = PROVIDER_ENV_MAP[provider];
   if (!envVar) {
     return { success: false, error: `Unknown provider: ${provider}` };
   }
+  const envPath = getEnvPath();
+  // #212: never write the real key store from inside a test run. THROWS rather
+  // than returning { success: false } on purpose — the failure this replaces
+  // was a silent overwrite of a user credential that masqueraded as a missing
+  // product feature for an unknown period.
+  if (isTestWriteToRealKeyStore(envPath, deps)) {
+    const err = new Error(
+      `Refusing to write the real API key store from a test run: ${envPath}. `
+      + 'Set AMICUS_ENV_DIR to a temp dir (tests/setup/hermetic-config-dir.js does '
+      + 'this for every unit file) before calling saveApiKey. See issue #212.'
+    );
+    err.code = 'TEST_ENV_WRITE_REFUSED';
+    throw err;
+  }
   // Shared merge helper (preserves comments/other lines, dedups, 0600, trailing NL;
   // strips CR/LF and returns the cleaned value).
-  const clean = upsertEnvLine(getEnvPath(), envVar, key);
+  const clean = upsertEnvLine(envPath, envVar, key);
   // Also set process.env so the key is immediately available (sanitized to match disk)
   process.env[envVar] = clean;
   return { success: true };
@@ -177,6 +260,7 @@ function removeApiKey(provider) {
 
 module.exports = {
   getEnvPath,
+  isTestWriteToRealKeyStore,
   loadEnvEntries,
   readApiKeys,
   readApiKeyHints,

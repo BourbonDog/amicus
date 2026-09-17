@@ -14,6 +14,11 @@ jest.mock('electron', () => ({
 
 jest.mock('../src/utils/api-key-store', () => ({
   saveApiKey: jest.fn(),
+  // #212: save-key validates in the main process before persisting, so the
+  // factory must define validateApiKey too — otherwise every save here is
+  // refused before saveApiKey is reached. Kept permissive: the refusal path
+  // is covered in tests/electron/ipc-keys.test.js.
+  validateApiKey: jest.fn(async () => ({ valid: true, status: 200 })),
 }));
 
 /**

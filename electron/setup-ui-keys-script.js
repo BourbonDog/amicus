@@ -67,16 +67,27 @@ function buildKeysScript() {
       var res = await window.sidecarSetup.invoke('sidecar:validate-key', selectedProvider.id, key);
       if (res.valid) {
         var saveResult = await window.sidecarSetup.invoke('sidecar:save-key', selectedProvider.id, key);
-        configuredKeys[selectedProvider.id] = true;
-        var c = document.getElementById('check-' + selectedProvider.id);
-        if (c) { c.textContent = '\\u2713'; }
-        statusMsg.textContent = 'Saved \\u2713'; statusMsg.className = 'status-valid';
-        setInputState('valid'); keyValid = true; validatedKey = key;
-        keyHints[selectedProvider.id] = key.slice(0, 8) + '\\u2022'.repeat(Math.min(key.length - 8, 12));
-        removeBtn.style.display = ''; updateNextState();
-        // Task 8: inline per-provider default picker beneath the just-saved key.
-        if (window.renderProviderDefaultPicker) {
-          window.renderProviderDefaultPicker(selectedProvider.id, selectedProvider.name, saveResult && saveResult.providerDefault);
+        // Issue 212: the main process validates again before it persists, so a save
+        // can be REFUSED even after this probe passed (a key revoked between
+        // the two calls, or a second probe that answered 401). Reporting
+        // 'Saved' on a refusal -- which this branch did unconditionally, for
+        // every failed save -- is exactly the silent credential loss issue
+        // 212 is about, so the outcome of the save now decides what is shown.
+        if (saveResult && saveResult.success === false) {
+          statusMsg.textContent = saveResult.error || 'Save failed'; statusMsg.className = 'status-invalid';
+          setInputState('invalid'); keyValid = false;
+        } else {
+          configuredKeys[selectedProvider.id] = true;
+          var c = document.getElementById('check-' + selectedProvider.id);
+          if (c) { c.textContent = '\\u2713'; }
+          statusMsg.textContent = 'Saved \\u2713'; statusMsg.className = 'status-valid';
+          setInputState('valid'); keyValid = true; validatedKey = key;
+          keyHints[selectedProvider.id] = key.slice(0, 8) + '\\u2022'.repeat(Math.min(key.length - 8, 12));
+          removeBtn.style.display = ''; updateNextState();
+          // Task 8: inline per-provider default picker beneath the just-saved key.
+          if (window.renderProviderDefaultPicker) {
+            window.renderProviderDefaultPicker(selectedProvider.id, selectedProvider.name, saveResult && saveResult.providerDefault);
+          }
         }
       } else {
         statusMsg.textContent = res.error || 'Invalid key'; statusMsg.className = 'status-invalid';
