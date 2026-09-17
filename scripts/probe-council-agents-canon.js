@@ -52,6 +52,21 @@ function extAllowRunShape(rules) {
  * or a run that moved, is still caught. If the engine's nondeterminism ever
  * widens past this one shape the CONTROL goes false and the script exits 1,
  * rather than quietly normalising a real move away.
+ *
+ * ⚠️ WHAT THIS REORDERING DOES **NOT** TOUCH (round-1 review F6) — read this
+ * before concluding that the older PROBE_TREE_* rows or the production tripwire
+ * are order-flaky. They are not, for two measured reasons. (a) Every existing
+ * row asserts RELATIONALLY — `last(starRule(…))`, the transcribed `evaluate(…)`,
+ * `verifyAgentRendering(…)` — never as an ordered whole-list equality, which is
+ * a comparison only this case ever makes. (b) `verifyAgentRendering`
+ * (src/council/run-seat-tools-verify.js) only reads rules AFTER the last `*`/`*`
+ * rule, and this measurement puts that rule at index **31**, while the
+ * nondeterministic run is `[3, 21]` — indices 3 to 23, entirely before it. The
+ * one `external_directory` allow that does sit after the wildcard deny (index
+ * 41 on council-seat, 36 on council-support) is a 1-long run with nothing to
+ * permute, and it is the engine's own tool-output rule, which
+ * `isEngineToolOutputPattern` exempts anyway. Nothing the tripwire reads can be
+ * permuted by the engine's enumeration.
  * @param {any[]} rules @returns {any[]}
  */
 function canonicaliseRules(rules) {

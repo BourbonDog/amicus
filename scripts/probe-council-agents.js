@@ -82,6 +82,11 @@
  * `controlMovedNothing` and `routingTreeMovedNothing` are printed, and the
  * script exits 1 if EITHER is false: a false control means the normalisation
  * no longer matches the engine and the routing verdict is worthless.
+ * That reordering leaves every row ABOVE this one, and the production tripwire,
+ * untouched — they assert relationally and read only past the last `*`/`*`
+ * rule, which sits after the reordered run. The evidence is in
+ * probe-council-agents-canon.js's canonicaliseRules docblock; read it before
+ * concluding anything here is order-flaky.
  */
 
 'use strict';
