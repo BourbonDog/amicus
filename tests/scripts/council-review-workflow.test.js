@@ -861,6 +861,22 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain("'config.json'");
     });
 
+    test('the outcome comment states the SHIPPED contract, not a superseded one', () => {
+      // Council #264 r2 polish. The block still described round 1's rule — refuse
+      // only on free tier / limit <= 0 / sub-cent, and "a key with NO monthly
+      // limit ... is never a refusal" — twenty lines above the code that does
+      // neither. A stale contract in a comment is exactly what turned a correct
+      // reading into round 2's B1, and it sits outside a -U10 diff window where
+      // a council reviewing the diff would never see it.
+      const step = creditStep();
+      // The two facts the comment must carry, because they are what changed.
+      expect(step).toMatch(/MINIMUM of the key's monthly limit and the ACCOUNT\s*\n?\s*#\s*BALANCE/);
+      expect(step).toContain("ONE SEAT'S RESERVATION");
+      // And the two superseded sentences must be gone for good.
+      expect(step).not.toContain('is never a refusal');
+      expect(step).not.toMatch(/Only for a key that can fund NOTHING/);
+    });
+
     test('the step says what it guarantees and what it cannot', () => {
       // Council #264 r2 read the earlier copy as a promise the probe cannot
       // keep; the boundary now travels in the decision's own messages and in
@@ -953,6 +969,17 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // The invalid value is NEVER echoed — printing it is the injection.
       const guard = paid.slice(paid.indexOf('valid_ceiling()'), paid.indexOf('BENCH='));
       expect(guard).not.toMatch(/echo[^\n]*::error::[^\n]*\$(CEILING|MAX_COST)/);
+    });
+
+    test('the ceiling guard rejects ZERO as well as a non-number (council #264 r2, folded minor)', () => {
+      // `0`, `0.00` and `.0` all match the shape regex, so a caller passing
+      // max_cost: "0" reached `--max-cost 0` — which the CLI rejects with exit 1.
+      // That is the very class the sub-cent REFUSAL exists to prevent, arriving
+      // by the one door the preflight does not control: the caller's input.
+      const y = yml();
+      const paid = y.slice(y.indexOf('Run the adjudicated council'), y.indexOf('Collect the spend receipt'));
+      expect(paid).toContain('*[!0.]*)');
+      expect(paid).toMatch(/positive|non-zero|zero/i);
     });
 
     test('the warning is mirrored into the step summary, not only into annotations', () => {

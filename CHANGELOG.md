@@ -29,7 +29,8 @@ All notable changes to Amicus are documented here. Format follows
   an unusable ceiling; **ok** otherwise. Separately, money below the run's ceiling **clamps**
   `effective_max_cost`, which the paid step validates and passes as `--max-cost`.
 
-  **What this guarantees, stated in every message it prints:** it refuses when a refusal is
+  **What this guarantees, stated in every decision message it prints** (the step-level messages
+  report that the check did not run, so they qualify nothing): it refuses when a refusal is
   certain and warns when one is likely, and it bounds aggregate spend. **What it cannot do:**
   prevent a per-request refusal once seats are dispatched — reservations are charged concurrently
   and settle asynchronously, so the money available to leg four is not knowable before legs one to

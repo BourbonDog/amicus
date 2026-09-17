@@ -350,36 +350,53 @@ jobs:
           #
           # FOUR OUTCOMES, and only one stops the job (src/utils/council-credit-preflight.js
           # :: decideCreditPreflight owns the ruling, and is unit-tested per branch
-          # in tests/utils/council-credit-preflight.test.js):
-          #   refuse  -> ::error:: + exit 1. Only for a key that can fund NOTHING:
-          #              free tier, a monthly limit at or below zero, or a limit
-          #              below one cent (it would floor to a `--max-cost 0` the
-          #              CLI rejects outright). Zero spend, no seat dispatched.
+          # in tests/utils/council-credit-preflight.test.js).
+          #
+          # `remaining` is the MINIMUM of the key's monthly limit and the ACCOUNT
+          # BALANCE, over whichever of the two came back as a finite number. The
+          # cap alone is not the money: a key reporting limit_remaining null has
+          # no cap at all, and on a depleted account that is a REFUSAL, not an
+          # `ok`. Both unknown leaves `remaining` unknown, which is a warn.
+          #
+          #   refuse  -> ::error:: + exit 1, nothing dispatched. Four states, each
+          #              one meaning NOTHING can run:
+          #                * the key is free tier;
+          #                * remaining <= 0;
+          #                * remaining < ONE SEAT'S RESERVATION (outputBudget x the
+          #                  bench's dearest completion price) — the motivating
+          #                  run's own shape, and the only rule that catches it;
+          #                * remaining < one cent, which would floor the clamp to
+          #                  `--max-cost 0` — a bad ARGUMENT, not a tight budget:
+          #                  cli-handlers-council-run.js rejects a non-positive
+          #                  ceiling with exit 1 before any budget exists.
+          #   warn    -> ::warning:: + exit 0. Either something could not be read
+          #              (a probe, the balance, the bench's price, the ceiling) or
+          #              remaining < the whole first wave's reservation, i.e.
+          #              refusals are LIKELY but the run is not hopeless. A blind
+          #              preflight must never cost the repo a review.
           #   clamp   -> ::warning:: + exit 0, and `effective_max_cost` carries a
-          #              SMALLER ceiling the key can actually fund.
-          #   warn    -> ::warning:: + exit 0. A network blip must never cost the
-          #              repo a review, so a blind preflight continues.
+          #              SMALLER ceiling. This is a SPEND BOUND ONLY and the
+          #              weakest state: any warn outranks it, and the bound still
+          #              travels on that warn.
           #   ok      -> ::notice:: + exit 0.
-          # A key with NO monthly limit reports limit_remaining null and is `ok`;
-          # it is never a refusal.
-          # ⚠️ WHY CLAMP AND NOT ABORT (council #264 r1, finding B1). Refusing on
-          # `limit_remaining < MAX_COST` treats --max-cost as the expected spend.
-          # It is a WHOLE-RUN CEILING: the motivating run spent $0.003 under a
-          # $2.00 ceiling and THREE of its seats reviewed fine with the remaining
-          # limit already below it, so that rule would have turned a partial
-          # round into zero reviews. The clamp hands the paid step a ceiling the
-          # key can fund and lets the run's own cost gate bound the spend.
-          # ⚠️ BUT a limit BELOW ONE CENT refuses rather than clamping to $0.00:
-          # `--max-cost 0` is a bad ARGUMENT, not a tight budget —
-          # cli-handlers-council-run.js rejects a non-positive ceiling with exit 1
-          # before any budget exists, which would fail the job outright.
+          #
+          # ⚠️ WHY A CLAMP AND NOT AN ABORT ON THE CEILING (council #264 r1, B1).
+          # Refusing on `remaining < MAX_COST` treats --max-cost as the expected
+          # spend. It is a WHOLE-RUN CEILING: the motivating run spent $0.003
+          # under a $2.00 ceiling and THREE of its seats reviewed fine with the
+          # money already below it, so that rule would have turned a partial round
+          # into zero reviews. Capping spend is all the clamp does — it cannot
+          # make a per-request reservation affordable, which is why the
+          # reservation rule above exists and refuses on its own evidence.
           # ⚠️ NOTHING BUT A REFUSAL MAY FAIL THIS STEP (council #264 r1, finding
           # A1). Every path — including a synchronous throw, an unhandled
           # rejection, a missing or broken module and a renamed export — ends at
           # `finish`, which is the ONLY caller of process.exit.
-          # ⚠️ WHAT THIS GUARANTEES AND WHAT IT CANNOT — every message says it out
-          # loud (council #264 r2 read the earlier copy as a promise the probe
-          # cannot keep):
+          # ⚠️ WHAT THIS GUARANTEES AND WHAT IT CANNOT — every DECISION message
+          # says it out loud (council #264 r2 read the earlier copy as a promise the
+          # probe cannot keep). The step-level messages — bootstrap, a broken or
+          # renamed module, a rejected probe, the outer catch, unhandledRejection —
+          # report that the check did not RUN, so they make no claim to qualify:
           #   GUARANTEES: refuses before any seat is dispatched when a refusal is
           #   CERTAIN, warns when refusals are LIKELY, and bounds aggregate spend.
           #   CANNOT: it cannot prevent a per-request refusal once seats are
@@ -801,9 +818,18 @@ jobs:
           # LINE, so a multi-line value whose first line is `2.00` would sail
           # through a regex alone. `*[!0-9.]*` rejects any character outside the
           # dollar alphabet, newline included, and only then is the shape checked.
+          # ⚠️ AND IT MUST BE POSITIVE (council #264 r2, folded minor). `0`, `0.00`
+          # and `.0` all satisfy the shape below, so a caller passing
+          # max_cost: "0" reached `--max-cost 0` — which cli-handlers-council-run.js
+          # rejects with exit 1. That is the exact class the preflight's sub-cent
+          # REFUSAL exists to prevent, arriving through the one door the preflight
+          # does not control: the caller's own input. The second case arm demands
+          # at least one character that is neither a zero nor a dot.
           valid_ceiling() {
             case "$1" in
               ''|*[!0-9.]*) return 1 ;;
+              *[!0.]*) ;;
+              *) return 1 ;;
             esac
             printf '%s' "$1" | grep -Eq '^[0-9]+(\.[0-9]{1,2})?$'
           }

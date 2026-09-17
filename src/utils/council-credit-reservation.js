@@ -27,6 +27,12 @@
  * per-request, so the worst row decides whether a request can be admitted at
  * all. And a bench with ANY unpriced row is not priced — the missing row could
  * be the dearest one, so a max over the rest bounds nothing.
+ *
+ * SPLIT FROM `council-credit-preflight.js` for two reasons, not just the
+ * 300-line gate: this module does I/O (a catalog fetch) while that one must stay
+ * a pure ruling that the decision matrix can enumerate, and pricing a bench is a
+ * fact about the RUN'S CONFIGURATION — the provisioned alias map and the live
+ * catalog — where the other is a policy about what to do with the facts.
  */
 
 'use strict';

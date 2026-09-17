@@ -166,7 +166,7 @@ describe('#256 decideCreditPreflight', () => {
       expect(d.outcome).toBe('refuse');
       expect(d.message).toContain('free tier');
       expect(d.message).toContain('add credit');
-      expect(d.message).not.toContain('monthly limit —');
+      expect(d.message).not.toContain('monthly limit');
     });
 
     test('an exhausted cap or balance (<= 0)', () => {
@@ -251,12 +251,32 @@ describe('#256 decideCreditPreflight', () => {
     test('the clamped ceiling rounds DOWN to cents and is never zero', () => {
       expect(decide({ credit: credit({ limitRemaining: 1.239 }), balance: balance(1.239),
         reservation: priced(0.0001) }, '10.00').effectiveMaxCost).toBe(1.23);
+      // Every point is accounted for, not just the clamps: a sweep that only
+      // checks the branch it expects cannot see a point falling silently into
+      // another one.
+      // 0.001 .. 0.200 in tenth-of-a-cent steps: the ONLY region where a
+      // round-down could reach zero, and the only one where both branches are
+      // genuinely reachable. (A sweep starting at $0.01 never enters the refuse
+      // arm at all, which makes an `else` there look checked while testing
+      // nothing.)
+      const seen = new Set();
       for (let i = 1; i <= 200; i++) {
-        const r = i / 200 * 2;
+        const r = i * 0.001;
         const d = decide({ credit: credit({ limitRemaining: r }), balance: balance(r),
           reservation: priced(0.0001) }, '10.00');
-        if (d.outcome === 'clamp') { expect(d.effectiveMaxCost).toBeGreaterThan(0); }
+        if (d.outcome === 'clamp') {
+          expect(d.effectiveMaxCost).toBeGreaterThan(0);
+          expect(r).toBeGreaterThanOrEqual(0.01);
+        } else {
+          // The only non-clamp point in this range is money below one cent,
+          // which refuses by the stated rule.
+          expect(d.outcome).toBe('refuse');
+          expect(r).toBeLessThan(0.01);
+        }
+        seen.add(d.outcome);
       }
+      // Both arms were actually taken — otherwise the `else` above is decoration.
+      expect([...seen].sort()).toEqual(['clamp', 'refuse']);
     });
 
     test('a warn outranks a clamp, and still carries the clamped ceiling', () => {

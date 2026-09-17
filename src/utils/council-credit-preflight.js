@@ -10,8 +10,10 @@
  * afford 56097`.
  *
  * ⚠️ WHAT THIS GUARANTEES, AND WHAT IT CANNOT — the whole shape follows from it,
- * and every message says it out loud (council #264 r2 read the earlier copy as a
- * promise the probe cannot keep):
+ * and every message THIS MODULE returns says it out loud (council #264 r2 read
+ * the earlier copy as a promise the probe cannot keep). The workflow step's own
+ * messages — a module that would not load, a probe that threw — report that the
+ * check did not RUN at all, so they have nothing to qualify:
  *   GUARANTEES: it refuses before any seat is dispatched when a refusal is
  *   CERTAIN (nothing on the key can fund even one seat's reservation), warns
  *   when refusals are LIKELY (the first wave cannot be funded in full), and
