@@ -11,9 +11,10 @@ All notable changes to Amicus are documented here. Format follows
   persists anything, mirroring `amicus key`'s rule exactly (only a 401 blocks a save; 403, 429,
   5xx, an unexpected status and an unanswered probe still save). The renderer's validate-then-save
   order was advisory — a direct IPC call, such as a CDP automation session on `AMICUS_DEBUG_PORT`,
-  could persist an arbitrary unvalidated string into `~/.config/amicus/.env`. A refused save is
-  now reported in the key step instead of being shown as "Saved ✓". (#212)
-- The API key store refuses to write the real `~/.config/amicus/.env` from inside a test run
+  could persist an arbitrary unvalidated string into `~/.config/amicus/.env` — or, with an empty
+  key, silently blank out a stored one. A refused save is now reported in the key step instead of
+  being shown as "Saved ✓". (#212)
+- `saveApiKey` refuses to write the real `~/.config/amicus/.env` from inside a test run
   (`JEST_WORKER_ID` set, `AMICUS_ENV_DIR` unset, and the path inside the real user's amicus config
   dir), throwing `TEST_ENV_WRITE_REFUSED` before any write instead of silently overwriting a
   user's credential. (#212)

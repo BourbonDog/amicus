@@ -63,6 +63,26 @@ function registerKeyHandlers({ ipcMain, offerCatalogs, logger = defaultLogger })
 
   ipcMain.handle('sidecar:save-key', async (_event, provider, key) => {
     try {
+      // The CLI's own precondition, mirrored (src/cli-handlers.js :: handleKey):
+      //
+      //     // Save mode: key required
+      //     if (!keyArg) {
+      //       console.error(`Error: API key is required. Usage: amicus key ...`);
+      //       process.exit(1);
+      //     }
+      //
+      // It never reaches saveApiKey with a falsy key, and neither may this. An
+      // empty string validates to { valid: false, status: null }, and null is
+      // NOT in BLOCKS_SAVE — so the 401 gate below would wave it through, and
+      // upsertEnvLine (env-raw-store.js) would rewrite a stored
+      // `ANTHROPIC_API_KEY=<real key>` line as `ANTHROPIC_API_KEY=`, wiping the
+      // credential while still returning success. Reachable only by a direct
+      // IPC call (the renderer trims and returns early), which is the bypass
+      // issue 212 is about.
+      //
+      // NOT trimmed, deliberately: the CLI saves a whitespace-only key, so
+      // trimming here would invent a rule rather than mirror one.
+      if (!key) { return { success: false, error: 'API key is required' }; }
       const { saveApiKey, validateApiKey } = require('../src/utils/api-key-store');
       // Issue 212: validate HERE, in the main process, before anything is written.
       // sidecar:validate-key is a sibling handler the RENDERER calls first

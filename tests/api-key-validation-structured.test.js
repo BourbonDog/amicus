@@ -17,7 +17,7 @@
  *       permanent 'unverified'. Return the status as data instead.
  *   F3  https.get can throw SYNCHRONOUSLY inside the promise executor, and the
  *       Google probe URL embeds the key as `?key=...`. That rejection reached
- *       electron/ipc-setup.js — which RETURNS err.message to the renderer AND
+ *       electron/ipc-keys.js — which RETURNS err.message to the renderer AND
  *       logs it — and src/cli-handlers.js, which has no try/catch at all.
  */
 

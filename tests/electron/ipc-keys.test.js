@@ -130,6 +130,30 @@ describe('sidecar:save-key validates in the MAIN process before persisting (#212
     expect(result).toEqual({ success: false, error: 'socket hang up' });
   });
 
+  // An EMPTY key validates to { valid: false, status: null } (api-key-validation.js
+  // :: validateApiKey), and null is not in BLOCKS_SAVE — so the 401 gate alone waves
+  // it through to saveApiKey, whose upsertEnvLine rewrites a stored
+  // `ANTHROPIC_API_KEY=<real key>` line as `ANTHROPIC_API_KEY=`. That WIPES the
+  // credential and still returns { success: true }, so the wizard reports "Saved".
+  // The CLI never gets there: `if (!keyArg) { … process.exit(1); }` refuses a missing
+  // key before it validates anything. The renderer trims and returns early too, so
+  // this is reachable only by a direct IPC call — the bypass issue 212 is about.
+  it.each([
+    ['an empty string', ''],
+    ['undefined (a caller that omitted the argument)', undefined],
+    ['null', null],
+  ])('%s is refused before validating — nothing is probed, nothing is written', async (_label, key) => {
+    const { handlers, saveApiKey, validateApiKey, refreshCatalog } = registerKeys();
+
+    const result = await handlers['sidecar:save-key']({}, 'anthropic', key);
+    await drainImmediates();
+
+    expect(result).toEqual({ success: false, error: 'API key is required' });
+    expect(saveApiKey).not.toHaveBeenCalled();
+    expect(validateApiKey).not.toHaveBeenCalled();
+    expect(refreshCatalog).not.toHaveBeenCalled();
+  });
+
   it('a valid key is persisted and warms the catalog (pre-#212 behaviour, unchanged)', async () => {
     const { handlers, saveApiKey, refreshCatalog } = registerKeys({ validation: { valid: true, status: 200 } });
     const result = await handlers['sidecar:save-key']({}, 'openrouter', 'sk-or-good');
