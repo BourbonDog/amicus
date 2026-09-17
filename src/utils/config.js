@@ -10,6 +10,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { autoRepairAlias } = require('./alias-resolver');
 const { isDirectProvider } = require('./provider-registry');
+const { writeFileAtomic } = require('./atomic-write');
 
 /** Default model alias map — derived from the curated-models single source (F5) */
 const { toDefaultAliases, toGatewayRoutes } = require('./curated-models');
@@ -57,6 +58,11 @@ function loadConfig() {
 
 /** Save config data to disk, creating the directory if needed. Strips invalid aliases. */
 function saveConfig(configData) {
+  // #258: every Notice this function emits is BUFFERED here and flushed only
+  // after the rename below lands. They used to print as they were decided —
+  // i.e. before the write — so a write that failed still announced alias
+  // removals and D6 conversions that never reached disk.
+  const notices = [];
   if (configData && configData.aliases) {
     const cleaned = {};
     for (const [key, value] of Object.entries(configData.aliases)) {
@@ -70,7 +76,7 @@ function saveConfig(configData) {
       // and the setter ignores them — so this is an announcement fix, not a
       // security one. Stated that way on purpose.)
       if (key === 'null' || key === '__proto__' || !value || typeof value !== 'string' || value === 'null') {
-        process.stderr.write(
+        notices.push(
           `Notice: Removing invalid alias '${key}' (value: ${JSON.stringify(value)}) from config.\n`
         );
         continue;
@@ -80,12 +86,17 @@ function saveConfig(configData) {
     // #238 D6: a key equal to the shipped default is the same as absence —
     // drop it so the alias FOLLOWS the next pin bump (one Notice per key).
     const { normalizeAliases } = require('./alias-state');
-    configData.aliases = normalizeAliases(cleaned, DEFAULT_ALIASES, (line) => process.stderr.write(line)).aliases;
+    configData.aliases = normalizeAliases(cleaned, DEFAULT_ALIASES, (line) => notices.push(line)).aliases;
   }
   const configDir = getConfigDir();
   fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
   const configPath = getConfigPath();
-  fs.writeFileSync(configPath, JSON.stringify(configData, null, 2), { mode: 0o600 });
+  // #258: temp + rename, not truncate-and-write. config.json is the user's
+  // aliases, default, council and routing in ONE document; a crash between the
+  // truncate and the write used to leave it empty or half-written.
+  writeFileAtomic(configPath, JSON.stringify(configData, null, 2), { mode: 0o600 });
+  // The write landed — only now is any of this true out loud (#258).
+  for (const line of notices) { process.stderr.write(line); }
 }
 
 /** @returns {object} Copy of the default alias map */

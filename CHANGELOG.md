@@ -3,6 +3,14 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- `config.json` is written atomically (temp + rename), so a crash mid-write can no longer
+  truncate it; the alias-conversion Notices print only after the write lands, so a failed write
+  no longer reports conversions that did not happen. (#258)
+
 ## [4.11.0] - 2026-09-16
 
 ### Added
