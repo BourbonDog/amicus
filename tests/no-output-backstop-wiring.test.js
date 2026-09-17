@@ -528,6 +528,28 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
     expect(statusFromResult(result)).toBe('error');
   }, 20000);
 
+  test('#256: a key-management URL in the engine log excerpt is redacted before it reaches the death reason', async () => {
+    // The engine log is the SECOND source of provider prose in a death reason
+    // (the first is the assistant message's own error, redacted at its own seam
+    // in headless.js). Run 35143585179 put an
+    // openrouter.ai/workspaces/default/keys/<64 hex> URL — a key identifier
+    // inside the owner's account — into a refusal message that reached an
+    // uploaded run.json. FIXTURE IS SYNTHETIC: this id came from nowhere real.
+    const id = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const dataDir = fixtureDataDir(['time=2026-08-25T18:55:32Z level=ERROR service=session '
+      + `session.id=ses_parent error="402 insufficient credits, see https://openrouter.ai/workspaces/default/keys/${id}"`]);
+    mockGetMessages.mockResolvedValue([]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'englogredact1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
+
+    expect(result.error).not.toContain(id);
+    expect(result.error).toContain('https://openrouter.ai/workspaces/default/keys/<redacted>');
+    // Still the same reason, and still classified by its prefix.
+    expect(result.error).toContain('402 insufficient credits');
+    expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+  }, 20000);
+
   test('pre-send firing site: a prompt send that never resolves also carries the excerpt', async () => {
     // The #133 shape: the leg dies upstream of the poll loop entirely.
     mockSendPromptAsync.mockImplementation(() => new Promise(() => {}));

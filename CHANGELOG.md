@@ -28,6 +28,17 @@ All notable changes to Amicus are documented here. Format follows
   inside `data.reason`. All three arms of `run-retry-notes.js :: retryLegStillDeadNote` (leg,
   wave, missing) now append `: <retry reason>` after the retry's status; an identical, empty or
   absent retry error leaves the text byte-identical to before. (#256)
+- **Provider key-management URLs are redacted from death reasons** before they reach `run.json`.
+  A refusal carrying `https://openrouter.ai/workspaces/default/keys/<64 hex>` — a key identifier
+  inside the owner's account, not the key — was published unredacted inside the CI evidence
+  artifact. `src/utils/redact-provider-error.js` replaces the id in any `/keys/<id ≥32 chars>`
+  path segment with `<redacted>` and is applied at both seams where provider prose becomes a
+  leg's death reason in `src/headless.js` (the assistant message's error, and the engine-log
+  excerpt on a no-output backstop). Figures, doc links and short `/keys` paths are untouched.
+  (#256)
+
+> Deferred from #256 to the verdict-surface PR: classifying a provider refusal distinctly in the
+> census and report (issue Ask item 3) — it changes the verdict schema.
 
 ## [4.11.0] - 2026-09-16
 

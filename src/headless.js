@@ -30,6 +30,16 @@ const { formatSessionStatusSuffix } = require('./utils/session-status');
 // v4.9 W13 Task A (PR #207 round 3, B3): the one honesty predicate every ttftMs
 // emit gate shares — see src/utils/ttft.js for why `typeof` was not it.
 const { isMeasuredTtft } = require('./utils/ttft');
+// #256: a provider's error text can name a key inside the owner's account
+// (run 35143585179 carried an openrouter.ai/.../keys/<64 hex> URL all the way
+// into an uploaded run.json). Applied at the TWO seams below where provider prose
+// ENTERS a death reason and nowhere else — the assistant message's own error in
+// the poll loop, and the engine-log excerpt a no-output backstop folds in. Both
+// are entry points, so no consumer downstream of either has to remember to
+// redact. The #37 client-boundary path needs no belt: it synthesizes its own
+// fixed reason ('Insufficient credits' / 'Provider error: <status>', see
+// opencode-client.js :: providerErrorReason) and never carries provider text.
+const { redactProviderError } = require('./utils/redact-provider-error');
 
 /**
  * Fold marker that the agent outputs when done.
@@ -288,7 +298,11 @@ function readOutputBudgetSafe(server, read) {
 function engineErrorExcerptSafe(sessionId, engineLogOptions) {
   if (!sessionId) { return null; }
   try {
-    return engineErrorForSession(sessionId, engineLogOptions || {});
+    // #256: the engine log is the SECOND (and last) source of provider prose in
+    // a death reason — the assistant message's own error is the first, redacted
+    // at its own seam in the poll loop. Both are redacted where the text enters
+    // the reason, so no consumer downstream of either has to remember to.
+    return redactProviderError(engineErrorForSession(sessionId, engineLogOptions || {}));
   } catch (_e) {
     return null;
   }
@@ -1022,8 +1036,13 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         liveTools = getLiveToolCalls(mirror);
         if (liveTools.length === 0) { toolSettleDeferredSince = null; }
         if (mr.sessionError) {
-          sessionError = mr.sessionError;
-          logger.error('Session error detected in assistant message', { sessionId, message: mr.sessionError });
+          // #256: redact HERE, where the engine's message error ENTERS this
+          // leg's death reason, so every downstream consumer (leg.error ->
+          // metadata.reason -> run.json :: degrades[].data.reason -> the
+          // uploaded CI artifact) sees the redacted text and no consumer can be
+          // forgotten. The log line carries the same value.
+          sessionError = redactProviderError(mr.sessionError);
+          logger.error('Session error detected in assistant message', { sessionId, message: sessionError });
         }
 
         logger.debug('Poll status', {

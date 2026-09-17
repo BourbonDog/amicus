@@ -131,6 +131,26 @@ describe('#218 PR 3 — a leg whose provider stopped for length', () => {
     expect(r.finish).toBe('length');
   });
 
+  it('#256: a key-management URL in the engine\'s message error is redacted before it becomes the death reason', async () => {
+    // MEASURED (run 35143585179, 2026-09-16): the r3 gpt retry was refused for
+    // credit and the engine's message error embedded
+    // https://openrouter.ai/workspaces/default/keys/<64 hex> — a key IDENTIFIER
+    // inside the owner's account. It rode sessionError -> leg.error ->
+    // metadata.reason -> run.json :: degrades[].data.reason into the uploaded
+    // evidence artifact, unredacted. redactSecret only ever covered the
+    // validation path, where the key is in hand; here it is not.
+    const id = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const message = 'This request requires more credits, or fewer max_tokens. You requested up to '
+      + `64000 tokens, but can only afford 56097. See https://openrouter.ai/workspaces/default/keys/${id}`;
+    mockGetMessages.mockResolvedValue(finished({ error: { name: 'ProviderError', data: { message } } }));
+    const r = await run();
+    expect(r.completed).toBe(false);
+    expect(r.error).not.toContain(id);
+    expect(r.error).toContain('https://openrouter.ai/workspaces/default/keys/<redacted>');
+    // The figures a reader needs are untouched — this is a redaction, not a scrub.
+    expect(r.error).toContain('can only afford 56097');
+  });
+
   it('the configured budget is named in the reason (seam: options._readOutputBudget)', async () => {
     mockGetMessages.mockResolvedValue(finished());
     const r = await run({ _readOutputBudget: () => 8000 });
