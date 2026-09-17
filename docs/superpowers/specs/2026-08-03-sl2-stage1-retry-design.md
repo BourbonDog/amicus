@@ -119,9 +119,15 @@ Still-dead degrades keep today's channels and shapes, with the why enriched. All
 attempt-class combinations, explicitly:
 
 - leg → retry leg died: `dead-leg` why gains `` ; its once-only retry also ended '<status>' ``
+  ⚠️ **AMENDED (#256, 2026-09-16):** when the retry leg carries its own non-empty error and it
+  DIFFERS from the first failure's reason, the why gains `` : <retry reason> `` after that status.
+  Run 35143585179 died `NO_OUTPUT_BACKSTOP` and was then REFUSED for credit on the retry — two
+  deaths this sentence rendered as one. Identical/empty/absent retry errors keep the text above.
 - wave → retry wave died wholesale: `dead-wave` why gains `` ; the once-only retry wave also produced no legs ``
 - wave → retry produced legs, this seat's died: **`dead-leg`** (D5 final-failure
   granularity) with why: `` its first wave <waveId> produced no legs (<reason>); its once-only retry leg ended '<status>' with no usable output ``
+  ⚠️ **AMENDED (#256, 2026-09-16):** same rule as the leg arm above — a differing retry reason is
+  named as `` '<status>': <retry reason> ``. The `missing` (seat-unbound) arm follows it too.
 - leg → retry wave died wholesale (bench batch case): `dead-leg` why gains
   `` ; its once-only retry wave produced no legs ``
 - A skipped retry (D7) leaves today's texts byte-unchanged.

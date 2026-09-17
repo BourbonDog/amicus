@@ -143,14 +143,37 @@ function srcLegStillDeadNote(leg, unit, counts, seatId = null) {
  */
 function retryLegStillDeadNote(seat, ff, retryLeg, unit, counts) {
   const missing = !!(ff && ff.class === 'missing');
+  // #256: the RETRY's own cause, when it is not the first failure's. MEASURED
+  // (run 35143585179, 2026-09-16): glm and qwen died NO_OUTPUT_BACKSTOP at 480 s
+  // and their once-only retries were REFUSED by OpenRouter two seconds later for
+  // want of credit — two different deaths that this sentence rendered as one,
+  // because the retry's reason reached run.json only inside `data.reason`. Named
+  // in the same `'<status>': <reason>` shape the first attempt already uses.
+  // An identical, empty or absent retry error keeps the text BYTE-IDENTICAL to
+  // the pre-#256 wording: repeating one reason twice is noise, and several
+  // suites pin that exact string.
+  // Council #264 r1 (C2 + D2): BOTH sides are trimmed FOR THE COMPARISON.
+  // Trimming only the retry made the same reason with different whitespace
+  // compare unequal, so the note printed one reason twice — the byte-identity
+  // guarantee broken by the very comparison meant to uphold it.
+  // Council #264 r2 (A4 + C1 + D2, three seats independently): the RENDERED text
+  // uses each side's own ORIGINAL bytes, and now actually does. It rendered the
+  // trimmed retry string while `data.reason` carried the raw one, so the note's
+  // prose and its machine-readable field disagreed about the same error — and
+  // the comment claiming otherwise made the discrepancy harder to find, not
+  // easier. Normalising a comparison is not licence to rewrite the evidence.
+  const retryRaw = typeof retryLeg.error === 'string' ? retryLeg.error : '';
+  const retryErr = retryRaw.trim();
+  const firstReason = (ff && typeof ff.reason === 'string') ? ff.reason.trim() : '';
+  const retryCause = (retryErr && retryErr !== firstReason) ? `: ${retryRaw}` : '';
   const why = ff && ff.class === 'wave'
     ? `its first wave ${ff.waveId} produced no legs (${ff.reason}); `
-      + `its once-only retry leg ended '${retryLeg.status}' with no usable output`
+      + `its once-only retry leg ended '${retryLeg.status}'${retryCause} with no usable output`
     : missing
       ? `${ff.reason} in wave ${ff.waveId}; its once-only retry leg ended `
-        + `'${retryLeg.status}' with no usable output`
+        + `'${retryLeg.status}'${retryCause} with no usable output`
       : `the leg ended '${ff ? ff.status : 'unknown'}'${ff && ff.reason ? `: ${ff.reason}` : ''} `
-        + `with no usable output; its once-only retry also ended '${retryLeg.status}'`;
+        + `with no usable output; its once-only retry also ended '${retryLeg.status}'${retryCause}`;
   return { channel: missing ? 'seat-unbound' : 'dead-leg', what: `seat ${seat} did not review`, why,
     effect: legEffect(counts),
     data: { seat, status: retryLeg.status, reason: retryLeg.error || null,

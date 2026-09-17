@@ -204,8 +204,12 @@ describe('retryStage1Losses (SL-2 Task 4)', () => {
     const r = await retryStage1Losses(ctx, {
       deadWaves: [{ waveId: 'r1-s1', models: ['a'], seats: [ctx.o.seats[0]], reason: 'died' }],
       deadLegs: [], counts: COUNTS });
+    // #256: the retry leg's own error ('again') DIFFERS from the first wave's
+    // reason ('died'), so the why now names it — the wave arm carries the same
+    // cure as the leg arm. An identical or absent retry error still renders the
+    // pre-#256 sentence (pinned in tests/council/run-retry-notes.test.js).
     expect(r.stillDeadNotes[0]).toMatchObject({ channel: 'dead-leg',
-      why: "its first wave r1-s1 produced no legs (died); its once-only retry leg ended 'error' with no usable output" });
+      why: "its first wave r1-s1 produced no legs (died); its once-only retry leg ended 'error': again with no usable output" });
     expect(r.stillDeadWaves).toEqual([
       { waveId: 'r1-s1', models: ['a'], seats: [ctx.o.seats[0]], reason: 'died' }]);
   });

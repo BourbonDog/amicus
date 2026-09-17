@@ -31,6 +31,30 @@ const { formatSessionStatusSuffix, probeUnknown, isRenderableStatus } =
 // v4.9 W13 Task A (PR #207 round 3, B3): the one honesty predicate every ttftMs
 // emit gate shares — see src/utils/ttft.js for why `typeof` was not it.
 const { isMeasuredTtft } = require('./utils/ttft');
+// #256: a provider's error text can name a key inside the owner's account
+// (run 35143585179 carried an openrouter.ai/.../keys/<64 hex> URL all the way
+// into an uploaded run.json).
+//
+// THE PERIMETER, not a count (council #264 r2, HQ4 / finding D4 — the earlier
+// "exactly two seams" wording asserted something a reader could not verify).
+// The rule is about the ORIGIN of a death reason's text, and it partitions every
+// assignment site in this file:
+//   * ENGINE-AUTHORED text — a provider may put anything in it — enters at the
+//     assistant message's own error (poll loop) and at the engine-log excerpt a
+//     no-output backstop folds in (`engineErrorExcerptSafe`). Both redact, at
+//     the point of ENTRY, so no consumer downstream has to remember to.
+//   * AMICUS-AUTHORED text — the #37 client boundary's fixed strings
+//     ('Insufficient credits' / 'Provider error: <status>', see
+//     opencode-client.js :: providerErrorReason), the backstop and stall
+//     templates, an HTTP/Node error message, the output-length reason — carries
+//     no provider prose and is left alone.
+// `src/sidecar/fanout-leg.js :: buildRoutingFailureLeg` builds a leg error
+// WITHOUT passing through here, and is safe for the same reason: its text is
+// amicus's own routing diagnosis.
+// Every one of those sites is ENUMERATED and classified in
+// tests/utils/redaction-perimeter.test.js, so a new one fails the suite instead
+// of quietly bypassing redaction — which is what makes this comment checkable.
+const { redactProviderError } = require('./utils/redact-provider-error');
 
 /**
  * Fold marker that the agent outputs when done.
@@ -294,7 +318,11 @@ function readOutputBudgetSafe(server, read) {
 function engineErrorExcerptSafe(sessionId, engineLogOptions) {
   if (!sessionId) { return null; }
   try {
-    return engineErrorForSession(sessionId, engineLogOptions || {});
+    // #256: the engine log is the SECOND (and last) source of provider prose in
+    // a death reason — the assistant message's own error is the first, redacted
+    // at its own seam in the poll loop. Both are redacted where the text enters
+    // the reason, so no consumer downstream of either has to remember to.
+    return redactProviderError(engineErrorForSession(sessionId, engineLogOptions || {}));
   } catch (_e) {
     return null;
   }
@@ -1084,8 +1112,13 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         liveTools = getLiveToolCalls(mirror);
         if (liveTools.length === 0) { toolSettleDeferredSince = null; }
         if (mr.sessionError) {
-          sessionError = mr.sessionError;
-          logger.error('Session error detected in assistant message', { sessionId, message: mr.sessionError });
+          // #256: redact HERE, where the engine's message error ENTERS this
+          // leg's death reason, so every downstream consumer (leg.error ->
+          // metadata.reason -> run.json :: degrades[].data.reason -> the
+          // uploaded CI artifact) sees the redacted text and no consumer can be
+          // forgotten. The log line carries the same value.
+          sessionError = redactProviderError(mr.sessionError);
+          logger.error('Session error detected in assistant message', { sessionId, message: sessionError });
         }
 
         logger.debug('Poll status', {
