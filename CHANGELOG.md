@@ -3,6 +3,16 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **The shipped `second-opinion` skill's `MODEL-NOTES.md` `NO_OUTPUT_BACKSTOP` bullet said 120s
+  and claimed "the retry reuses the same threshold" — both stale since the default moved to 300s.**
+  Corrected to the v4.11.0 source: 300s default (`DEFAULT_NO_OUTPUT_BACKSTOP_MS`), the retry's
+  actual escalation rule (doubled, clamped strictly below the leg cap), the tool-call disarm, and
+  `ttftMs` as the disarm moment usable to size an override. (#245)
+
 ## [4.11.0] - 2026-09-16
 
 ### Added
