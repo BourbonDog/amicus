@@ -291,6 +291,7 @@ describe('#224: an error AFTER the response object exists must not escape', () =
 describe('#224: enableLiveProbes has exactly ONE caller', () => {
   const fs = require('fs');
   const path = require('path');
+  const { readIfPresent } = require('./helpers/read-if-present');
 
   // The old pin asserted bin/amicus.js CALLS it. That cannot notice a SECOND
   // caller appearing — and a second caller is precisely what would quietly
@@ -319,7 +320,15 @@ describe('#224: enableLiveProbes has exactly ONE caller', () => {
     const rel = (f) => path.relative(root, f).split(path.sep).join('/');
     const callers = files
       .filter((f) => rel(f) !== 'src/utils/live-probes.js')       // the definition itself
-      .filter((f) => /enableLiveProbes/.test(fs.readFileSync(f, 'utf-8')))
+      .filter((f) => {
+        // Read through readIfPresent: scripts/check-file-sizes.test.js writes a real
+        // src/__sizecheck_tmp__.js in a parallel worker and unlinks it milliseconds
+        // later, so a file the listing named can be gone by the time it is read. A
+        // vanished file is another worker's temp file, never shipped source, so
+        // skipping it cannot hide a caller. See tests/helpers/read-if-present.js.
+        const src = readIfPresent(f);
+        return src !== null && /enableLiveProbes/.test(src);
+      })
       .map(rel)
       .sort();
 
