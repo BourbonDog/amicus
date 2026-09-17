@@ -66,6 +66,24 @@ describe('#256 retryLegStillDeadNote names the retry\'s own cause', () => {
       }
     });
 
+    /**
+     * Council #264 r2 / A4 + C1 + D2 (three seats, independently). The comment
+     * promised "each side's own original bytes; only the comparison is
+     * normalised" while the retry cause was RENDERED from the trimmed string.
+     * The promise was the right design — it is the code that was wrong.
+     */
+    test('a DIFFERING retry reason renders its ORIGINAL bytes, padding and all', () => {
+      const padded = `\n  ${REFUSAL}  `;
+      const n = note({ class: 'leg', status: 'error', reason: BACKSTOP },
+        { status: 'error', error: padded });
+      expect(n.why).toBe(`the leg ended 'error': ${BACKSTOP} with no usable output; `
+        + `its once-only retry also ended 'error': ${padded}`);
+      // The note's `why` and its machine-readable `data.reason` now carry the
+      // same bytes — they used to disagree.
+      expect(n.data.reason).toBe(padded);
+      expect(n.why).toContain(n.data.reason);
+    });
+
     test('a padded retry error matched against a padded first reason is still suppressed', () => {
       const n = note({ class: 'leg', status: 'error', reason: `  ${BACKSTOP}  ` },
         { status: 'error', error: `\t${BACKSTOP}\n` });

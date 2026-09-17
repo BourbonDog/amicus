@@ -46,6 +46,32 @@ describe('#256 redactProviderError', () => {
     expect(redactProviderError(`/keys/${id}`)).toBe('/keys/<redacted>');
   });
 
+  /**
+   * Council #264 r2 / A3 + D3. The two rules disagreed with each other inside
+   * one module: the query rule was case-insensitive and the path rule was not,
+   * so `/Keys/<id>` escaped — and neither admitted a percent-encoded id, which a
+   * provider is free to emit for the same identifier.
+   */
+  describe('the two rules agree on case and on the id alphabet', () => {
+    test('a case-variant /Keys/ path is redacted like /keys/', () => {
+      for (const seg of ['keys', 'Keys', 'KEYS', 'kEyS']) {
+        expect(redactProviderError(`https://openrouter.ai/${seg}/${HEX64}`))
+          .toBe(`https://openrouter.ai/${seg}/<redacted>`);
+      }
+    });
+
+    test('a percent-encoded id is still an id, in both rules', () => {
+      const pct = `${HEX64.slice(0, 30)}%2F%2Babc`;
+      expect(pct.length).toBeGreaterThanOrEqual(32);
+      expect(redactProviderError(`/keys/${pct}`)).toBe('/keys/<redacted>');
+      expect(redactProviderError(`?api_key=${pct}`)).toBe('?api_key=<redacted>');
+    });
+
+    test('a short percent-encoded segment is still not an identifier', () => {
+      expect(redactProviderError('/keys/%2Fabc')).toBe('/keys/%2Fabc');
+    });
+  });
+
   test('a URL without /keys/ is untouched', () => {
     const raw = `https://openrouter.ai/workspaces/default/models/${HEX64}`;
     expect(redactProviderError(raw)).toBe(raw);

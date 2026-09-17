@@ -152,14 +152,20 @@ function retryLegStillDeadNote(seat, ff, retryLeg, unit, counts) {
   // An identical, empty or absent retry error keeps the text BYTE-IDENTICAL to
   // the pre-#256 wording: repeating one reason twice is noise, and several
   // suites pin that exact string.
-  // Council #264 r1 (C2 + D2): BOTH sides are trimmed. Trimming only the retry
-  // made the same reason with different whitespace compare unequal, so the note
-  // printed one reason twice — the byte-identity guarantee broken by the very
-  // comparison meant to uphold it. The RENDERED text still uses each side's own
-  // original bytes; only the comparison is normalised.
-  const retryErr = typeof retryLeg.error === 'string' ? retryLeg.error.trim() : '';
+  // Council #264 r1 (C2 + D2): BOTH sides are trimmed FOR THE COMPARISON.
+  // Trimming only the retry made the same reason with different whitespace
+  // compare unequal, so the note printed one reason twice — the byte-identity
+  // guarantee broken by the very comparison meant to uphold it.
+  // Council #264 r2 (A4 + C1 + D2, three seats independently): the RENDERED text
+  // uses each side's own ORIGINAL bytes, and now actually does. It rendered the
+  // trimmed retry string while `data.reason` carried the raw one, so the note's
+  // prose and its machine-readable field disagreed about the same error — and
+  // the comment claiming otherwise made the discrepancy harder to find, not
+  // easier. Normalising a comparison is not licence to rewrite the evidence.
+  const retryRaw = typeof retryLeg.error === 'string' ? retryLeg.error : '';
+  const retryErr = retryRaw.trim();
   const firstReason = (ff && typeof ff.reason === 'string') ? ff.reason.trim() : '';
-  const retryCause = (retryErr && retryErr !== firstReason) ? `: ${retryErr}` : '';
+  const retryCause = (retryErr && retryErr !== firstReason) ? `: ${retryRaw}` : '';
   const why = ff && ff.class === 'wave'
     ? `its first wave ${ff.waveId} produced no legs (${ff.reason}); `
       + `its once-only retry leg ended '${retryLeg.status}'${retryCause} with no usable output`

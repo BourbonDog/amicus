@@ -33,13 +33,27 @@ const { formatSessionStatusSuffix, probeUnknown, isRenderableStatus } =
 const { isMeasuredTtft } = require('./utils/ttft');
 // #256: a provider's error text can name a key inside the owner's account
 // (run 35143585179 carried an openrouter.ai/.../keys/<64 hex> URL all the way
-// into an uploaded run.json). Applied at the TWO seams below where provider prose
-// ENTERS a death reason and nowhere else — the assistant message's own error in
-// the poll loop, and the engine-log excerpt a no-output backstop folds in. Both
-// are entry points, so no consumer downstream of either has to remember to
-// redact. The #37 client-boundary path needs no belt: it synthesizes its own
-// fixed reason ('Insufficient credits' / 'Provider error: <status>', see
-// opencode-client.js :: providerErrorReason) and never carries provider text.
+// into an uploaded run.json).
+//
+// THE PERIMETER, not a count (council #264 r2, HQ4 / finding D4 — the earlier
+// "exactly two seams" wording asserted something a reader could not verify).
+// The rule is about the ORIGIN of a death reason's text, and it partitions every
+// assignment site in this file:
+//   * ENGINE-AUTHORED text — a provider may put anything in it — enters at the
+//     assistant message's own error (poll loop) and at the engine-log excerpt a
+//     no-output backstop folds in (`engineErrorExcerptSafe`). Both redact, at
+//     the point of ENTRY, so no consumer downstream has to remember to.
+//   * AMICUS-AUTHORED text — the #37 client boundary's fixed strings
+//     ('Insufficient credits' / 'Provider error: <status>', see
+//     opencode-client.js :: providerErrorReason), the backstop and stall
+//     templates, an HTTP/Node error message, the output-length reason — carries
+//     no provider prose and is left alone.
+// `src/sidecar/fanout-leg.js :: buildRoutingFailureLeg` builds a leg error
+// WITHOUT passing through here, and is safe for the same reason: its text is
+// amicus's own routing diagnosis.
+// Every one of those sites is ENUMERATED and classified in
+// tests/utils/redaction-perimeter.test.js, so a new one fails the suite instead
+// of quietly bypassing redaction — which is what makes this comment checkable.
 const { redactProviderError } = require('./utils/redact-provider-error');
 
 /**
