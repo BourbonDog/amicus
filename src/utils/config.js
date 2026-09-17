@@ -63,6 +63,12 @@ function saveConfig(configData) {
   // i.e. before the write — so a write that failed still announced alias
   // removals and D6 conversions that never reached disk.
   const notices = [];
+  // #261 r1 C1/D1: the cleaned+normalized map is built into a NEW object and
+  // assigned onto the caller's `configData` only after the rename succeeds.
+  // Mutating first meant a failed write left memory diverged from disk with
+  // the Notices suppressed forever — a caller that caught and retried then
+  // persisted the cleaned aliases silently.
+  let normalized = null;
   if (configData && configData.aliases) {
     const cleaned = {};
     for (const [key, value] of Object.entries(configData.aliases)) {
@@ -86,17 +92,34 @@ function saveConfig(configData) {
     // #238 D6: a key equal to the shipped default is the same as absence —
     // drop it so the alias FOLLOWS the next pin bump (one Notice per key).
     const { normalizeAliases } = require('./alias-state');
-    configData.aliases = normalizeAliases(cleaned, DEFAULT_ALIASES, (line) => notices.push(line)).aliases;
+    normalized = normalizeAliases(cleaned, DEFAULT_ALIASES, (line) => notices.push(line)).aliases;
   }
   const configDir = getConfigDir();
   fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
   const configPath = getConfigPath();
+  // #261 r1 A1/C4/D2: rename REPLACES its destination, so a user who symlinks
+  // config.json into a dotfiles repo would have the link swapped for a regular
+  // file and the config silently forked. writeFileSync followed the link;
+  // follow it here instead, so the temp lands beside the real TARGET and the
+  // rename swaps that. Resolved in saveConfig, not in atomic-write.js — 25
+  // other callers share that primitive and none of them asked for this.
+  // realpathSync throws when the path is absent (first save, or a dangling
+  // link): the lexical path is then the right destination.
+  let writePath = configPath;
+  try { writePath = fs.realpathSync(configPath); } catch { /* absent — write the lexical path */ }
   // #258: temp + rename, not truncate-and-write. config.json is the user's
-  // aliases, default, council and routing in ONE document; a crash between the
-  // truncate and the write used to leave it empty or half-written.
-  writeFileAtomic(configPath, JSON.stringify(configData, null, 2), { mode: 0o600 });
-  // The write landed — only now is any of this true out loud (#258).
-  for (const line of notices) { process.stderr.write(line); }
+  // aliases, default, council and routing in ONE document; a PROCESS crash
+  // between the truncate and the write used to leave it empty or half-written.
+  // This is crash atomicity, not power-loss durability: neither the temp nor
+  // the directory is fsync'd, so an OS-level power failure can still lose or
+  // truncate the write (#261 r1 D4).
+  const payload = normalized ? { ...configData, aliases: normalized } : configData;
+  writeFileAtomic(writePath, JSON.stringify(payload, null, 2), { mode: 0o600 });
+  // The rename landed — only now is any of this true, in memory or out loud.
+  if (normalized) { configData.aliases = normalized; }
+  try {
+    for (const line of notices) { process.stderr.write(line); }
+  } catch { /* #261 r1 B1/C6/D3: the save is already committed; a dead stderr must not make it throw */ }
 }
 
 /** @returns {object} Copy of the default alias map */
