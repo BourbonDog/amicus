@@ -27,9 +27,9 @@ All notable changes to Amicus are documented here. Format follows
   Each case now carries its own clause: `(session: unknown — probe skipped|failed|no-status:
   <detail>)`. The type is always `unknown`, never `idle`/`busy` — a probe that timed out on a
   loaded engine is not an observation about the session (#219) — so an artifact now separates
-  "the engine reported X" from "nobody asked". A session-keyed status answer is unwrapped the
-  same way the poll-loop probe already unwraps it — on RENDERABILITY, so an empty top-level
-  `type` can no longer hide a real keyed answer — and the `no-status` detail names which of the
+  "the engine reported X" from "nobody asked". A session-keyed status answer is unwrapped like
+  the poll-loop probe, on a stricter bar: the top-level `type` must be a renderable string, so an
+  empty one can no longer hide a real keyed answer. The `no-status` detail names which of the
   three shapes came back (empty status / unrenderable status type / a map with no entry for this
   session). The clause's provenance marker is a private Symbol, so an engine status that happens
   to carry a `probe` field renders as the engine status it is. (#251 item 3, #202)

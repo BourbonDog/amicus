@@ -127,18 +127,21 @@ function isRenderableStatus(status) {
  * @returns {string} ` (session: …)`, or '' when nothing usable was observed
  */
 function formatSessionStatusSuffix(status) {
-  if (!status || typeof status !== 'object') { return ''; }
-  // A non-string `type` is DROPPED rather than coerced: `String({})` renders
-  // '[object Object]', which would read as an observation rather than as the
-  // absence it actually is.
-  if (typeof status.type !== 'string') { return ''; }
+  // THE shared predicate, not a copy of it (#263 r1 round 2). These three checks
+  // — an object, a string `type`, a `type` that survives the sanitizer — were
+  // spelled out here AND in `isRenderableStatus`, which is how the probe and the
+  // renderer would drift into disagreeing about what is usable; the docblock
+  // above already claimed one predicate, so this makes the claim true. A
+  // non-string `type` is DROPPED rather than coerced, because `String({})`
+  // renders '[object Object]', which would read as an observation rather than as
+  // the absence it actually is.
+  if (!isRenderableStatus(status)) { return ''; }
   // ⚠️ CLASSIFY on the RAW value, RENDER the sanitized one (#219 round 2,
   // deepseek). Branching on the sanitized type let the sanitizer's own
   // normalisation decide the arm — anything collapsing to 'retry' took the retry
   // path — so a future SDK identifier could be misclassified by a function whose
   // job is display, not semantics. Only the exact published identifier routes.
   const type = collapseExcerpt(status.type, MAX_STATUS_TYPE_CHARS);
-  if (!type) { return ''; }
   // #251 item 3, BEFORE the generic arm: a probe result reports on the PROBE,
   // so it must not render as the bare identifier an engine observation renders
   // as. Gated on the private marker (#263 r1 B3/D1), never on a wire field —
@@ -147,7 +150,7 @@ function formatSessionStatusSuffix(status) {
     const probe = collapseExcerpt(status.probe, MAX_STATUS_TYPE_CHARS);
     // A probe arm that collapses to nothing would render ` — probe : …`, which
     // names no arm at all; fall through to the plain identifier rather than emit
-    // a malformed clause. Same discipline as the empty-`type` guard above.
+    // a malformed clause. Same discipline as the renderability guard above.
     if (probe) {
       // Same untrusted-text treatment as `message`: a probe detail can be a
       // provider/engine error string, and it lands in run.json and the sticky PR

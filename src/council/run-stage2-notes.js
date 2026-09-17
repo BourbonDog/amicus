@@ -79,7 +79,7 @@ function thinCrossReviewWhy(judgeResults) {
  * The thin-cross-review degrade, or null when the cross-review was not thin.
  * Returning the record (rather than noting it) keeps this pure and keeps
  * `run-degrade.js` the only place a degrade is announced.
- * @param {Array<{ok: boolean, died?: boolean}>} judgeResults
+ * @param {Array<{ok: boolean, died?: boolean, emptyAnswer?: boolean}>} judgeResults
  * @returns {{channel: string, what: string, why: string, effect: string}|null}
  */
 function thinCrossReviewNote(judgeResults) {

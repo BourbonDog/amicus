@@ -148,14 +148,26 @@ describe('#251 item 3 — a probe that answered nothing SAYS SO', () => {
   test('S14b a probe ARM that collapses to nothing falls back to the plain identifier', () => {
     // ` — probe : detail` names no arm; a malformed clause is worse than the
     // bare identifier, which at least claims nothing it cannot support.
-    expect(formatSessionStatusSuffix({ type: 'unknown', probe: '   ', detail: 'x' }))
-      .toBe(' (session: unknown)');
+    //
+    // ⚠️ BUILT WITH `probeUnknown` (#263 r1 round 2). It used to pass a plain
+    // literal, which stopped being a probe outcome the moment the marker became
+    // a Symbol — so it exercised the ENGINE arm and stayed green no matter what
+    // the blank-arm guard did. A vacuous test is worse than none: it reports
+    // coverage it does not have.
+    const blankArm = probeUnknown('   ', 'x');
+    expect(isProbeOutcome(blankArm)).toBe(true);          // it really is on the probe path
+    expect(formatSessionStatusSuffix(blankArm)).toBe(' (session: unknown)');
+    // Not the malformed shape the guard exists to prevent — stated positively so
+    // deleting the guard reddens this line, which is the point of the test.
+    expect(formatSessionStatusSuffix(blankArm)).not.toContain('probe');
   });
 
   test('S15 only a PROBE RESULT takes the new arm — an engine `unknown` renders as before', () => {
-    // The marker is the `probe` field, which only `probeUnknown` sets. If the
-    // SDK ever publishes a real `{type:'unknown'}` arm it is an OBSERVATION and
-    // must keep rendering as the plain identifier — the opposite meaning.
+    // The marker is the module-private `Symbol('amicus.probeOutcome')` that only
+    // `probeUnknown` sets — NOT the `probe` field, which is ordinary wire-shaped
+    // data an engine can publish (#263 r1, B3/D1). If the SDK ever publishes a
+    // real `{type:'unknown'}` arm it is an OBSERVATION and must keep rendering
+    // as the plain identifier — the opposite meaning.
     expect(formatSessionStatusSuffix({ type: 'unknown' })).toBe(' (session: unknown)');
     expect(formatSessionStatusSuffix({ type: 'unknown', probe: 7 })).toBe(' (session: unknown)');
     // A `probe` field on any OTHER type is ignored: the type is the observation.
