@@ -8839,9 +8839,12 @@ processed (rulings R-P4-1..22 in the committed plan). Parked at the cut, one lin
   frequency record).
 
 **Tests**
-- [ ] #224 src-walker flake: `tests/api-key-validation-structured.test.js`'s walker vs
+- [x] #224 src-walker flake: `tests/api-key-validation-structured.test.js`'s walker vs
   `check-file-sizes.test.js`'s temp file — hardened on the owner's branch
-  `test/224-walker-read-if-present` (unpushed at the cut).
+  `test/224-walker-read-if-present` (unpushed at the cut). CLOSED 2026-09-16 — merged to main
+  as PR #255 (d3f579ac, test-only, no council label at the owner's call): the walker reads through
+  `readIfPresent` like the four before it, the helper's caller registry counts five, and a scratch
+  `setupFiles` injector reproduced the exact ENOENT at `:322` before the fix.
 - [ ] Prod audit at the cut (`npm audit --omit=dev`): the lockfile is unchanged since v4.9.8
   except the version pin, so the same two advisories ship — `extract-zip` (high, no fix; the
   in-house extraction refuses symlink/traversal entries) and `hono ≤4.13.4` (moderate, fix
