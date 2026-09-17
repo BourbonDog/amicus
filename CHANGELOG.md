@@ -19,6 +19,16 @@ All notable changes to Amicus are documented here. Format follows
   the provider refuse four of seven legs in 2–3 s, consume their once-only retries and lose the
   round's quorum for $0.003. (#256)
 
+### Fixed
+
+- **The still-dead note names the retry's OWN cause** when it differs from the first failure's.
+  `run.json`'s dead-leg prose read `the leg ended 'error': NO_OUTPUT_BACKSTOP …; its once-only
+  retry also ended 'error'` for a seat whose retry was in fact REFUSED by the provider two
+  seconds later — two different deaths rendered as one, with the retry's reason reachable only
+  inside `data.reason`. All three arms of `run-retry-notes.js :: retryLegStillDeadNote` (leg,
+  wave, missing) now append `: <retry reason>` after the retry's status; an identical, empty or
+  absent retry error leaves the text byte-identical to before. (#256)
+
 ## [4.11.0] - 2026-09-16
 
 ### Added
