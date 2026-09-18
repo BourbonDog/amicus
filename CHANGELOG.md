@@ -16,7 +16,8 @@ All notable changes to Amicus are documented here. Format follows
   912s at 481s on session busy`, or `— not extended: the window is already at the leg cap` (the CI
   retry leg, already at 912 s), or `— not extended: the engine schedules its next attempt at …, past
   the extended window`; a kill that was never a candidate is byte-identical to 4.12.0's. Every leg
-  the backstop fired for carries a `backstop` record on its document (`windowMs`, `firedAtMs`,
+  the backstop fired for carries a `backstop` record on its document — the FINAL attempt's, since a
+  fallback substitute re-running in the same leg dir starts clean — (`windowMs`, `firedAtMs`,
   `status`, `extended`, and `extendedToMs` or `why` — with `retryNextIso` when the engine's next
   attempt was the reason) — including a leg the extension SAVED, which
   is how the next corpus counts what the lever bought. Measured motive: on amicus 4.12.0 every one
