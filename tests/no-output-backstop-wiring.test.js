@@ -1465,7 +1465,9 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
     expect(elapsed).toBeLessThan(10000);           // not the 60 s cap
     expect(result.completed).toBe(false);
     expect(result.timedOut).toBeFalsy();
-    expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 2s — a caller-set window overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default/);
+    // #269 r1 (D5): the head reports the window IN FORCE (2 s) and the window phrase names
+    // the BASE it was extended from (1 s), so no reader attributes 2 s to the env var.
+    expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 2s — a caller-set window of 1s overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default, extended once/);
     expect(String(result.error)).toMatch(/ \(session: busy\) — window extended once from 1s to 2s at 1s on session busy$/);
     expect(result.backstop).toEqual({ windowMs: 1000, firedAtMs: expect.any(Number), status: 'busy', extended: true, extendedToMs: 2000 });
     expect(result.backstop.firedAtMs).toBeGreaterThanOrEqual(1000);
@@ -1579,7 +1581,10 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
     expect(elapsed).toBeGreaterThanOrEqual(1900);
     expect(elapsed).toBeLessThan(4000);
     expect(result.timedOut).toBeFalsy();
-    expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP:.* in 2s .*window extended once/);
+    // #269 r1 (D5): the extended head names the base window once, and the fourth clause
+    // says the same thing a second way — there is exactly ONE extension in either place.
+    expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 2s — a caller-set window of 1s overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default, extended once/);
+    expect(String(result.error)).toMatch(/ — window extended once from 1s to 2s at 1s on session busy$/);
   }, 20000);
 
   test('W7 at the cap: a window already at the clamp is not extended (the CI retry leg\'s shape), and the clause says so', async () => {
@@ -1627,13 +1632,30 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
     expect('backstop' in result).toBe(false);
   }, 20000);
 
-  test('W10 formatNoOutputBackstopReason without `extension` is byte-identical; with one it appends the clause LAST', () => {
+  test('W10 formatNoOutputBackstopReason without `extension` is byte-identical; an extension changes the window phrase AND appends the clause LAST', () => {
     const base = { ms: 480000, fromEnv: true, engineLogExcerpt: 'ERROR x', engineSkew: { server: '1.18.15', installed: '1.18.14' }, sessionStatus: { type: 'busy' } };
     const before = formatNoOutputBackstopReason(base);
+    // Byte-identity, the fence this whole design stands on: a record with nothing to say
+    // leaves BOTH the head and the clause list exactly where 4.12.0 left them.
     expect(formatNoOutputBackstopReason({ ...base, extension: undefined })).toBe(before);
     expect(formatNoOutputBackstopReason({ ...base, extension: { windowMs: 480000, firedAtMs: 480722, status: 'idle', extended: false } })).toBe(before);
-    expect(formatNoOutputBackstopReason({ ...base, extension: { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 } }))
-      .toBe(`${before} — window extended once from 480s to 912s at 481s on session busy`);
+    expect(formatNoOutputBackstopReason({ ...base, extension: { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: false, why: 'at-cap' } }))
+      .toBe(`${before} — not extended: the window is already at the leg cap`);
+    // #269 r1 (D5): the CI composition, whole. `ms` is the window IN FORCE at the kill
+    // (912 s), and the phrase names the 480 s the env var actually holds — the two numbers
+    // are different facts and the sentence now says which is which.
+    expect(formatNoOutputBackstopReason({
+      ...base, ms: 912000,
+      extension: { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 },
+    })).toBe('NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 912s — the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables) of 480s, extended once'
+      + ' — engine log: ERROR x (engine skew: server 1.18.15 ≠ installed 1.18.14) (session: busy)'
+      + ' — window extended once from 480s to 912s at 481s on session busy');
+    // The caller-set arm of the same fact (a Stage-1 retry or the live probe).
+    expect(formatNoOutputBackstopReason({
+      ms: 60000, fromEnv: false, sessionStatus: { type: 'busy' },
+      extension: { windowMs: 30000, firedAtMs: 30011, status: 'busy', extended: true, extendedToMs: 60000 },
+    })).toBe('NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 60s — a caller-set window of 30s overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default, extended once'
+      + ' (session: busy) — window extended once from 30s to 60s at 30s on session busy');
   });
 
   test('W11 a retry `next` outside the Date range still dies NAMED, never as `Invalid time value` (fix round 1, F3)', async () => {

@@ -9072,14 +9072,18 @@ Deferred — one line each, none blocks anything:
 
 ## #251 item 1 — filed, not fixed (2026-09-18)
 
-- [ ] The poll loop's backstop block sits INSIDE the poll body's `try … catch (pollError)`
+- [x] The poll loop's backstop block sits INSIDE the poll body's `try … catch (pollError)`
   (`src/headless.js :: runHeadless`) and `consecutivePollFailures` is reset at the top of every poll
   before that block runs, so a throw inside the block is swallowed as a poll failure and retried
   every poll (5 ms in tests, 2 s at the default interval) until the leg `--timeout` — the leg then
   dies a generic `timeout` with the `NO_OUTPUT_BACKSTOP:` diagnosis lost. Measured on this branch
   when `decideBackstopExtension` still threw on an out-of-range `retry.next` (W11's RED was a 20 s
-  hang, not the RangeError). The known thrower is gone; the shape is not — move the backstop block
-  out of the poll `try`, or count its failures toward the bail. (#251 item 1, Task 2 fix round)
+  hang, not the RangeError). FIXED in PR #269 round 1 (council A1/B1/C2, three seats): the decision
+  block converts a throw into a kill under its own name — it owns an inner `catch (decisionErr)`
+  that sets `backstopFired`, names the failure in the session clause and breaks, so the leg dies at
+  its window with the `NO_OUTPUT_BACKSTOP:` prefix intact; pinned by
+  tests/headless-backstop-decision-throws.test.js (whose RED at that HEAD was the same 20 s hang).
+  (#251 item 1, Task 2 fix round)
 - [ ] `tests/no-output-backstop-wiring.test.js` runs ≈ 34 s (measured 2026-09-18; from ≈ 15 s): the
   new W1/W2/W4/W5/W6/W11/W12 pins wait on real 1–2 s windows by design. Accepted cost; a fake-timer
   rewrite of that describe would buy the time back. (#251 item 1)

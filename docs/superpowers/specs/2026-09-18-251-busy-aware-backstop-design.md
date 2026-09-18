@@ -158,9 +158,10 @@ this design moves any CI timing value.
 
 ### 5.1 The death report — one appended clause, byte-identical otherwise
 
-The head sentence and the three existing clauses keep their bytes and order (engine log → skew →
-session). When the decision produced a record with something to say, ONE clause is appended after the
-session clause, in exactly one of these forms (seconds are integers, `Math.round(ms / 1000)`):
+The three existing clauses keep their bytes and order (engine log → skew → session), and so does the
+head sentence for every kill that was not extended. When the decision produced a record with something
+to say, ONE clause is appended after the session clause, in exactly one of these forms (seconds are
+integers, `Math.round(ms / 1000)`):
 
 - extended, then died: ` — window extended once from 480s to 912s at 481s on session busy`
   (`busy` or `retry`, the status at the extension)
@@ -168,12 +169,23 @@ session clause, in exactly one of these forms (seconds are integers, `Math.round
   leg cap`
 - retry whose next attempt lies past the extended window: ` — not extended: the engine schedules its
   next attempt at 2026-09-18T12:34:56.000Z, past the extended window`
+- the extension was decided and then refused because its deadline had already passed (council #269 r1,
+  C1 + D1): ` — not extended: the extended window had already passed when the decision ran`
 
 `idle`, probe outcomes, unknown arms and the pre-send site append NOTHING — those strings are
 byte-identical to 4.12.0's. The head sentence's `in Ns` reports the window IN FORCE at the kill (912 s
 after an extension), because "no output in 480 s" would be false for a leg that was silent for 912.
-The window phrase (`the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)` / `a caller-set window
-overriding …`) is unchanged; after an extension the clause is what says the window was 480 s.
+**The window phrase then names the base window it was extended from** (council #269 r1, D5):
+`the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables) of 480s, extended once`, or
+`a caller-set window of 30s overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default, extended once`.
+Without it, `in 912s — the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)` attributes 912 s to a
+variable that holds 480, and mis-states the remedy the sentence exists to point at by a factor of two.
+The phrase is unchanged whenever the record does not say `extended: true`, so every non-extending kill
+is byte-identical to 4.12.0's. The CI composition, in full:
+
+```
+NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 912s — the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables) of 480s, extended once (session: busy) — window extended once from 480s to 912s at 481s on session busy
+```
 
 The clause is rendered by a pure `formatBackstopExtensionClause(record)` in
 `src/utils/no-output-backstop.js`, composed by `headless.js :: formatNoOutputBackstopReason` through a

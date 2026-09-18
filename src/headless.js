@@ -281,18 +281,32 @@ function withTimeout(promise, ms, label) {
  * there stay identical to what's tested here.
  * #251 item 1 adds a FOURTH clause on the same terms, after the session clause:
  * `formatBackstopExtensionClause(extension)`, '' whenever the record has nothing
- * to say.
+ * to say. Council #269 r1 (D5) also makes the WINDOW PHRASE extension-aware: when
+ * the record says the window was extended, the phrase names the base window
+ * (`… (0 disables) of 480s, extended once` / `a caller-set window of 480s
+ * overriding …, extended once`), because the head's `in Ns` is by then the
+ * extended number and would otherwise be attributed to the env var. Nothing
+ * changes for a kill that was never extended.
  * @param {{ms: number, fromEnv: boolean, engineLogExcerpt?: string|null,
  *          engineSkew?: {server: string, installed: string}|null,
  *          sessionStatus?: object|null, extension?: object|null}} args
  * @returns {string}
  */
 function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSkew, sessionStatus, extension }) {
+  const s = (v) => `${Math.round(v / 1000)}s`;
+  // Council #269 r1 (D5): after an extension the head's `in Ns` is the EXTENDED window, so
+  // the window phrase has to name the BASE window it was extended from. Without that,
+  // `in 912s — the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)` reads as "that variable
+  // is set to 912 s" — it is not, it is 480 — and the remedy the sentence exists to point at
+  // is mis-stated by a factor of two. Only the extended arms change: every string a kill that
+  // was never extended can build (idle, a probe outcome, an unknown arm, the pre-send site)
+  // stays byte-identical to 4.12.0's, which is what pins W3 and W8 hold.
+  const extendedOnce = !!(extension && extension.extended);
+  const windowPhrase = fromEnv
+    ? `the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)${extendedOnce ? ` of ${s(extension.windowMs)}, extended once` : ''}`
+    : `a caller-set window${extendedOnce ? ` of ${s(extension.windowMs)}` : ''} overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default${extendedOnce ? ', extended once' : ''}`;
   const observed = 'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in '
-    + `${Math.round(ms / 1000)}s — `
-    + (fromEnv
-      ? 'the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)'
-      : 'a caller-set window overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default');
+    + `${s(ms)} — ${windowPhrase}`;
   // Append-only: absent/empty excerpt ⇒ the string above, unchanged byte for byte.
   const quoted = engineLogExcerpt ? `${observed} — engine log: ${engineLogExcerpt}` : observed;
   // Append-only for the same reason: no skew ⇒ formatSkewSuffix returns ''.
