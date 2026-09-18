@@ -30,6 +30,10 @@ const DEFAULT_NO_OUTPUT_BACKSTOP_MS = 300000;
 /** The reasons a busy/retry session was NOT extended (spec 2026-09-18 §5.2). */
 const BACKSTOP_WHY = ['at-cap', 'retry-beyond-window', 'pre-send'];
 
+/** #251 item 1 fix round 1 (F3): the exact key set isBackstopRecord accepts — "and nothing
+ *  else" in its docblock, made true rather than merely claimed. */
+const RECORD_KEYS = new Set(['windowMs', 'firedAtMs', 'status', 'extended', 'extendedToMs', 'why', 'retryNextIso']);
+
 /** @param {object} [env] test seam; defaults to process.env */
 function resolveNoOutputBackstopMs(env) {
   return envNumber('AMICUS_NO_OUTPUT_BACKSTOP_MS', DEFAULT_NO_OUTPUT_BACKSTOP_MS, env);
@@ -87,6 +91,9 @@ function extendWindowMs(baseMs, legTimeoutMs) {
  * as a pure function so every row is testable without the poll loop.
  * Classifies on the RAW `status.type` and records the SANITISED identifier —
  * the #219 r2 rule in session-status.js: display never decides semantics.
+ * The `!isProbeOutcome` conjunct is documentary: `probeUnknown` always publishes
+ * `type: 'unknown'`, so no fixture can distinguish it — it states the rule (a
+ * probe outcome is never engine evidence) rather than adding a branch.
  * @param {{status:*, windowMs:number, firedAtMs:number, legTimeoutMs:number, clockStartedAt:number}} a
  *   status — sessionStatusSafe's answer: an engine SessionStatus or a probeUnknown outcome
  *   windowMs — the window in force at this firing; firedAtMs — elapsed on the backstop's clock
@@ -96,15 +103,18 @@ function extendWindowMs(baseMs, legTimeoutMs) {
 function decideBackstopExtension({ status, windowMs, firedAtMs, legTimeoutMs, clockStartedAt }) {
   const isEngine = isRenderableStatus(status) && !isProbeOutcome(status);
   const type = isEngine ? collapseExcerpt(status.type, MAX_STATUS_TYPE_CHARS) : 'unknown';
-  const record = { windowMs, firedAtMs, status: type, extended: false };
+  // #251 item 1 fix round 1 (F2): the record must be valid by construction — floor here rather
+  // than trust the caller's inputs to already be integers (envNumber accepts any finite number,
+  // fractions included), so isBackstopRecord never rejects what this function just built.
+  const record = { windowMs: Math.floor(windowMs), firedAtMs: Math.floor(firedAtMs), status: type, extended: false };
   if (!isEngine || (status.type !== 'busy' && status.type !== 'retry')) { return { extendTo: null, record }; }
-  const extendedMs = extendWindowMs(windowMs, legTimeoutMs);
+  const extendedMs = Math.floor(extendWindowMs(windowMs, legTimeoutMs));
   if (!(extendedMs > windowMs)) { return { extendTo: null, record: { ...record, why: 'at-cap' } }; }
   const extendTo = clockStartedAt + extendedMs;
   if (status.type === 'retry' && Number.isFinite(status.next) && status.next > extendTo) {
     return { extendTo: null, record: { ...record, why: 'retry-beyond-window', retryNextIso: new Date(status.next).toISOString() } };
   }
-  return { extendTo, record: { ...record, extended: true, extendedToMs: extendedMs } };
+  return { extendTo, record: { ...record, extended: true, extendedToMs: Math.floor(extendedMs) } };
 }
 
 /**
@@ -116,9 +126,14 @@ function decideBackstopExtension({ status, windowMs, firedAtMs, legTimeoutMs, cl
  */
 function isBackstopRecord(x) {
   if (!x || typeof x !== 'object' || Array.isArray(x)) { return false; }
+  if (!Object.keys(x).every((k) => RECORD_KEYS.has(k))) { return false; }
   if (!(Number.isInteger(x.windowMs) && x.windowMs >= 0)) { return false; }
   if (!(Number.isInteger(x.firedAtMs) && x.firedAtMs >= 0)) { return false; }
-  if (typeof x.status !== 'string' || x.status === '') { return false; }
+  // #251 item 1 fix round 1 (F4): the identifier must already be sanitised — this pair's own
+  // docblocks claim "no untrusted text enters" the clause, a property only the PRODUCER
+  // (decideBackstopExtension, which records collapseExcerpt(status.type, ...)) can guarantee;
+  // requiring the fixed point here makes the predicate enforce what it claims.
+  if (typeof x.status !== 'string' || x.status === '' || collapseExcerpt(x.status, MAX_STATUS_TYPE_CHARS) !== x.status) { return false; }
   if (typeof x.extended !== 'boolean') { return false; }
   if (x.extended) {
     return Number.isInteger(x.extendedToMs) && x.extendedToMs > x.windowMs && x.why === undefined && x.retryNextIso === undefined;

@@ -84,6 +84,10 @@ describe('#251 item 1 — extend(): a fired backstop re-arms exactly once, at a 
     expect(fired.extend(1099)).toBe(false);
     expect(fired.state()).toBe('fired');
     expect(fired.extended()).toBe(false);
+    expect(fired.extend(NaN)).toBe(false);
+    expect(fired.extend(undefined)).toBe(false);
+    expect(fired.deadline()).toBe(1100);
+    expect(fired.state()).toBe('fired');
   });
   test('E4 progress after an extension still disarms it permanently', () => {
     const b = createNoOutputBackstop({ ms: 100, startedAt: 1000 });
@@ -170,6 +174,22 @@ describe('#251 item 1 — decideBackstopExtension: the spec §3 table, row by ro
     const d = decideBackstopExtension({ ...base, status: { type: ' busy ' } });
     expect(d.extendTo).toBeNull();
   });
+  test('D10 a fractional windowMs/firedAtMs (envNumber accepts non-integers) still yields a record isBackstopRecord accepts', () => {
+    // floor(2 * 480000.5) = 961001; min(961001, floor(960000 * 0.95) = 912000) = 912000 -- the
+    // clamp already lands on an integer, so extendTo = clockStartedAt + 912000 = 1912000.
+    const d = decideBackstopExtension({ ...base, windowMs: 480000.5, firedAtMs: 480722.9, status: { type: 'busy' } });
+    expect(d.extendTo).toBe(1912000);
+    expect(isBackstopRecord(d.record)).toBe(true);
+    expect(d.record.windowMs).toBe(480000);
+    expect(d.record.firedAtMs).toBe(480722);
+    // the at-cap arm with fractional inputs: floor(windowMs) still yields a valid record.
+    const atCap = decideBackstopExtension({
+      ...base, windowMs: 912000.5, firedAtMs: 913904.7, status: { type: 'busy' },
+    });
+    expect(atCap.extendTo).toBeNull();
+    expect(isBackstopRecord(atCap.record)).toBe(true);
+    expect(atCap.record).toEqual({ windowMs: 912000, firedAtMs: 913904, status: 'busy', extended: false, why: 'at-cap' });
+  });
 });
 
 describe('#251 item 1 — isBackstopRecord and the clause', () => {
@@ -193,6 +213,9 @@ describe('#251 item 1 — isBackstopRecord and the clause', () => {
     expect(isBackstopRecord({ windowMs: 1, firedAtMs: 2, status: 'busy', extended: false, why: 'because' })).toBe(false);
     expect(isBackstopRecord({ windowMs: 1, firedAtMs: 2, status: 'busy', extended: false, why: 'retry-beyond-window' })).toBe(false); // needs retryNextIso
     expect(isBackstopRecord({ windowMs: 1, firedAtMs: 2, status: 'busy', extended: false, why: 'at-cap', retryNextIso: 'x' })).toBe(false);
+    expect(isBackstopRecord({ windowMs: 1, firedAtMs: 2, status: 'idle', extended: false, extra: 1 })).toBe(false);
+    expect(isBackstopRecord({ windowMs: 1, firedAtMs: 2, status: 'busy\nINJECTED', extended: false })).toBe(false);
+    expect(isBackstopRecord({ windowMs: 1, firedAtMs: 2, status: 'x'.repeat(41), extended: false })).toBe(false);
   });
   test('C1 the four clause strings, byte-exact (spec §5.1)', () => {
     expect(formatBackstopExtensionClause({ windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 }))
