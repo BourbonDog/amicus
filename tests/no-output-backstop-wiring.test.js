@@ -1694,18 +1694,20 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
 
   test('W13 the DECISION probe is bounded by the leg time left, so a slow engine cannot push the kill past the leg cap (council #269 r2, C1)', async () => {
     // Geometry: the at-cap shape (window 2850 ms under a 3 000 ms cap), so ~150 ms of leg
-    // time remains when the backstop fires — and a status read that takes 400 ms is slower
-    // than that. MEASURED RED at a5a8d74a: the probe ran its full 400 ms PAST the cap and the
-    // leg died at ~3 25x ms carrying the engine's late `busy` — the right NAME on the wrong
+    // time remains when the backstop fires — and a status read that takes 2 s is far slower
+    // than that. MEASURED RED at a5a8d74a (with a 400 ms read): the probe ran its full 400 ms
+    // PAST the cap and the leg died at 3 273 ms carrying the engine's late `busy` — the right
+    // NAME on the wrong clock; a 2 s read makes the RED ~4.85 s against a GREEN bound of 3.5 s,
+    // so a loaded runner cannot flip the verdict (controller, after the r2 fix re-review).
     // clock. The decision read now gets `min(statusProbeMs, deadline - Date.now())`, and
     // `sessionStatusSafe` skips a non-positive window, so a firing with no leg time left kills
     // at once under its own name. Named mutant "PROBEUNBOUNDED": in headless.js pass
     // `statusProbeMs` back to the decision read instead of `probeBudgetMs`.
     mockGetMessages.mockResolvedValue([]);
-    mockGetSessionStatus.mockImplementation(() => new Promise(r => setTimeout(() => r({ type: 'busy' }), 400)));
+    mockGetSessionStatus.mockImplementation(() => new Promise(r => setTimeout(() => r({ type: 'busy' }), 2000)));
     const started = Date.now();
     const result = await run('probebound1', { noOutputBackstopMs: 2850 }, 3000);
-    expect(Date.now() - started).toBeLessThan(3100);
+    expect(Date.now() - started).toBeLessThan(3500);
     expect(result.timedOut).toBeFalsy(); // the backstop, not the 3 s leg cap, ended it
     expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP:/);
     // Either arm is a correct kill under this name — the bounded read gave up, or there was
