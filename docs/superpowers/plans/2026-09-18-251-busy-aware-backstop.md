@@ -759,7 +759,20 @@ git commit -m "feat(headless): consult the session before the no-output kill; ex
 - Modify: `src/sidecar/session-utils.js :: finalizeSession` (the `opts.finish` line's sibling)
 - Modify: `src/sidecar/fanout-leg.js` (`legPatch`, the `finish:` line's sibling)
 - Modify: `src/sidecar/start.js`, `src/sidecar/continue.js`, `src/sidecar/resume.js` (error branch stamp; `finalizeSession` opts; resume's reopen delete line)
-- Test: `tests/shared-server-finalize.test.js`, `tests/sidecar/session-utils.test.js`, `tests/sidecar/fanout.test.js`, `tests/start-terminal-status.test.js`, `tests/continue-resume-spend.test.js`, `tests/sidecar/resume.test.js`
+- Modify: `src/utils/result-schema.js :: buildRunResult` (the `finish` spread's sibling — spec R5 AMENDED: this is the writer of the wave doc's leg entries and of `amicus read`'s run result; the file is 300/300, so the spread joins the existing spread line or ONE comment line is folded — net ≤ 300, reported by `wc -l`)
+- Test: `tests/shared-server-finalize.test.js`, `tests/sidecar/session-utils.test.js`, `tests/sidecar/fanout.test.js`, `tests/start-terminal-status.test.js`, `tests/continue-resume-spend.test.js`, `tests/sidecar/resume.test.js`, `tests/utils/result-schema.test.js`
+
+**Amendment (2026-09-18, from the Task 3 implementer's NEEDS_CONTEXT):** `legPatch` cannot reach the wave doc; wave leg entries are `buildRunResult(metadata)` output (`fanout-leg.js` after `writeLegPatch`; `buildWaveResult` passes `legs` through verbatim), an enumerated literal. `finish` reaches `run.json` ONLY via `result-schema.js`'s spread. So item 3's `wave.legs[0].backstop` pin is correct and REQUIRES the `result-schema.js` change below. Add to Step 1: in `tests/utils/result-schema.test.js`, beside the `finish` pin (~:93–98, named mutant FINISHCOERCED):
+```js
+    it('carries metadata.backstop emit-when-valid (#251 item 1)', () => {
+      // Named mutant "BACKSTOPCOERCED": `backstop: metadata.backstop || null` — the key appears as null.
+      const REC = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+      expect(buildRunResult({ ...baseMeta, backstop: REC }, null).backstop).toEqual(REC);
+      expect('backstop' in buildRunResult({ ...baseMeta, backstop: { windowMs: 'x' } }, null)).toBe(false);
+      expect('backstop' in buildRunResult({ ...baseMeta }, null)).toBe(false);
+    });
+```
+(`baseMeta` and the `buildRunResult` call shape are whatever that file's `finish` test uses — read it and use ITS fixture and arguments.) Add to Step 3: in `src/utils/result-schema.js :: buildRunResult`, beside the `finish` spread, `...(require('./no-output-backstop').isBackstopRecord(metadata.backstop) ? { backstop: metadata.backstop } : {}),` — on the SAME line as an existing spread if the file would otherwise exceed 300, or as its own line after folding one comment line; either way `wc -l src/utils/result-schema.js` ≤ 300 and reported. Update that file's docblock field list (the sentence that names `finish`, ~:53) to name `backstop` too. Add `src/utils/result-schema.js tests/utils/result-schema.test.js` to Step 5's `git add`. Named mutant BACKSTOPCOERCED joins Step 4's list.
 
 **Interfaces:**
 - Consumes (Task 1): `isBackstopRecord`. (Task 2): `result.backstop`.

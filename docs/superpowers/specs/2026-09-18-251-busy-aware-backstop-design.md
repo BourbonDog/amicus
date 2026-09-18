@@ -212,12 +212,25 @@ delete-when-absent rule `finish` and `variant` follow, council #232 r1 B1).
 four error branches share one implementation instead of four copies (failure mode #11: one shared
 implementation, not a second patch at a second site).
 
-**Deliberately NOT reached** (rulings R5, R6): `src/utils/result-schema.js :: buildRunResult` (the file
-is 300/300; the solo `read` surface carries the case in the reason string), the runStats projection
-(`run-stats-entry.js`, `tally.js`, `verdict.json`) and the spend ledger (`appendSpend` callers in
-`start.js`, `fanout-leg-fallback.js`, `reopen-spend.js`). The corpus that sizes the extension is built
-from leg documents and `run.json` degrade notes (`data.reason` carries the whole reason string), exactly
-as Wave 2's was.
+**The tenth writer — found at execution, R5 AMENDED (2026-09-18, Task 3 implementer's NEEDS_CONTEXT):**
+`src/utils/result-schema.js :: buildRunResult` is the projection that turns a leg's `metadata.json`
+into the leg entry of the council wave doc / `run.json` (`fanout-leg.js` calls it after
+`writeLegPatch`; `buildWaveResult` passes those entries through verbatim) AND into `amicus read`'s run
+result. It is an enumerated object literal — a field that is not spelled there does not reach `run.json`.
+`finish` reaches the wave doc only through its spread on that literal. So the record MUST be carried
+there too, or the corpus (which Wave 2 built from `run.json`) would read zero extended legs: the exact
+"emit-site verification is not document-shape verification" error (failure mode #6). Rule: the same
+emit-when-valid spread, `...(isBackstopRecord(metadata.backstop) ? { backstop: metadata.backstop } : {})`,
+beside the `finish` spread — at ZERO net lines (the file is 300/300: the spread joins the existing
+spread line, or one comment line is folded to make room; the implementer reports `wc -l` ≤ 300), with a
+pin in `tests/utils/result-schema.test.js` mirroring the `finish` pin (valid → carried; forged → absent;
+absent → absent; named mutant "BACKSTOPCOERCED": `backstop: metadata.backstop || null`).
+
+**Deliberately NOT reached** (ruling R6): the runStats projection (`run-stats-entry.js`, `tally.js`,
+`verdict.json`) and the spend ledger (`appendSpend` callers in `start.js`, `fanout-leg-fallback.js`,
+`reopen-spend.js`). The corpus that sizes the extension is built from the leg entries of `run.json`
+(now carrying `backstop`), the leg documents, and `run.json` degrade notes (`data.reason` carries the
+whole reason string).
 
 ## 6. What does not change — the fences
 
@@ -253,9 +266,16 @@ as Wave 2's was.
   exist. *Cost if wrong:* one class of leg keeps today's behaviour exactly.
 - **R4 — Survivors record the extension too.** Without it the only evidence of a saved leg is a TTFT
   above a window the reader has to know. *Cost if wrong:* one small object on a handful of legs.
-- **R5 — `result-schema.js :: buildRunResult` does not carry the field.** The file is at the 300-line
-  gate with zero headroom, and the solo `read` surface already shows the reason string, which carries the
-  case. *Cost if wrong:* a solo `read --json` consumer parses the clause instead of a field.
+- **R5 — AMENDED at execution (2026-09-18): `result-schema.js :: buildRunResult` DOES carry the field,
+  at zero net lines.** The original ruling ("the file is 300/300 and the solo `read` surface shows the
+  reason string") mis-described the file: it is also the writer of the council wave doc's leg entries,
+  i.e. of `run.json` — the document the corpus reads. Excluding it would have made every extended leg
+  invisible to the census this record exists for. Caught by the Task 3 implementer, who stopped instead of
+  dropping the assertion. *Cost of the amendment:* one spread joined to an existing line (or one folded
+  comment) in a file at the size gate; a new pin. *Cost had it stood:* a silent zero in the next corpus —
+  failure mode #6 (verify at the writer of every document you name), fired again despite §5.2's own
+  "measured by grepping every writer" claim, because the grep was scoped to `src/sidecar` and the hit in
+  `src/utils` was dismissed by a ruling about a different surface.
 - **R6 — The runStats projection and the ledger do not carry the field.** `verdict.json`'s schema is
   unchanged; the corpus reads leg documents. *Cost if wrong:* a future census needs the leg docs, which
   the evidence artifact already ships.
