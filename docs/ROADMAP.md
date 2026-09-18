@@ -13,16 +13,17 @@ lives under **Backlog (tracked, not scheduled)** with everything else that is re
 Nothing about the content changed and no judgment about its value is implied; only its status. When
 an org buyer and the org to support them exist, it earns a number then.
 
-Amicus is at **v4.12.0** (2026-09-17). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.13.0** (2026-09-18). Each 4.x rev below leads with the benefit, not the
 plumbing; the v4.9.x patch releases carry no section of their own, because each corrected a
 defect rather than adding scope — where one added a surface (v4.9.4's `--thinking` refusals and
 `output-budget` doctor row, v4.9.5's Electron digest gate, v4.9.6's artifact custody, v4.9.7's dual name-table rescue boundary, v4.9.8's per-run seat tool allowlist and its unverified/refused seat census) it did so to
 make an existing promise true, not to widen it. v4.10.0 added a surface (`amicus aliases`) and
 v4.11.0 finished it (owner mode, the setup window's Needs-review section, the once-a-day notice),
-and v4.12.0 added one of its own (the CI council's credit preflight), so each gets a section. See
-`CHANGELOG.md` for what each one contained.
+v4.12.0 added one of its own (the CI council's credit preflight), and v4.13.0 changed what a
+shipped one does (the no-output backstop asks the engine before it kills), so each gets a
+section. See `CHANGELOG.md` for what each one contained.
 
-**Status:** v4.0 through **v4.12.0** have **shipped**, plus the v4.9.1–v4.9.8 patch releases —
+**Status:** v4.0 through **v4.13.0** have **shipped**, plus the v4.9.1–v4.9.8 patch releases —
 everything on this page is a record of what landed, not a plan. Composition — the scope that
 carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
 release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
@@ -561,6 +562,54 @@ wiping the credential already there, and a `config.json` a mid-write crash can n
 > release: the workflow installs `amicus@latest`, so the preflight and the death-report fix were
 > inert on main. The judge-death investigation (#202) is downstream of this cut for exactly that
 > reason.
+
+## v4.13 — "The backstop asks before it kills" *(the busy-aware no-output backstop — #251 item 1; the CI provider-routing pin, shipped blank — #202 Lever 2)* — ✅ SHIPPED v4.13.0, 2026-09-18
+**Benefit:** a leg that is still thinking at the no-output deadline is no longer killed for being
+slow to speak. The backstop reads the engine's `session.status` before it kills and gives a `busy`
+or `retry` session exactly one more window, so a council loses fewer seats to the wall — and every
+kill, and every leg the extension saved, leaves a record the next corpus can count. Beside it, the
+CI council gains a switch to pin a seat's OpenRouter upstream, shipped off because the one live pin
+measured did not remove the tail.
+
+- **★ The busy-aware no-output backstop** — at its deadline a leg that has produced nothing reads
+  `session.status` once: `busy`, or `retry` with the engine's next attempt inside reach, extends the
+  window exactly once — doubled and clamped strictly below the leg `--timeout`, the Stage-1 retry's
+  own formula, 480 s → 912 s in CI — while `idle`, an arm this code does not know, or a probe that
+  could not answer kills byte for byte as 4.12.0 did. The death report says which (`… (session:
+  busy) — window extended once from 480s to 912s at 481s on session busy`, or why it was not
+  extended), its head names both windows so the doubled figure is never read as the value of
+  `AMICUS_NO_OUTPUT_BACKSTOP_MS`, and every leg the backstop fired for carries a `backstop` record
+  (`windowMs`, `firedAtMs`, `status`, `extended`, and `extendedToMs` or `why`) on its
+  `metadata.json` and its `wave.json` entry — including the legs the extension SAVED. The status
+  read is bounded by the leg time remaining, so a slow engine cannot push a kill past the leg cap,
+  and CI's job worst case is unchanged. Motive: on 4.12.0 every one of 6 backstop kills across two
+  CI rounds reported `(session: busy)`. (#251 item 1) *(M)*
+- **The CI provider-routing pin, shipped blank** — `council-review.yml` can write an
+  `opencode.json` carrying only `provider.openrouter.models.<id>.options.provider` into the run
+  directory from `COUNCIL_PROVIDER_ROUTING`, so a pinned bench model is served by the upstream(s)
+  named and, with a single-slug `only`, its outcomes are attributable by construction. The document
+  is validated before it is written (structure, documented routing keys, every pinned id seated by
+  this run's alias map), a keyless pre-run check against OpenRouter's public endpoints route skips
+  the pin when a named upstream is not listed and serving, a keyless canary pins the engine's
+  forwarding of the file, a post-run step warns when a pinned model's leg died, and the file ships
+  inside the `council-run` evidence artifact. **No pin is in force:** two live rounds with qwen
+  pinned to `reka` did not remove the tail. (#202 Lever 2) *(M)*
+- **The Waves 2–3.0 probe scripts** — six keyless probes (`scripts/probe-shared-server.js`,
+  `probe-wire-64k.js`, `probe-agent-wire.js`, `probe-sandbox.js`, `probe-session-obs.js`,
+  `probe-council-agents-canon.js`; repo only, not in the tarball) with their digests: the
+  zero-spend reads that eliminated both v4.9.8 candidates for the judge-death regime at the code
+  level and measured the shared server, the 64000 reservation and the council agents on the wire.
+  Evidence for #202, not a user surface *(S)*
+> Why here: the workflow installs `amicus@latest`, so the extension was inert on main — every
+> council round after this cut is the first live sample of what the lever buys, and the spec's
+> revert criterion (kills carrying `extended once … on session busy` versus survivors carrying
+> `backstop.extended: true`; if the saved count stays near zero while the delayed count matches
+> the old kill count, the extension is only cost) can only be read from released artifacts. Two
+> council rounds on #269 shaped the record: the pre-send catch needs no decision, a decision failure
+> kills under its own name, a retry scheduled past the extended window is refused, an elapsed
+> extension is refused and recorded, and the status read is bounded by the leg time. The
+> judge-death regime since v4.9.8 stays open and weekday-collinear; nothing here claims to explain
+> it.
 
 ## Backlog (tracked, not scheduled)
 
