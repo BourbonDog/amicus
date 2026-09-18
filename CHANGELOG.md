@@ -13,9 +13,10 @@ All notable changes to Amicus are documented here. Format follows
   step, so a pinned bench model is served by the upstream(s) named and — with a single-slug `only` —
   its outcomes are attributable by construction, since nothing in a run records the serving
   upstream. **No pin is in force by default:** the #202 Lever 2 experiment ran two live rounds with
-  qwen pinned to `reka` and did not remove the tail — both pinned first attempts died at the
-  no-output backstop, while the retry and judge legs completed through `reka` — so a merge-gating
-  seat is not left on a single upstream for no measured benefit. When a pin is set, the document is validated before it
+  qwen pinned to `reka` and did not remove the tail: both pinned first attempts died at the
+  no-output backstop, round 1's retry died too (912 s) and lost the seat, and round 2's retry and
+  judge leg then completed through `reka` — so a merge-gating seat is not left on a single upstream
+  for no measured benefit. When a pin is set, the document is validated before it
   is written — structure, documented OpenRouter routing keys, and that every pinned model id is one
   this run's provisioned alias map actually seats, each failing the job loudly; a keyless pre-run
   check asks OpenRouter's public endpoints route whether every named upstream is listed and serving

@@ -148,9 +148,9 @@ directory before the paid step, pinning one bench model's upstream
 (`provider.openrouter.models.<id>.options.provider`); with a single-slug `only` that model's legs
 become attributable by construction. **It ships blank.** The #202 Lever 2 experiment ran two live
 rounds with qwen pinned to one upstream and the time-to-first-token tail did not move: in both rounds
-the pinned seat's *first* attempt died at the no-output backstop (3 of the 5 pinned legs across the
-two rounds failed), and in the second round its retry and judge leg then completed through that same
-upstream. So a pin is not a fix, and a merge-gating seat does not sit on a single upstream for no
+the pinned seat's *first* attempt died at the no-output backstop, round 1's retry died too (912 s)
+and lost the seat, and only in round 2 did the retry — and its judge leg — complete through that same
+upstream (3 of the 5 pinned legs across the two rounds failed). So a pin is not a fix, and a merge-gating seat does not sit on a single upstream for no
 measured benefit. The
 machinery stays, gated and tested, for the next question. When a pin *is* set: the document is
 validated before it is written, a keyless pre-run check skips the pin for that run if a named

@@ -29,6 +29,11 @@
  *         scopes support legs at `<runDir>/_scratch`), and it is what makes the
  *         workflow's "the pin governs every call that model makes in the run"
  *         claim true rather than hopeful.
+ *   R15 — R12's geometry carrying the SHIPPED document: a single-slug `only`
+ *         on a real CI model id, with no `allow_fallbacks`. Added by council
+ *         #266 r3 (A1/D4), which found that the two rows above pin the probe's
+ *         own `order` preference and leave the shape CI actually writes
+ *         unverified on the wire.
  *
  * The probe re-sandboxes itself (OUTER/INNER, credential-scrubbed) and points
  * the provider at a LOCAL capture server, so this is keyless and $0 — it asserts
@@ -46,13 +51,30 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const ROWS = 'R12,R14';
+const ROWS = 'R12,R14,R15';
 const PROBE = path.join(__dirname, '..', 'scripts', 'probe-provider-routing.js');
-// The routing preference the probe's own tree config asks for (`ROUTE` in
-// scripts/probe-provider-routing.js). Sentinel values — neither provider serves
-// the probe's model — because the assertion is about the REQUEST BODY, not about
-// anything a provider would do with it.
-const WIRE = '{"order":["Fireworks"],"allow_fallbacks":false}';
+/**
+ * What each row must carry on the wire.
+ *
+ * R12/R14 carry the probe's own `ROUTE` — sentinel values, because neither
+ * provider serves the probe's model and the assertion is about the REQUEST BODY,
+ * not about anything a provider would do with it.
+ *
+ * R15 is the row council #266 r3 (A1/D4) added, and it is the one that covers
+ * what CI actually ships: the same per-call geometry as R12, but carrying a
+ * single-slug `only` on a real CI model id and no `allow_fallbacks` — the
+ * document `council-review.yml` documents as its example. Without it the canary
+ * pinned that SOME provider block reaches the wire while the shipped shape went
+ * unverified, so an engine regression specific to `only` handling would have
+ * tripped neither this test nor any gate. The exact body matters as much as the
+ * key: an engine that dropped `only` and forwarded `{}` would still say
+ * `carried: yes`.
+ */
+const WIRE = {
+  R12: '{"order":["Fireworks"],"allow_fallbacks":false}',
+  R14: '{"order":["Fireworks"],"allow_fallbacks":false}',
+  R15: '{"only":["reka"]}',
+};
 
 test(`the pinned engine still carries a run-directory opencode.json's options.provider to the wire (probe rows ${ROWS})`, () => {
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-routing-canary-'));
@@ -79,10 +101,10 @@ test(`the pinned engine still carries a run-directory opencode.json's options.pr
       expect(line(id)).toContain('carried: yes');
       // And the KEYS, not merely the presence of a provider object: an engine
       // that forwarded an empty `{}` would still say `carried: yes`.
-      expect(line(id)).toContain(WIRE);
+      expect(line(id)).toContain(WIRE[id]);
     }
     // The summary line, so a row that never captured cannot pass as absent.
-    expect(out).toContain(`routing: 2 of 2 cases carried a preference (${ROWS})`);
+    expect(out).toContain(`routing: 3 of 3 cases carried a preference (${ROWS})`);
     // The other half of the workflow's claim, re-pinned here because the
     // ::notice:: and the env comment both rest on it: the engine surfaces the
     // serving upstream NOWHERE, which is why `only: [one-slug]` is the only

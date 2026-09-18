@@ -1279,7 +1279,8 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
     test('C5 — the notice keys the routing BY MODEL ID, so two pins cannot be merged into one', () => {
       const step = routingStep();
-      expect(step).toContain('to_entries[] | {(.key): .value.options.provider}');
+      // Gateway-qualified since r3/B2 — the bare key collided across gateways.
+      expect(step).toContain('{($prov + "/" + .key): .value.options.provider}');
       // The "obvious" form, banned: `add` over bare provider objects merges
       // them, so the notice would print one model's `only` list against both
       // ids. Recorded as data, not only as a why-comment.
@@ -1303,7 +1304,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(routingStep()).toContain('pinned by');
       // The canary itself must exist and name the two geometry cases.
       const canary = fs.readFileSync(path.join(__dirname, '..', 'probe-provider-routing-canary.integration.test.js'), 'utf-8');
-      expect(canary).toContain("'R12,R14'");
+      expect(canary).toContain("'R12,R14,R15'");
       expect(canary).toContain('probe-provider-routing.js');
     });
 
@@ -1374,11 +1375,17 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         const files = {};
         if (o.run !== null) { files[path.join('RD', 'run.json')] = JSON.stringify(o.run || { degrades: [] }); }
         if (o.map !== null) { files[path.join('CFG', 'config.json')] = JSON.stringify(o.map || ALIASES); }
+        // r3/B1: attribution is keyed on the marker the routing step leaves
+        // behind, not on the env value. Present unless a case says otherwise.
+        if (o.marker !== false) { files[path.join('RD', '.routing-pin-written')] = 'deadbeef'; }
         const ctx = vm.createContext({
-          require: (id) => ({ fs: { readFileSync: (p) => {
-            if (!Object.prototype.hasOwnProperty.call(files, p)) { throw new Error(`ENOENT ${p}`); }
-            return files[p];
-          } }, path }[id]),
+          require: (id) => ({ fs: {
+            readFileSync: (p) => {
+              if (!Object.prototype.hasOwnProperty.call(files, p)) { throw new Error(`ENOENT ${p}`); }
+              return files[p];
+            },
+            existsSync: (p) => Object.prototype.hasOwnProperty.call(files, p),
+          }, path }[id]),
           console: { log: (m) => out.logs.push(m) },
           process: {
             env: { RUN_DIR: 'RD', AMICUS_CONFIG_DIR: 'CFG', COUNCIL_PROVIDER_ROUTING: o.pin || PIN },
@@ -1441,6 +1448,18 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         expect(run({ run: { degrades: [] } }).logs).toEqual([]);
         // Another seat's death is not this pin's business.
         expect(run({ run: { degrades: [{ channel: 'dead-leg', data: { seat: 'glm', status: 'error' } }] } }).logs).toEqual([]);
+      });
+
+      test('B1 — no marker means no pin was in force, so nothing is attributed to one', () => {
+        // The run that this exists for: COUNCIL_PROVIDER_ROUTING is set, a seat
+        // died, and the pre-run upstream check SKIPPED the write — so the council
+        // ran completely unpinned and the pin must not be named as a cause.
+        const { logs, exits } = run({ run: { degrades: [DEAD] }, marker: false });
+        expect(exits).toEqual([0]);
+        expect(logs).toHaveLength(1);
+        expect(logs[0]).toMatch(/^::notice::/);
+        expect(logs[0]).toContain('no pin was in force this run');
+        expect(logs.join(' ')).not.toContain('was LOST from');
       });
 
       test('a cancelled run (no run.json) is a notice, not a warning, and stops there', () => {
@@ -1536,8 +1555,8 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(cmd).toContain('VERIFIED=$(jq -r');
       expect(cmd).toContain('${VERIFIED}');
       expect(cmd).toContain('((.only // []) + (.order // []))[]');
-      expect(cmd).toContain('Every named upstream was verified listed and serving');
-      expect(cmd).toContain('No upstream is named by this document (no only/order), so there was nothing to verify.');
+      expect(cmd).toContain('Every upstream this document allows was verified listed and serving');
+      expect(cmd).toContain('No upstream is named by this document (no only/order/ignore), so there was nothing to verify.');
       // The vacuous unconditional form must be gone from the notice itself.
       expect(cmd).not.toMatch(/\$\{ATTRIB\}\. Every named upstream/);
     });
@@ -1597,16 +1616,37 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         .filter((l) => /^\s*(el)?if ! jq -e /.test(l))
         .map((l) => l.trim().replace(/^(el)?if ! /, '').replace(/; then$/, ''));
 
+      /**
+       * D6 (council #266 r3) — the step's jq is not only its `if !` gates.
+       * `PINNED`, `ROUTING`, `ATTRIB`, `VERIFIED`, `PINS`, `KNOWN`, `DISPATCHED`
+       * and `UNGOVERNED` are command substitutions that were string-pinned and
+       * never executed — the exact class the N1 blocker belonged to, where a
+       * scoping error surfaces only on a real gated CI run.
+       */
+      const assignments = () => routingRunCommand().split('\n')
+        .filter((l) => /^\s*[A-Z_]+=\$\(jq /.test(l))
+        .map((l) => {
+          const t = l.trim();
+          return { name: t.slice(0, t.indexOf('=')), cmd: t.slice(t.indexOf('=$(') + 3, t.lastIndexOf(')')) };
+        });
+
+      test('D6 — the harvest found every jq assignment, not only the gates', () => {
+        expect(assignments().map((a) => a.name).sort()).toEqual(
+          ['ATTRIB', 'DISPATCHED', 'KNOWN', 'PINNED', 'PINS', 'ROUTING', 'UNGOVERNED', 'VERIFIED']);
+        for (const { cmd } of assignments()) { expect(cmd).toMatch(/^jq /); }
+      });
+
       // Runs EVERYWHERE, jq or not: the harvest itself is the part most likely
       // to rot (a reformatted gate, a renamed variable), and a machine with no
       // jq can still prove the lines were found and are shaped as expected.
       test('the harvest found every gate', () => {
-        // Nine `jq -e` gates: six read the DOCUMENT (object, top-level keys,
-        // provider level, model entry, key allowlist, list shape) and three read
-        // the provisioned MAP (parseable, has aliases, and the set difference
-        // that decides whether every pinned id is seated).
-        expect(gates().length).toBe(9);
-        expect(gates().filter((g) => g.includes('$COUNCIL_PROVIDER_ROUTING'))).toHaveLength(7);
+        // Ten `jq -e` gates: seven read the DOCUMENT (object, top-level keys,
+        // provider level, model entry, key allowlist, key TYPES — added by r3/D7
+        // — and list shape) and three read the provisioned MAP (parseable, has
+        // aliases, and the set difference that decides whether every pinned id is
+        // seated; that last one reads both, so it counts in both figures).
+        expect(gates().length).toBe(10);
+        expect(gates().filter((g) => g.includes('$COUNCIL_PROVIDER_ROUTING'))).toHaveLength(8);
         expect(gates().filter((g) => g.includes('"$MAP"'))).toHaveLength(3);
         for (const g of gates()) { expect(g).not.toMatch(/^(el)?if |; then$/); }
       });
@@ -1630,8 +1670,8 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
         test('the shipped fixture passes every gate', () => {
           const statuses = runGates(FIXTURE);
-          expect(`the fixture passes all 9 gates: ${JSON.stringify(statuses)}`)
-            .toBe(`the fixture passes all 9 gates: ${JSON.stringify(statuses.map(() => 0))}`);
+          expect(`the fixture passes all 10 gates: ${JSON.stringify(statuses)}`)
+            .toBe(`the fixture passes all 10 gates: ${JSON.stringify(statuses.map(() => 0))}`);
         });
 
         test('each invalid class is refused by at least one gate', () => {
@@ -1647,6 +1687,11 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
             'an empty only list': '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"only":[]}}}}}}}',
             'a blank slug': '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"only":[""]}}}}}}}',
             'a non-string slug': '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"only":[1]}}}}}}}',
+            'a sort object where a documented string belongs': '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"sort":"cheapest"}}}}}}}',
+            'a max_price array': '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"max_price":[1]}}}}}}}',
+            'a string allow_fallbacks': '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"only":["reka"],"allow_fallbacks":"false"}}}}}}}',
+            'an undocumented data_collection value': '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"data_collection":"maybe"}}}}}}}',
+            'an empty quantizations list': '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"quantizations":[]}}}}}}}',
             'an unseated model id': '{"provider":{"openrouter":{"models":{"nobody/unseated-1":{"options":{"provider":{"only":["reka"]}}}}}}}',
           };
           for (const [name, value] of Object.entries(cases)) {
@@ -1670,14 +1715,81 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
             .toBe('alias gate on a valid document: exit 0 stderr ');
         });
 
+        /**
+         * D6 — the step's OTHER jq, executed. The gates above are `if !` lines;
+         * `PINNED`, `ROUTING`, `ATTRIB`, `VERIFIED`, `DISPATCHED` and
+         * `UNGOVERNED` are command substitutions that were string-pinned and
+         * never run — the exact class the N1 blocker belonged to, where a
+         * scoping error surfaces only on a real gated CI run.
+         */
+        test('every jq assignment in the step runs and produces output', () => {
+          for (const { name, cmd } of assignments()) {
+            const r = spawnSync('bash', ['-c', cmd], {
+              encoding: 'utf8',
+              env: {
+                ...process.env,
+                COUNCIL_PROVIDER_ROUTING: FIXTURE,
+                MAP: mapPath,
+                MODELS: 'glm,qwen,gpt,deepseek',
+                CHAIR: 'gemini-pro',
+              },
+            });
+            expect(`${name} exit ${r.status} stderr ${(r.stderr || '').trim()}`).toBe(`${name} exit 0 stderr `);
+            // Every one of them is interpolated into a message, so an empty
+            // result is a silent hole in that message — except UNGOVERNED,
+            // whose emptiness IS its "nothing to report" signal.
+            if (name !== 'UNGOVERNED') { expect(`${name} non-empty`).toBe(`${(r.stdout || '').trim() ? name : ''} non-empty`); }
+          }
+        });
+
+        test('the notice expressions say the right thing about the fixture', () => {
+          const run = (name, value) => {
+            const { cmd } = assignments().find((a) => a.name === name);
+            return spawnSync('bash', ['-c', cmd], {
+              encoding: 'utf8',
+              env: { ...process.env, COUNCIL_PROVIDER_ROUTING: value, MAP: mapPath, MODELS: 'glm,qwen,gpt,deepseek', CHAIR: 'gemini-pro' },
+            }).stdout.trim();
+          };
+          // B2: gateway-qualified, both surfaces.
+          expect(run('PINNED', FIXTURE)).toBe('openrouter/qwen/qwen3.8-27b');
+          expect(JSON.parse(run('ROUTING', FIXTURE)))
+            .toEqual({ 'openrouter/qwen/qwen3.8-27b': { only: ['reka'] } });
+          // C1: attribution follows the document.
+          expect(run('ATTRIB', FIXTURE)).toMatch(/^self-attributing/);
+          const orderOnly = '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"order":["reka","novita"]}}}}}}}';
+          expect(run('ATTRIB', orderOnly)).toMatch(/^NOT self-attributing/);
+          // D3: VERIFIED distinguishes all three cases.
+          expect(run('VERIFIED', FIXTURE)).toContain('Every upstream this document allows was verified');
+          const ignoreOnly = '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"ignore":["deepinfra"]}}}}}}}';
+          expect(run('VERIFIED', ignoreOnly)).toContain('only excludes some');
+          const sortOnly = '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"sort":"latency"}}}}}}}';
+          expect(run('VERIFIED', sortOnly)).toContain('no only/order/ignore');
+          // B2 again, on the shape that collided: two gateways, one model id.
+          const twoGateways = JSON.stringify({ provider: {
+            openrouter: { models: { 'qwen/qwen3.8-27b': { options: { provider: { only: ['reka'] } } } } },
+            other: { models: { 'qwen/qwen3.8-27b': { options: { provider: { only: ['novita'] } } } } },
+          } });
+          expect(Object.keys(JSON.parse(run('ROUTING', twoGateways))).sort())
+            .toEqual(['openrouter/qwen/qwen3.8-27b', 'other/qwen/qwen3.8-27b']);
+          // D5: the pin is seated here, so nothing is ungoverned; re-point the
+          // bench and the same expression names it.
+          expect(run('UNGOVERNED', FIXTURE)).toBe('');
+          const { cmd } = assignments().find((a) => a.name === 'UNGOVERNED');
+          const elsewhere = spawnSync('bash', ['-c', cmd], {
+            encoding: 'utf8',
+            env: { ...process.env, COUNCIL_PROVIDER_ROUTING: FIXTURE, MAP: mapPath, MODELS: 'glm', CHAIR: 'glm' },
+          });
+          expect(elsewhere.stdout.trim()).toBe('openrouter/qwen/qwen3.8-27b');
+        });
+
         test('a two-model document with order-only routing also passes every gate', () => {
           const value = JSON.stringify({ provider: { openrouter: { models: {
             'qwen/qwen3.8-27b': { options: { provider: { order: ['reka', 'novita'], allow_fallbacks: false } } },
             'z-ai/glm-5.3': { options: { provider: { only: ['novita'] } } },
           } } } });
           const statuses = runGates(value);
-          expect(`order-only, two models, all 9 gates: ${JSON.stringify(statuses)}`)
-            .toBe(`order-only, two models, all 9 gates: ${JSON.stringify(statuses.map(() => 0))}`);
+          expect(`order-only, two models, all 10 gates: ${JSON.stringify(statuses)}`)
+            .toBe(`order-only, two models, all 10 gates: ${JSON.stringify(statuses.map(() => 0))}`);
         });
       });
 
@@ -1808,6 +1920,152 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         // And the fetch takes exactly one argument object, with no headers.
         expect(code).toContain('fetch(url, { signal: AbortSignal.timeout(10000) })');
       });
+    });
+
+    // ---- council #266 round 3 ------------------------------------------------
+
+    test('B1 — attribution is keyed on a marker the write leaves, not on the env value', () => {
+      const cmd = routingRunCommand();
+      const health = healthStep();
+      // A non-blank value means a pin was ASKED for. The pre-run check skips the
+      // write whenever an upstream is missing, down or unverifiable, and on
+      // those runs the council is completely unpinned — yet the health step
+      // still blamed the pin for any seat that died.
+      expect(cmd).toContain('> "$RUN_DIR/.routing-pin-written"');
+      // Written only after the document is on disk, so it cannot exist on a
+      // skipped run.
+      expect(cmd.indexOf('> "$RUN_DIR/opencode.json"'))
+        .toBeLessThan(cmd.indexOf('> "$RUN_DIR/.routing-pin-written"'));
+      expect(cmd.indexOf('verdict.txt')).toBeLessThan(cmd.indexOf('> "$RUN_DIR/.routing-pin-written"'));
+      // It carries the document's sha, so an archived run ties to exact bytes.
+      expect(cmd).toContain('sha256sum "$RUN_DIR/opencode.json"');
+      // And the health program reads it before anything else.
+      expect(health).toContain('.routing-pin-written');
+      expect(health).toContain('no pin was in force this run');
+    });
+
+    test('A2 — the pre-run check refuses an ignore policy that leaves no serving upstream', () => {
+      const step = routingStep();
+      expect(step).toContain('after applying ignore');
+      expect(step).toContain('NO serving upstream remains for');
+      expect(step).toContain('the pinned model would be unservable');
+    });
+
+    test('B3 — an endpoint whose status is unknown is NOT treated as serving', () => {
+      const step = routingStep();
+      // Fail-closed, matching the stated posture: `status` is present on all 112
+      // endpoints of the saved capture, so an absent or non-numeric one means
+      // the shape moved. `uptime_last_30m` stays asymmetric on purpose — 14 of
+      // those 112 carry null while healthy, so null there is unknown, not down.
+      expect(step).toContain('const serving = (e) => e && e.status === 0');
+      expect(step).not.toContain('e.status === undefined || e.status === null || e.status === 0');
+      expect(step).toContain('UNKNOWN IS NOT SERVING');
+    });
+
+    test('B2 — every surface keys routing by gateway/model, so two gateways cannot collide', () => {
+      const cmd = routingRunCommand();
+      // The bare `[.provider[].models | keys[]]` form dropped the gateway and
+      // collided last-wins when two gateways pin the same model id.
+      expect(cmd).not.toContain("jq -r '[.provider[].models | keys[]] | join");
+      expect(cmd).not.toContain('[.provider[].models | to_entries[] | {(.key): .value.options.provider}] | add');
+      expect(cmd).toContain('$prov + "/" + .] | join(", ")');
+      expect(cmd).toContain('{($prov + "/" + .key): .value.options.provider}');
+      // Demonstrated on the shape that breaks: two gateways, one model id.
+      const two = { 'gw-a': { 'm/1': { only: ['x'] } }, 'gw-b': { 'm/1': { only: ['y'] } } };
+      const bare = Object.assign({}, ...Object.values(two).map((models) => (
+        Object.fromEntries(Object.entries(models).map(([id, r]) => [id, r])))));
+      expect(Object.keys(bare)).toEqual(['m/1']); // one key — the collision
+      const keyed = Object.assign({}, ...Object.entries(two).map(([gw, models]) => (
+        Object.fromEntries(Object.entries(models).map(([id, r]) => [`${gw}/${id}`, r])))));
+      expect(Object.keys(keyed)).toEqual(['gw-a/m/1', 'gw-b/m/1']);
+    });
+
+    test('D3 — an ignore-only document names upstreams, and the run says so', () => {
+      const step = routingStep();
+      const cmd = routingRunCommand();
+      // The pre-run check collects ignore slugs too, and a slug that lists
+      // nothing is a typo worth saying — without skipping, since ignoring a
+      // provider that is not there cannot make the model unservable.
+      expect(step).toContain('const deny = [].concat(routing.ignore || []);');
+      expect(step).toContain('is ignored by this document but is not an upstream OpenRouter');
+      expect(step).toContain('check the slug for a typo');
+      // And the notice no longer claims an ignore-only document names nothing.
+      expect(cmd).toContain('(.ignore // [])[]');
+      expect(cmd).toContain('no only/order/ignore');
+      expect(cmd).not.toContain('(no only/order), so there was nothing to verify');
+    });
+
+    test('D5 — a pin that governs no dispatched seat is called out, without failing the job', () => {
+      const cmd = routingRunCommand();
+      // The alias gate proves a pinned id is SEATABLE. This asks whether this
+      // run seats it, resolved through the same provisioned map so the two
+      // cannot disagree about what an alias means.
+      expect(cmd).toContain('UNGOVERNED=$(jq -r');
+      expect(cmd).toContain('governs no seat this run');
+      expect(cmd).toContain('--arg models "$MODELS"');
+      expect(cmd).toContain('--arg chair "$CHAIR"');
+      // A warning, not a refusal — and it must sit after the alias gate.
+      const at = cmd.indexOf('UNGOVERNED=$(jq -r');
+      expect(cmd.slice(at, at + 800)).toContain('::warning::');
+      expect(cmd.slice(at, at + 800)).not.toContain('exit 1');
+      expect(cmd.indexOf('pins a model id that no alias')).toBeLessThan(at);
+    });
+
+    test('D7 — the documented keys are type-checked, not merely named', () => {
+      const cmd = routingRunCommand();
+      // The allowlist proves a key is documented and says nothing about its
+      // value, so `sort: {}` or `max_price: [1]` passed the gate and the notice.
+      expect(cmd).toContain('.value | type == "boolean"');
+      expect(cmd).toContain('.value == "allow" or .value == "deny"');
+      expect(cmd).toContain('IN("price", "throughput", "latency")');
+      expect(cmd).toContain('.key == "max_price"');
+      expect(cmd).toContain('.key == "quantizations"');
+      expect(cmd).toContain('has the wrong type for its documented field');
+      // The types are the saved field table's, so the values a gate accepts and
+      // the values the docs describe cannot drift apart silently.
+      for (const key of ['allow_fallbacks', 'require_parameters', 'zdr', 'enforce_distillable_text',
+        'data_collection', 'sort', 'max_price', 'quantizations',
+        'preferred_min_throughput', 'preferred_max_latency']) {
+        expect(DOCUMENTED_PROVIDER_KEYS).toContain(key);
+      }
+    });
+
+    test('A3 — "a single upstream with no fallback" is claimed only when that is true', () => {
+      const health = healthStep();
+      expect(health).toContain('const soleUpstream = Array.isArray(routing.only) && routing.only.length === 1;');
+      expect(health).toContain('a single upstream with no fallback, so the pin is a candidate cause');
+      expect(health).toContain('routing restricted by the pinned document (more than one upstream remains permitted)');
+      // The unconditional form must be gone from the message itself.
+      expect(health).toContain('${shape}');
+      expect(health).not.toMatch(/\$\{pin\} — a single upstream with no fallback/);
+    });
+
+    test('C1 — the two rounds are summarised without merging their retries', () => {
+      // "the retry and judge legs completed through reka" read as if BOTH
+      // retries completed; round 1's died at 912 s and lost the seat.
+      const y = yml();
+      expect(y).toContain("Round 1's\n      # retry ALSO died, at 912 s, and that round lost the seat.");
+      expect(y).toContain("one round's retry, not both");
+      const changelog = fs.readFileSync(path.join(__dirname, '..', '..', 'CHANGELOG.md'), 'utf-8');
+      expect(changelog).toContain("round 1's retry died too (912 s) and lost the seat");
+      expect(changelog).not.toContain('while the retry and judge legs completed through');
+      const readme = fs.readFileSync(path.join(__dirname, '..', '..', 'README.md'), 'utf-8');
+      expect(readme).toContain("round 1's retry died too (912 s)");
+      expect(readme).toContain('only in round 2 did the retry');
+    });
+
+    test('A1/D4 — the canary covers the SHIPPED only-shape, not just the probe document', () => {
+      const canary = fs.readFileSync(path.join(__dirname, '..', 'probe-provider-routing-canary.integration.test.js'), 'utf-8');
+      expect(canary).toContain("'R12,R14,R15'");
+      expect(canary).toContain('R15: \'{"only":["reka"]}\'');
+      expect(canary).toContain('routing: 3 of 3 cases carried a preference');
+      // The probe must carry that case, on the real CI model id, and the
+      // pre-existing rows must be untouched.
+      const probe = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'probe-provider-routing.js'), 'utf-8');
+      expect(probe).toContain("id: 'R15'");
+      expect(probe).toContain('const TREE_ONLY = { provider: { openrouter: { models: { [QWEN_CI]:');
+      expect(probe).toContain("only: ['reka']");
+      for (const id of ['R12', 'R14']) { expect(probe).toContain(`id: '${id}'`); }
     });
 
     test('A6 — the probe measures byte-for-byte the document the workflow writes', () => {
