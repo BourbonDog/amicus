@@ -1451,6 +1451,11 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
     runHeadless(MODEL, 'sys', 'user', taskId, '/proj', timeoutMs, 'build', { ...GEO, ...opts });
 
   test('W1 busy at the deadline: the leg gets one more window, then dies at the EXTENDED deadline with the clause and the record', async () => {
+    // Named mutant "REFUSEDEXTENDPUBLISHED": in headless.js, drop the record rewrite on a
+    // refused extend() — unobservable through W1 (extend() cannot refuse at the first firing
+    // without a stalled loop); the guarantee is the unit pin E6 plus this rewrite; see
+    // council #269 r1 D1. The end-to-end half lives in
+    // tests/headless-backstop-extend-refused.test.js, which injects the refusal at the seam.
     mockGetMessages.mockResolvedValue([]);
     mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
     const started = Date.now();

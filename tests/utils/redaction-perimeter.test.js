@@ -53,6 +53,15 @@ function classify(rhs) {
   // `collapseExcerpt`); the extension clause carries only a sanitised type identifier,
   // integers and an amicus-formatted timestamp.
   if (s.includes('noOutputBackstopReason(')) { return 'AMICUS:backstop (engine-log excerpt redacted at its own seam)'; }
+  // Council #269 r1 (A1/B1/C2): the decision block's own catch kills under the backstop's
+  // name instead of letting a throw be retried as a poll failure. It calls the PURE
+  // module-scope formatter (not the closure — the closure does I/O, and this site is
+  // already handling a failure), with no engine-log excerpt and no skew: its only variable
+  // text is `decisionErr.message`, an amicus-authored exception from amicus's own decision
+  // code, carried through `probeUnknown` and sanitised at render by `collapseExcerpt`
+  // (utils/session-status.js). No provider prose can reach it — a NEW site, deliberately
+  // classified, not a shape that slipped in.
+  if (s.includes('formatNoOutputBackstopReason(')) { return 'AMICUS:backstop decision failure (no engine text)'; }
   if (s.includes('promptResult.providerError')) { return 'AMICUS:client-boundary synthetic'; }
   if (s.includes('formatOutputLengthReason(')) { return 'AMICUS:output-length'; }
   if (s.startsWith('sessionError')) { return 'AMICUS:poll-failure fallback'; }
@@ -75,6 +84,7 @@ describe('#256 the redaction perimeter is enumerated, not asserted', () => {
       'ENGINE:redacted',                                                 // the assistant message's error
       'AMICUS:template',                                                 // RETRY_BEYOND_DEADLINE
       'AMICUS:backstop (engine-log excerpt redacted at its own seam)',  // poll-loop firing site
+      'AMICUS:backstop decision failure (no engine text)',                // #269 r1 A1/B1/C2
       'AMICUS:template',                                                 // tool-call stall
       'AMICUS:poll-failure fallback',                                    // F4
       'AMICUS:output-length',                                            // #218 PR 3

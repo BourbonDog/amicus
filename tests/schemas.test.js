@@ -107,6 +107,47 @@ describe('published result-family schemas validate real builder output (v4.0 §7
     expectValid(validate, clean);
   });
 
+  // Council #269 r1 (D4, glm): the flat `properties` block above was WEAKER than the
+  // producer's own predicate — it accepted `extended: true` with no `extendedToMs`,
+  // `extended: false` WITH one, and a `retry-beyond-window` with no schedule. A document
+  // read back off disk or hand-assembled is the only place that gap could bite, and this
+  // schema is that reader's whole contract, so the four `oneOf` arms now mirror
+  // `isBackstopRecord`. The ONE rule they cannot express is the inequality
+  // `extendedToMs > windowMs` (no `$data` in draft 2020-12) — the description says so.
+  test('run.schema.json backstop mirrors isBackstopRecord: the four arms, and every record the producer builds', () => {
+    const validate = compile('run');
+    const { decideBackstopExtension, isBackstopRecord } = require('../src/utils/no-output-backstop');
+    const { probeUnknown } = require('../src/utils/session-status');
+    const doc = buildRunResult({ taskId: 'sch-run-2f', metadata: { model: 'm', status: 'error' } });
+    const withRecord = (backstop) => validate({ ...doc, backstop });
+
+    // The shapes the predicate rejects, which the flat block used to accept.
+    expect(withRecord({ windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true })).toBe(false);
+    expect(withRecord({ windowMs: 480000, firedAtMs: 480722, status: 'idle', extended: false, extendedToMs: 912000 })).toBe(false);
+    expect(withRecord({ windowMs: 480000, firedAtMs: 480722, status: 'retry', extended: false, why: 'retry-beyond-window' })).toBe(false);
+    expect(withRecord({ windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: false, why: 'at-cap', retryNextIso: '2026-09-18T12:34:56.000Z' })).toBe(false);
+    // …and an extended record never carries a `why`, exactly as the predicate says.
+    expect(withRecord({ windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000, why: 'at-cap' })).toBe(false);
+
+    // Every record the PRODUCER builds validates — one per row of spec §3, plus the
+    // `elapsed` rewrite the poll loop performs when `extend()` refuses (#269 r1 C1/D1).
+    const base = { windowMs: 480000, firedAtMs: 480722, legTimeoutMs: 960000, clockStartedAt: 1000000 };
+    const records = [
+      decideBackstopExtension({ ...base, status: { type: 'busy' } }).record,
+      decideBackstopExtension({ ...base, status: { type: 'retry', attempt: 2, message: '429', next: 1911999 } }).record,
+      decideBackstopExtension({ ...base, status: { type: 'retry', attempt: 3, message: '503', next: 1912001 } }).record,
+      decideBackstopExtension({ ...base, windowMs: 912000, firedAtMs: 913904, status: { type: 'busy' } }).record,
+      decideBackstopExtension({ ...base, status: { type: 'idle' } }).record,
+      decideBackstopExtension({ ...base, status: probeUnknown('failed', 'ECONNRESET') }).record,
+      { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: false, why: 'pre-send' },
+      { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: false, why: 'elapsed' },
+    ];
+    for (const record of records) {
+      expect(isBackstopRecord(record)).toBe(true);        // the producer agrees…
+      expectValid(validate, { ...doc, backstop: record }); // …and so does the published schema
+    }
+  });
+
   test('wave.schema.json accepts buildWaveResult output', () => {
     const doc = buildWaveResult({
       waveId: 'sch-wave-1', legs: [runDoc],

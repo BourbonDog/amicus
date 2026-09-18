@@ -46,14 +46,16 @@ function writeLegPatch(legDir, patch) {
  * attempt's per-attempt fields, so a substitute that COMPLETES is not credited with the primary's `backstop`
  * record (a "saved leg" it was not), nor with its `finish`/`ttftMs`/`variant`/`variantUnverified`. Mirrors
  * `src/sidecar/resume.js :: updateSessionStatus`'s reopen deletes; writeLegPatch above drops only `undefined`
- * keys, so nothing else clears them here. Best-effort: an unreadable metadata.json is left alone.
+ * keys, so nothing else clears them here. Best-effort at BOTH ends (council #269 r1, D3): a missing,
+ * unreadable OR unwritable metadata.json is left alone — this runs to tidy the NEXT attempt's document,
+ * and a hygiene write that throws must not sink the substitution that is about to run.
  * @param {string} legDir
  */
 function clearAttemptFields(legDir) {
   const metaPath = path.join(legDir, 'metadata.json'); let meta;
   try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { return; }
   for (const k of ['backstop', 'finish', 'ttftMs', 'variant', 'variantUnverified']) { delete meta[k]; }
-  writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+  try { writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 }); } catch { /* best-effort: the attempt's own patch follows */ }
 }
 
 /**

@@ -12,6 +12,24 @@ jest.mock('../../src/headless', () => ({
   waitForServer: jest.fn(async () => true),
 }));
 
+// Council #269 r1 (D3, glm): `clearAttemptFields` guarded its READ and not its WRITE, so an
+// unwritable metadata.json turned a hygiene step into the death of the substitution about to
+// run. `src/sidecar/fanout-leg.js` destructures `writeFileAtomic` at module load, so a
+// `jest.spyOn` after the require would never be seen — the seam has to be the MODULE, mocked
+// before it. Default: a straight passthrough, inert for every other test in this file.
+let mockAtomicWriteFails = false;
+jest.mock('../../src/utils/atomic-write', () => {
+  const real = jest.requireActual('../../src/utils/atomic-write');
+  return {
+    writeFileAtomic: (...args) => {
+      if (mockAtomicWriteFails && String(args[0]).endsWith('metadata.json')) {
+        throw new Error('EACCES: permission denied, open \'metadata.json\'');
+      }
+      return real.writeFileAtomic(...args);
+    },
+  };
+});
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -274,6 +292,53 @@ describe('runLegWithFallback (spec 6.2)', () => {
     const meta = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8'));
     expect(meta.backstop).toEqual(record);
     expect(meta.finish).toBe('length');
+  });
+
+  // Council #269 r1 (D3, glm): the clear is HYGIENE for the attempt about to run, and its
+  // own docblock already promised best-effort — but only the READ was guarded. An unwritable
+  // metadata.json (a permissions change, a full disk, a Windows lock) therefore threw out of
+  // `runLegWithFallback`'s loop and killed a substitution that had not even started. The
+  // write is now inside its own try; the attempt's own patch follows and rewrites the file.
+  test('an UNWRITABLE metadata.json cannot sink the substitution — clearAttemptFields writes best-effort', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    const legDir = getSessionDir(project, 'w15-1');
+    fs.mkdirSync(legDir, { recursive: true });
+    const record = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+    const deadAttempt = { taskId: 'w15-1', status: 'error', backstop: record, finish: 'length' };
+    fs.writeFileSync(path.join(legDir, 'metadata.json'), JSON.stringify(deadAttempt, null, 2));
+
+    let call = 0;
+    const fakeRunOnce = async ({ model }) => {
+      call += 1;
+      if (call === 1) { return { legId: 'w15-1', status: 'error', model, reason: 'HTTP 429 Too Many Requests' }; }
+      return { legId: 'w15-1', status: 'complete', model, summary: 'ok' };
+    };
+    // With an injected runOnce the ONLY metadata.json write in this flow is the clear's
+    // (writeLegPatch lives in runSingleAttempt, which never runs here), so the veto below
+    // hits exactly the call under test.
+    mockAtomicWriteFails = true;
+    let doc;
+    try {
+      doc = await runLegWithFallback({
+        leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus' }, legId: 'w15-1', waveId: 'w15', project,
+        fallback: { enabled: true, maxSubstitutions: 2, chains: { 'anthropic/claude-opus-5': ['anthropic/claude-haiku-5'] } },
+        catalog: [{ id: 'anthropic/claude-opus-5' }, { id: 'anthropic/claude-haiku-5' }],
+      }, {
+        runOnce: fakeRunOnce,
+        resolveRoute: async (x) => ({ kind: 'resolved', executableId: x.model, gateway: 'direct' }),
+        spendDir: project,
+      });
+    } finally {
+      mockAtomicWriteFails = false;
+    }
+
+    expect(call).toBe(2);                 // the substitute really ran
+    expect(doc.status).toBe('complete');  // …and the leg completed
+    // The file is untouched: a refused write leaves what was there, exactly as an
+    // unreadable one does. The attempt's own patch is what rewrites it in production.
+    const meta = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8'));
+    expect(meta.backstop).toEqual(record);
   });
 
   // This is the ONLY test in this describe that does NOT inject `runOnce`.

@@ -27,8 +27,11 @@ const { collapseExcerpt } = require('./text-sanitize');
 
 const DEFAULT_NO_OUTPUT_BACKSTOP_MS = 300000;
 
-/** The reasons a busy/retry session was NOT extended (spec 2026-09-18 §5.2). */
-const BACKSTOP_WHY = ['at-cap', 'retry-beyond-window', 'pre-send'];
+/** The reasons a busy/retry session was NOT extended (spec 2026-09-18 §5.2).
+ *  #251 item 1 fix round 1 (F3, council C1/D1): `elapsed` is the fourth — the decision
+ *  granted an extension whose deadline had ALREADY passed by the time it was applied
+ *  (a stalled poll), so `extend()` refused it and nothing was granted. */
+const BACKSTOP_WHY = ['at-cap', 'retry-beyond-window', 'pre-send', 'elapsed'];
 
 /** #251 item 1 fix round 1 (F3): the exact key set isBackstopRecord accepts — "and nothing
  *  else" in its docblock, made true rather than merely claimed. */
@@ -41,7 +44,8 @@ function resolveNoOutputBackstopMs(env) {
 
 /**
  * @param {{ms:number, startedAt:number}} opts
- * @returns {{tick:(progressed:boolean, nowMs:number)=>string, extend:(deadlineMs:number)=>boolean,
+ * @returns {{tick:(progressed:boolean, nowMs:number)=>string,
+ *   extend:(deadlineMs:number, nowMs:number)=>boolean,
  *   state:()=>string, deadline:()=>number, extended:()=>boolean}}
  */
 function createNoOutputBackstop({ ms, startedAt }) {
@@ -59,8 +63,15 @@ function createNoOutputBackstop({ ms, startedAt }) {
     // false, nothing changes — while armed or disarmed, after one extension, or
     // for a deadline that is not strictly later. `!(deadlineMs > deadline)` also
     // refuses NaN/undefined, which `<=` would let through.
-    extend(deadlineMs) {
-      if (state !== 'fired' || extended || !(deadlineMs > deadline)) { return false; }
+    // Fix round 1 (F3, council C1/D1): the deadline must also be strictly later than
+    // `nowMs`, the caller's clock — an extension that has already elapsed grants nothing
+    // and must not be recorded as granted. A stalled poll (a long `getMessages`) can put
+    // `Date.now()` past `clockStartedAt + extendedMs` before the tick that fires, and the
+    // re-armed backstop would then fire again on its very next tick while the record and
+    // the death report both claimed a window the leg never got. `!(nowMs < deadlineMs)`
+    // refuses NaN and undefined for the same reason the deadline guard is written that way.
+    extend(deadlineMs, nowMs) {
+      if (state !== 'fired' || extended || !(deadlineMs > deadline) || !(nowMs < deadlineMs)) { return false; }
       deadline = deadlineMs;
       extended = true;
       state = 'armed';
@@ -117,6 +128,18 @@ function isoOrNumber(ms) {
  * The `!isProbeOutcome` conjunct is documentary: `probeUnknown` always publishes
  * `type: 'unknown'`, so no fixture can distinguish it — it states the rule (a
  * probe outcome is never engine evidence) rather than adding a branch.
+ *
+ * Fix round 1 (F2, council B2): a `retry` whose `next` falls EXACTLY on the extended
+ * deadline is beyond the window, not inside it — `next >= extendTo` kills. An attempt
+ * firing at the very instant the backstop fires cannot have produced a persisted part
+ * before the tick, so extending to meet it buys a window with nothing in it.
+ *
+ * Fix round 1 (D2, council glm, answered): `status.next` is an epoch-ms timestamp from
+ * the engine, a LOCAL process on the same machine — the poll loop already compares it
+ * with this process's own clock (`headless.js`, `lastSdkRetryNext > deadline` in the
+ * RETRY_BEYOND_DEADLINE gate) — so it is compared here against a deadline derived from
+ * `Date.now()` without a skew correction, and a non-finite `next` is treated as
+ * unscheduled by the same `Number.isFinite` rule that site uses.
  * @param {{status:*, windowMs:number, firedAtMs:number, legTimeoutMs:number, clockStartedAt:number}} a
  *   status — sessionStatusSafe's answer: an engine SessionStatus or a probeUnknown outcome
  *   windowMs — the window in force at this firing; firedAtMs — elapsed on the backstop's clock
@@ -134,7 +157,7 @@ function decideBackstopExtension({ status, windowMs, firedAtMs, legTimeoutMs, cl
   const extendedMs = Math.floor(extendWindowMs(windowMs, legTimeoutMs));
   if (!(extendedMs > windowMs)) { return { extendTo: null, record: { ...record, why: 'at-cap' } }; }
   const extendTo = clockStartedAt + extendedMs;
-  if (status.type === 'retry' && Number.isFinite(status.next) && status.next > extendTo) {
+  if (status.type === 'retry' && Number.isFinite(status.next) && status.next >= extendTo) {
     return { extendTo: null, record: { ...record, why: 'retry-beyond-window', retryNextIso: isoOrNumber(status.next) } };
   }
   return { extendTo, record: { ...record, extended: true, extendedToMs: Math.floor(extendedMs) } };
@@ -188,6 +211,9 @@ function formatBackstopExtensionClause(record) {
   if (record.why === 'retry-beyond-window') {
     return ` — not extended: the engine schedules its next attempt at ${record.retryNextIso}, past the extended window`;
   }
+  // Fix round 1 (F3, council C1/D1): the extension was decided and then refused because
+  // its deadline had already passed — the leg got nothing, and the report must say so.
+  if (record.why === 'elapsed') { return ' — not extended: the extended window had already passed when the decision ran'; }
   return '';
 }
 

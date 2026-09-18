@@ -53,10 +53,12 @@ describe('createNoOutputBackstop', () => {
 });
 
 describe('#251 item 1 — extend(): a fired backstop re-arms exactly once, at a later deadline', () => {
+  // Fix round 1 (F3): `extend` takes the caller's clock as its second argument, so every
+  // call below names the instant it is made at — 1100 is the firing tick throughout.
   test('E1 fired → extend to a later deadline re-arms; it fires again only at the new deadline', () => {
     const b = createNoOutputBackstop({ ms: 100, startedAt: 1000 });
     expect(b.tick(false, 1100)).toBe('fired');
-    expect(b.extend(1200)).toBe(true);
+    expect(b.extend(1200, 1100)).toBe(true);
     expect(b.state()).toBe('armed');
     expect(b.deadline()).toBe(1200);
     expect(b.extended()).toBe(true);
@@ -65,40 +67,70 @@ describe('#251 item 1 — extend(): a fired backstop re-arms exactly once, at a 
   });
   test('E2 once means once — a second extend after the second firing is refused', () => {
     const b = createNoOutputBackstop({ ms: 100, startedAt: 1000 });
-    b.tick(false, 1100); b.extend(1200); b.tick(false, 1200);
-    expect(b.extend(1400)).toBe(false);
+    b.tick(false, 1100); b.extend(1200, 1100); b.tick(false, 1200);
+    expect(b.extend(1400, 1200)).toBe(false);
     expect(b.state()).toBe('fired');
     expect(b.deadline()).toBe(1200);
   });
   test('E3 extend is refused while armed, while disarmed, and for a deadline that is not later', () => {
     const armed = createNoOutputBackstop({ ms: 100, startedAt: 1000 });
-    expect(armed.extend(1500)).toBe(false);
+    expect(armed.extend(1500, 1050)).toBe(false);
     expect(armed.state()).toBe('armed');
     const disarmed = createNoOutputBackstop({ ms: 100, startedAt: 1000 });
     disarmed.tick(true, 1050);
-    expect(disarmed.extend(1500)).toBe(false);
+    expect(disarmed.extend(1500, 1050)).toBe(false);
     expect(disarmed.state()).toBe('disarmed');
     const fired = createNoOutputBackstop({ ms: 100, startedAt: 1000 });
     fired.tick(false, 1100);
-    expect(fired.extend(1100)).toBe(false); // equal, not later
-    expect(fired.extend(1099)).toBe(false);
+    expect(fired.extend(1100, 1000)).toBe(false); // equal, not later
+    expect(fired.extend(1099, 1000)).toBe(false);
     expect(fired.state()).toBe('fired');
     expect(fired.extended()).toBe(false);
-    expect(fired.extend(NaN)).toBe(false);
-    expect(fired.extend(undefined)).toBe(false);
+    expect(fired.extend(NaN, 1100)).toBe(false);
+    expect(fired.extend(undefined, 1100)).toBe(false);
     expect(fired.deadline()).toBe(1100);
     expect(fired.state()).toBe('fired');
   });
   test('E4 progress after an extension still disarms it permanently', () => {
     const b = createNoOutputBackstop({ ms: 100, startedAt: 1000 });
-    b.tick(false, 1100); b.extend(1200);
+    b.tick(false, 1100); b.extend(1200, 1100);
     expect(b.tick(true, 1150)).toBe('disarmed');
     expect(b.tick(false, 5000)).toBe('disarmed');
   });
   test('E5 a never-armed backstop (ms <= 0) cannot be extended', () => {
     const b = createNoOutputBackstop({ ms: 0, startedAt: 1000 });
     expect(b.tick(false, 99999)).toBe('disarmed');
-    expect(b.extend(200000)).toBe(false);
+    expect(b.extend(200000, 99999)).toBe(false);
+  });
+  // Council #269 r1 (C1, deepseek): an extension whose deadline has ALREADY passed grants
+  // nothing. A stalled poll (a long `getMessages`) can put the caller's `Date.now()` past
+  // `clockStartedAt + extendedMs` before the tick that fires, and the re-armed backstop
+  // would then fire again on its very next tick while the record claimed a second window.
+  test('E6 an extension that has already elapsed on the caller\'s clock is refused', () => {
+    const past = createNoOutputBackstop({ ms: 100, startedAt: 1000 });
+    past.tick(false, 1100);
+    expect(past.extend(1200, 1250)).toBe(false);   // the new deadline is already behind now
+    expect(past.state()).toBe('fired');            // still fired: nothing was granted
+    expect(past.deadline()).toBe(1100);            // and the deadline did not move
+    expect(past.extended()).toBe(false);
+    // Equality is refusal too — a deadline reached at this very instant buys no window.
+    const exact = createNoOutputBackstop({ ms: 100, startedAt: 1000 });
+    exact.tick(false, 1100);
+    expect(exact.extend(1200, 1200)).toBe(false);
+    expect(exact.deadline()).toBe(1100);
+    // The live case: the decision ran before the deadline, so the extension is granted.
+    const live = createNoOutputBackstop({ ms: 100, startedAt: 1000 });
+    live.tick(false, 1100);
+    expect(live.extend(1200, 1199)).toBe(true);
+    expect(live.deadline()).toBe(1200);
+    // `!(nowMs < deadlineMs)` refuses a clock that is not a number at all, which `>=` would
+    // have let through — the same discipline the deadline guard beside it is written with.
+    const nan = createNoOutputBackstop({ ms: 100, startedAt: 1000 });
+    nan.tick(false, 1100);
+    expect(nan.extend(1200, NaN)).toBe(false);
+    expect(nan.extend(1200, undefined)).toBe(false);
+    expect(nan.state()).toBe('fired');
+    expect(nan.deadline()).toBe(1100);
   });
 });
 
@@ -128,7 +160,10 @@ describe('#251 item 1 — decideBackstopExtension: the spec §3 table, row by ro
     const noNext = decideBackstopExtension({ ...base, status: { type: 'retry', attempt: 2, message: '429' } });
     expect(noNext.extendTo).toBe(1912000);
     expect(noNext.record.status).toBe('retry');
-    const inside = decideBackstopExtension({ ...base, status: { type: 'retry', attempt: 2, message: '429', next: 1912000 } });
+    // Fix round 1 (F2, council B2): strictly INSIDE. 1912000 is the extended deadline
+    // itself and is now a kill (D3's equality case) — the last instant that extends is
+    // the millisecond before it.
+    const inside = decideBackstopExtension({ ...base, status: { type: 'retry', attempt: 2, message: '429', next: 1911999 } });
     expect(inside.extendTo).toBe(1912000);
   });
   test('D3 retry whose `next` lies past the extended window → kill now, why retry-beyond-window, ISO recorded', () => {
@@ -139,6 +174,16 @@ describe('#251 item 1 — decideBackstopExtension: the spec §3 table, row by ro
       why: 'retry-beyond-window', retryNextIso: new Date(1912001).toISOString(),
     });
     expect(isBackstopRecord(d.record)).toBe(true);
+    // Fix round 1 (F2, council B2 — the off-by-one): an attempt scheduled EXACTLY at the
+    // extended deadline is beyond the window, not inside it. It cannot have produced a
+    // persisted part before the tick that fires at that same instant, so the extension
+    // would buy a window with nothing in it.
+    const atDeadline = decideBackstopExtension({ ...base, status: { type: 'retry', attempt: 3, message: '503', next: 1912000 } });
+    expect(atDeadline.extendTo).toBeNull();
+    expect(atDeadline.record).toEqual({
+      windowMs: 480000, firedAtMs: 480722, status: 'retry', extended: false,
+      why: 'retry-beyond-window', retryNextIso: new Date(1912000).toISOString(),
+    });
   });
   test('D4 busy but the window is already at the clamp → kill now, why at-cap (the CI retry leg)', () => {
     const d = decideBackstopExtension({ ...base, windowMs: 912000, firedAtMs: 913904, status: { type: 'busy' } });
@@ -266,13 +311,17 @@ describe('#251 item 1 — isBackstopRecord and the clause', () => {
     expect(isBackstopRecord({ windowMs: 1, firedAtMs: 2, status: 'busy\nINJECTED', extended: false })).toBe(false);
     expect(isBackstopRecord({ windowMs: 1, firedAtMs: 2, status: 'x'.repeat(41), extended: false })).toBe(false);
   });
-  test('C1 the four clause strings, byte-exact (spec §5.1)', () => {
+  test('C1 the five clause strings, byte-exact (spec §5.1)', () => {
     expect(formatBackstopExtensionClause({ windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 }))
       .toBe(' — window extended once from 480s to 912s at 481s on session busy');
     expect(formatBackstopExtensionClause({ windowMs: 912000, firedAtMs: 913904, status: 'busy', extended: false, why: 'at-cap' }))
       .toBe(' — not extended: the window is already at the leg cap');
     expect(formatBackstopExtensionClause({ windowMs: 480000, firedAtMs: 480722, status: 'retry', extended: false, why: 'retry-beyond-window', retryNextIso: '2026-09-18T12:34:56.000Z' }))
       .toBe(' — not extended: the engine schedules its next attempt at 2026-09-18T12:34:56.000Z, past the extended window');
+    // Council #269 r1 (C1/D1): the extension was decided and then REFUSED because its
+    // deadline had already passed. The leg got nothing, and the report says so.
+    expect(formatBackstopExtensionClause({ windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: false, why: 'elapsed' }))
+      .toBe(' — not extended: the extended window had already passed when the decision ran');
     expect(formatBackstopExtensionClause({ windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: false, why: 'pre-send' })).toBe('');
   });
   test('C2 nothing to say renders nothing: idle, unknown, a non-record, undefined', () => {

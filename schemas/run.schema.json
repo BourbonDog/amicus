@@ -44,18 +44,53 @@
     },
     "backstop": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["windowMs", "firedAtMs", "status", "extended"],
-      "properties": {
-        "windowMs": { "type": "integer", "minimum": 0 },
-        "firedAtMs": { "type": "integer", "minimum": 0 },
-        "status": { "type": "string", "minLength": 1, "maxLength": 40 },
-        "extended": { "type": "boolean" },
-        "extendedToMs": { "type": "integer", "minimum": 1 },
-        "why": { "type": "string", "enum": ["at-cap", "retry-beyond-window", "pre-send"] },
-        "retryNextIso": { "type": "string", "minLength": 1 }
-      },
-      "description": "#251 item 1, optional, EMIT-WHEN-SET. The no-output backstop's decision record for this leg: the window in force at its FIRST firing, the elapsed time at that firing, the engine session status it read (a type identifier; 'unknown' for a probe that could not answer), whether the window was extended once (then `extendedToMs`), or — for a busy/retry session that was NOT extended — why (`at-cap`: the window was already at the leg-cap clamp; `retry-beyond-window`: the engine's next attempt lay past the extended window, its schedule in `retryNextIso`; `pre-send`: the engine never returned from the prompt send). Absent means the backstop never fired for this leg. Present on a COMPLETED leg with `extended: true` means the extension saved it. Written by `src/utils/no-output-backstop.js :: decideBackstopExtension`, validated at every writer by `isBackstopRecord`."
+      "oneOf": [
+        {
+          "required": ["windowMs", "firedAtMs", "status", "extended", "extendedToMs"],
+          "additionalProperties": false,
+          "properties": {
+            "windowMs": { "type": "integer", "minimum": 0 },
+            "firedAtMs": { "type": "integer", "minimum": 0 },
+            "status": { "type": "string", "minLength": 1, "maxLength": 40 },
+            "extended": { "const": true },
+            "extendedToMs": { "type": "integer", "minimum": 1 }
+          }
+        },
+        {
+          "required": ["windowMs", "firedAtMs", "status", "extended"],
+          "additionalProperties": false,
+          "properties": {
+            "windowMs": { "type": "integer", "minimum": 0 },
+            "firedAtMs": { "type": "integer", "minimum": 0 },
+            "status": { "type": "string", "minLength": 1, "maxLength": 40 },
+            "extended": { "const": false }
+          }
+        },
+        {
+          "required": ["windowMs", "firedAtMs", "status", "extended", "why"],
+          "additionalProperties": false,
+          "properties": {
+            "windowMs": { "type": "integer", "minimum": 0 },
+            "firedAtMs": { "type": "integer", "minimum": 0 },
+            "status": { "type": "string", "minLength": 1, "maxLength": 40 },
+            "extended": { "const": false },
+            "why": { "type": "string", "enum": ["at-cap", "pre-send", "elapsed"] }
+          }
+        },
+        {
+          "required": ["windowMs", "firedAtMs", "status", "extended", "why", "retryNextIso"],
+          "additionalProperties": false,
+          "properties": {
+            "windowMs": { "type": "integer", "minimum": 0 },
+            "firedAtMs": { "type": "integer", "minimum": 0 },
+            "status": { "type": "string", "minLength": 1, "maxLength": 40 },
+            "extended": { "const": false },
+            "why": { "const": "retry-beyond-window" },
+            "retryNextIso": { "type": "string", "minLength": 1 }
+          }
+        }
+      ],
+      "description": "#251 item 1, optional, EMIT-WHEN-SET. The no-output backstop's decision record for this leg: the window in force at its FIRST firing, the elapsed time at that firing, the engine session status it read (a type identifier; 'unknown' for a probe that could not answer), whether the window was extended once (then `extendedToMs`), or — for a busy/retry session that was NOT extended — why (`at-cap`: the window was already at the leg-cap clamp; `retry-beyond-window`: the engine's next attempt lay past the extended window, its schedule in `retryNextIso`; `pre-send`: the engine never returned from the prompt send; `elapsed`: the extended deadline had already passed when the decision ran, so the extension was refused and nothing was granted). Absent means the backstop never fired for this leg. Present on a COMPLETED leg with `extended: true` means the extension saved it. Written by `src/utils/no-output-backstop.js :: decideBackstopExtension`, validated at every writer by `isBackstopRecord`. Council #269 r1 (D4): the four `oneOf` arms MIRROR that predicate — extended carries `extendedToMs` and never a `why`; a not-extended record carries at most one `why`, and `retryNextIso` only with `retry-beyond-window`. One inequality the predicate enforces is NOT expressible in JSON Schema without `$data`: the producer enforces `extendedToMs > windowMs`; the schema cannot."
     }
   }
 }

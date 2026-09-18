@@ -1434,28 +1434,58 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // not evidence of life (idle, a probe that could not answer, an arm we do not know),
         // kills as before; the post-loop block below mirrors the timeout path.
         if (noOutputBackstop.tick(substantiveActivity, Date.now()) === 'fired') {
-          const firedAtMs = Date.now() - outputClockStartedAt;
-          let decisionStatus = null;
-          let extendedNow = false;
-          if (!backstopRecord) {
-            decisionStatus = await sessionStatusSafe(getSessionStatus, client, sessionId, dirArgs, statusProbeMs);
-            const decision = decideBackstopExtension({
-              status: decisionStatus, windowMs: noOutputBackstopMs, firedAtMs,
-              legTimeoutMs: timeoutMs, clockStartedAt: outputClockStartedAt,
-            });
-            backstopRecord = decision.record;
-            extendedNow = decision.extendTo !== null && noOutputBackstop.extend(decision.extendTo);
-            if (extendedNow) {
-              logger.warn('No-output backstop extended once on session status', {
-                taskId, sessionId, status: backstopRecord.status, fromMs: noOutputBackstopMs,
-                toMs: backstopRecord.extendedToMs, atMs: firedAtMs,
+          try {
+            const firedAtMs = Date.now() - outputClockStartedAt;
+            let decisionStatus = null;
+            let extendedNow = false;
+            if (!backstopRecord) {
+              decisionStatus = await sessionStatusSafe(getSessionStatus, client, sessionId, dirArgs, statusProbeMs);
+              const decision = decideBackstopExtension({
+                status: decisionStatus, windowMs: noOutputBackstopMs, firedAtMs,
+                legTimeoutMs: timeoutMs, clockStartedAt: outputClockStartedAt,
               });
+              backstopRecord = decision.record;
+              // Council #269 r1 (C1 + D1): the extension is applied against the caller's
+              // clock, and `extend()` refuses a deadline that has ALREADY passed — a stalled
+              // poll can put `Date.now()` past `clockStartedAt + extendedMs` before this tick
+              // fires. A refused extension granted nothing, so the record is REWRITTEN to say
+              // so (`why: 'elapsed'`, no `extendedToMs`) instead of publishing `extended: true`
+              // for a window the leg never got. Pinned by the unit E6 and by
+              // tests/headless-backstop-extend-refused.test.js.
+              const nowMs = Date.now();
+              extendedNow = decision.extendTo !== null && noOutputBackstop.extend(decision.extendTo, nowMs);
+              if (decision.extendTo !== null && !extendedNow) {
+                backstopRecord = {
+                  windowMs: decision.record.windowMs, firedAtMs: decision.record.firedAtMs,
+                  status: decision.record.status, extended: false, why: 'elapsed',
+                };
+              }
+              if (extendedNow) {
+                logger.warn('No-output backstop extended once on session status', {
+                  taskId, sessionId, status: backstopRecord.status, fromMs: noOutputBackstopMs,
+                  toMs: backstopRecord.extendedToMs, atMs: firedAtMs,
+                });
+              }
             }
-          }
-          if (!extendedNow) {
+            if (!extendedNow) {
+              backstopFired = true;
+              sessionError = await noOutputBackstopReason({ sessionStatus: decisionStatus, extension: backstopRecord });
+              logger.warn('No-output backstop fired', { taskId, backstopMs: noOutputBackstop.deadline() - outputClockStartedAt });
+              break;
+            }
+          } catch (decisionErr) {
+            // Council #269 r1 (A1/B1/C2, three seats): a failure while deciding or applying the
+            // extension must end the leg under its own name, not be swallowed by the poll body's
+            // catch (pollError) below and retried until --timeout as a generic 'timeout'. Nothing
+            // here is expected to throw (the probe cannot; the decision is pure) — this is the
+            // guarantee, pinned by tests/headless-backstop-decision-throws.test.js.
             backstopFired = true;
-            sessionError = await noOutputBackstopReason({ sessionStatus: decisionStatus, extension: backstopRecord });
-            logger.warn('No-output backstop fired', { taskId, backstopMs: noOutputBackstop.deadline() - outputClockStartedAt });
+            backstopRecord = backstopRecord || { windowMs: Math.floor(noOutputBackstopMs), firedAtMs: Math.floor(Date.now() - outputClockStartedAt), status: 'unknown', extended: false };
+            sessionError = formatNoOutputBackstopReason({
+              ms: noOutputBackstopMs, fromEnv: backstopFromEnv,
+              sessionStatus: probeUnknown('failed', `backstop decision failed: ${decisionErr && decisionErr.message}`),
+            });
+            logger.error('No-output backstop decision threw; killing the leg under its own name', { taskId, error: decisionErr && decisionErr.message });
             break;
           }
         }

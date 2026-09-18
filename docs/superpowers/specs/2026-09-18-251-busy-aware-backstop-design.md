@@ -75,9 +75,9 @@ At the tick where the backstop reports `fired`, before anything is killed:
 
 | status at the fired tick | room to extend? | action |
 |---|---|---|
-| `busy` (engine) | yes | **extend once**: `noOutputBackstop.extend(extendedDeadline)`, record, keep polling |
-| `retry` (engine), `next` not finite or `next <= extendedDeadline` | yes | **extend once**, same as busy |
-| `retry` (engine), `next > extendedDeadline` | — | kill now; record `why: 'retry-beyond-window'` |
+| `busy` (engine) | yes | **extend once**: `noOutputBackstop.extend(extendedDeadline, now)`, record, keep polling |
+| `retry` (engine), `next` not finite or `next < extendedDeadline` | yes | **extend once**, same as busy |
+| `retry` (engine), `next >= extendedDeadline` | — | kill now; record `why: 'retry-beyond-window'` |
 | `busy` / `retry` (engine) | no — `extendedMs <= noOutputBackstopMs` (window already at the clamp) | kill now; record `why: 'at-cap'` |
 | `busy` / `retry` (engine) | no — already extended once | kill now; the record already says `extended: true` |
 | `idle` (engine) | — | kill now (unchanged) |
@@ -86,6 +86,27 @@ At the tick where the backstop reports `fired`, before anything is killed:
 
 "Room to extend" is exactly `!extendedOnce && extendedMs > noOutputBackstopMs`. The `extend` call is
 the ONLY way a `fired` backstop re-arms; progress still disarms it permanently; a second `fired` kills.
+
+Two boundaries, both ruled by council #269 round 1:
+
+- **A `retry` scheduled EXACTLY at the extended deadline is beyond the window** (B2): `next >=
+  extendedDeadline` kills. An attempt firing at the very instant the backstop fires cannot have
+  produced a persisted part before the tick, so extending to meet it buys a window with nothing in it.
+- **An extension whose deadline has already passed is refused, and recorded as refused** (C1 + D1):
+  `extend(deadlineMs, nowMs)` takes the caller's clock and grants nothing unless `nowMs < deadlineMs`
+  as well as `deadlineMs > deadline`. A stalled poll — a long `getMessages` — can put `Date.now()`
+  past `clockStartedAt + extendedMs` before the tick fires. When `extendTo` was offered and `extend`
+  refused, the poll loop REWRITES the record to `{windowMs, firedAtMs, status, extended: false,
+  why: 'elapsed'}` (no `extendedToMs`) and kills — the leg never got the window, so nothing may claim
+  it did.
+
+**A throw inside the decision block is a KILL, never a retry** (A1 + B1 + C2). The block sits inside
+the poll body's `try … catch (pollError)`, whose counter resets at the top of every poll, so a throw
+there was swallowed and retried until `--timeout` and the leg died a generic `timeout` with the
+`NO_OUTPUT_BACKSTOP:` diagnosis lost. The block therefore owns an inner `try … catch (decisionErr)`
+that sets `backstopFired`, names the failure in the session clause (`probeUnknown('failed', 'backstop
+decision failed: …')`), records `{…, status: 'unknown', extended: false}` and breaks. Nothing on the
+path is expected to throw — this is the structural guarantee, not a repair.
 
 4. On **extend**: `logger.warn('No-output backstop extended once on session status', { taskId,
    sessionId, status: type, fromMs: noOutputBackstopMs, toMs: extendedMs, atMs })` and the record (§5.2)
@@ -173,7 +194,9 @@ backstop: {
   extended: true,        // whether the window was extended
   extendedToMs: 912000,  // only when extended
   why: 'at-cap',         // only when NOT extended for a reason other than the status:
-                         // 'at-cap' | 'retry-beyond-window' | 'pre-send'
+                         // 'at-cap' | 'retry-beyond-window' | 'pre-send' | 'elapsed'
+                         // ('elapsed': the extended deadline had already passed when the
+                         //  decision ran, so extend() refused it — council #269 r1 C1/D1)
   retryNextIso: '2026-09-18T12:34:56.000Z', // only with why 'retry-beyond-window': the engine's `next`
 }
 ```
