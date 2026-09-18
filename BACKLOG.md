@@ -9105,3 +9105,8 @@ Deferred — one line each, none blocks anything:
   `tests/scripts/generate-docs-check.test.js` on the stale map until `node scripts/generate-docs.js`
   is run by hand first — it bit Tasks 1 and 3. Document the order in CONTRIBUTING, or have that test
   regenerate before it compares. (#251 item 1, Task 3)
+- [ ] Mid-extension re-check: after an extension the status is not read again until the second
+  firing, so a session that goes idle at 600 s burns to 912 s. Measure first — the second firing's
+  session clause records exactly this case (`window extended once … (session: idle)`); if the corpus
+  shows it, re-read status every ~60 s during an extension and kill early on idle (never on unknown).
+  (#251 item 1, council #269 r2 D2)

@@ -13,14 +13,18 @@ All notable changes to Amicus are documented here. Format follows
   doubled and clamped strictly below the leg `--timeout`, the Stage-1 retry's own formula, so the
   named diagnosis survives — and `idle`, an unrecognised arm or a probe that could not answer kills
   as before. The death report says which: `… (session: busy) — window extended once from 480s to
-  912s at 481s on session busy`, or `— not extended: the window is already at the leg cap` (the CI
-  retry leg, already at 912 s), or `— not extended: the engine schedules its next attempt at …, past
+  912s at 481s on session busy`, or `— not extended: the window is already at its clamp below the leg
+  cap` (the CI retry leg, already at 912 s), or `— not extended: the engine schedules its next attempt at …, past
   the extended window`, or `— not extended: the extended window had already passed when the decision
   ran`; a kill that was never a candidate is byte-identical to 4.12.0's. After an extension the head
   of the report names both numbers — the window it actually waited out and the one it started from:
   `NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 912s — the AMICUS_NO_OUTPUT_BACKSTOP_MS
   window (0 disables) of 480s, extended once`, so the doubled figure is never read as the value of
-  that variable. Every leg
+  that variable. Where the two window figures round to the same second — which the clamp itself can
+  produce — both are printed in milliseconds instead (`from 2800ms to 2850ms`), so an extension is
+  never reported as `from 3s to 3s`; the production pair is unaffected. The status read the decision
+  runs is bounded by the leg time remaining as well as by its own five seconds, so a slow engine can
+  no longer push the kill past the leg `--timeout`. Every leg
   the backstop fired for carries a `backstop` record on its document — the FINAL attempt's, since a
   fallback substitute re-running in the same leg dir starts clean — (`windowMs`, `firedAtMs`,
   `status`, `extended`, and `extendedToMs` or `why` — with `retryNextIso` when the engine's next
