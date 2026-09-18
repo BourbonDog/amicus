@@ -210,12 +210,15 @@ jobs:
       # SILENT NO-OP — an engine bump that stops walking up from the session
       # directory, or stops forwarding `options.provider` — would be
       # indistinguishable from a working experiment. The standing check is
-      # tests/probe-provider-routing-canary.integration.test.js, which runs the
-      # two #265 cases whose geometry is this one's (R12, the Stage-1 seat shape;
-      # R14, the judge `_scratch` shape) against a local capture server, keyless
-      # and $0, on every push. It uses its own fixed document and is unaffected
-      # by whatever this value holds. If that canary goes red, a pin set here is
-      # measuring nothing.
+      # tests/probe-provider-routing-canary.integration.test.js, which runs three
+      # probe rows against a local capture server, keyless and $0, on every push:
+      # the two #265 cases whose geometry is this one's (R12, the Stage-1 seat
+      # shape; R14, the judge `_scratch` shape) and R15, which carries the
+      # SHIPPED SHAPE — a single-slug `only` on a real CI model id, i.e. the
+      # example above — because the first two carry the probe's own `order`
+      # preference and left `only` handling unverified (council #266 r3, A1/D4).
+      # The canary uses its own fixed documents and is unaffected by whatever
+      # this value holds. If it goes red, a pin set here is measuring nothing.
       #
       # THE INVARIANT ("PR code is never executed"). A file here lands inside the
       # surface the launch-time agent tripwire polices (verifyAgentRendering /
@@ -1249,10 +1252,11 @@ jobs:
           # serving upstream. That the file REACHES the model's calls is a
           # property of the engine, pinned by
           # tests/probe-provider-routing-canary.integration.test.js (probe rows
-          # R12/R14, keyless, on every push), not observed here. Saying otherwise
+          # R12/R14 for the geometry and R15 for the shipped single-slug `only`
+          # shape, keyless, on every push), not observed here. Saying otherwise
           # would let an engine bump that stopped honouring the file read exactly
           # like a working experiment.
-          echo "::notice::#202 Lever 2 — OpenRouter provider routing REQUESTED for ${PINNED}: ${ROUTING}. This document is ${ATTRIB}. ${VERIFIED} Written to ${RUN_DIR}/opencode.json and shipped in the council-run evidence artifact. That this file reaches the model's request body is pinned by tests/probe-provider-routing-canary.integration.test.js (probe rows R12/R14), not observed in this run — nothing here records the routing block or the serving upstream. Read this run's leg errors for an OpenRouter 4xx before reading its stalls."
+          echo "::notice::#202 Lever 2 — OpenRouter provider routing REQUESTED for ${PINNED}: ${ROUTING}. This document is ${ATTRIB}. ${VERIFIED} Written to ${RUN_DIR}/opencode.json and shipped in the council-run evidence artifact. That this file reaches the model's request body is pinned by tests/probe-provider-routing-canary.integration.test.js (probe rows R12/R14 for the geometry, R15 for this document’s single-slug only shape), not observed in this run — nothing here records the routing block or the serving upstream. Read this run's leg errors for an OpenRouter 4xx before reading its stalls."
 
       - name: Run the adjudicated council (amicus council run, headless)
         if: steps.gate.outputs.available == 'true'

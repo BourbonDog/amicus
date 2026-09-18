@@ -826,7 +826,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
    * a run records nothing about which one served a leg. PR #265 measured on the
    * pinned engine (keyless) that a per-model `options.provider` block reaches
    * the OpenRouter request body verbatim, and that an `opencode.json` placed in
-   * the per-call directory is live (cases R12/R14 — the engine walks up from
+   * the per-call directory is live (cases R12/R14/R15 — the engine walks up from
    * the session directory). `only: ["<one-slug>"]` is the only SELF-ATTRIBUTING
    * form, because nothing in the run names the serving upstream: if exactly one
    * upstream can serve the leg, the leg's outcome is that upstream's.
@@ -1302,6 +1302,16 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // notice nor the env comment may imply a run observed its own routing.
       expect(y).toContain('probe-provider-routing-canary');
       expect(routingStep()).toContain('pinned by');
+      // And it must name EVERY row the canary runs (re-review N10). The env
+      // comment and the notice both cited R12/R14 after R15 landed, so the one
+      // row that covers the shipped `only` shape went uncredited in the two
+      // places a reader looks to find out what is actually verified.
+      const canaryRows = /const ROWS = '([^']+)'/.exec(
+        fs.readFileSync(path.join(__dirname, '..', 'probe-provider-routing-canary.integration.test.js'), 'utf-8'))[1];
+      for (const row of canaryRows.split(',')) {
+        expect(`the env comment names ${row}: ${y.includes(row)}`).toBe(`the env comment names ${row}: true`);
+        expect(`the notice names ${row}: ${routingRunCommand().includes(row)}`).toBe(`the notice names ${row}: true`);
+      }
       // The canary itself must exist and name the two geometry cases.
       const canary = fs.readFileSync(path.join(__dirname, '..', 'probe-provider-routing-canary.integration.test.js'), 'utf-8');
       expect(canary).toContain("'R12,R14,R15'");
