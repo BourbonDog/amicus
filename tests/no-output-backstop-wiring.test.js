@@ -1543,7 +1543,19 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
   }, 30000);
 
   test('W6 once means once: busy at both deadlines dies at the extended deadline, never a third window', async () => {
-    // Named mutant "TWICE": in no-output-backstop.js extend(), drop `|| extended` — W6 dies at the 60 s cap instead.
+    // ⚠️ MEASURED 2026-09-18 (#251 item 1): the named mutant "TWICE" — in
+    // no-output-backstop.js extend(), drop `|| extended` — does NOT redden W6. This file
+    // stays 68/68 under it. It is caught by tests/no-output-backstop.test.js :: E2, which
+    // owns extend()'s once-only guard, and that is the right place for a helper's mutant.
+    // A second extension is unreachable THREE ways over here: the poll loop decides only
+    // when `!backstopRecord`; extend() refuses once `extended`; and a re-decision derives
+    // its deadline from the ORIGINAL window, so the new deadline is never strictly later.
+    // Dropping the first two TOGETHER (`|| extended` plus `if (!backstopRecord)`) reddens
+    // W1 and W5a — the record is re-decided at the second firing and reports "at 2s"
+    // instead of "at 1s" — and still not W6, because the third mechanism holds alone.
+    // So W6 pins the OBSERVABLE the three produce (the leg dies at the extended deadline,
+    // never a third window) and is green by construction; W1 is the pin that owns the
+    // decide-once gate.
     mockGetMessages.mockResolvedValue([]);
     mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
     const started = Date.now();
@@ -1567,9 +1579,14 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
   }, 20000);
 
   test('W8 the pre-send site never extends: a prompt send that never resolves dies at the window with the byte-identical string, record why pre-send', async () => {
-    // Preservation pin. Named mutant "PRESENDEXTENDS": route the pre-send catch through decideBackstopExtension and
-    // extend() — the leg would then wait 2 s. (The pre-send path has no backstop object to extend; the mutant is the
-    // temptation to add one.)
+    // Preservation pin. Named mutant "PRESENDEXTENDS" (MEASURED 2026-09-18: RED on W8 and on
+    // S-W6, 2 failed / 68): in headless.js's pre-send catch, delete the two lines that
+    // neutralise the decision — `backstopRecord = { ...backstopRecord, extended: false, why:
+    // 'pre-send' };` and the `delete` beside it — so the site publishes the decision's own
+    // record. The report then claims a 2 s window and an extension that never happened, which
+    // is exactly the byte-identity this pin holds. (The catch calls decideBackstopExtension
+    // for the RECORD only; the temptation the mutant models is letting that decision govern
+    // this site, which never observed a provider stream at all.)
     mockSendPromptAsync.mockImplementation(() => new Promise(() => {}));
     mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
     const started = Date.now();
