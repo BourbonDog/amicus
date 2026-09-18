@@ -28,6 +28,14 @@ const { currentEngineSkew, formatSkewSuffix } = require('./utils/engine-skew');
 // #202: the session-status clause on a death report (see utils/session-status.js).
 const { formatSessionStatusSuffix, probeUnknown, isRenderableStatus } =
   require('./utils/session-status');
+// #251 item 1: the busy-aware backstop — the decision table (spec 2026-09-18 §3),
+// the record predicate every writer of a leg document gates on, and the death
+// report's fourth clause. Required at MODULE scope, unlike the state machine's own
+// `createNoOutputBackstop` below, because two consumers live outside runHeadless's
+// try block: `formatNoOutputBackstopReason` (module scope) and the outer catch's
+// return, which cannot see a `const` declared in the try body.
+const { decideBackstopExtension, isBackstopRecord, formatBackstopExtensionClause } =
+  require('./utils/no-output-backstop');
 // v4.9 W13 Task A (PR #207 round 3, B3): the one honesty predicate every ttftMs
 // emit gate shares — see src/utils/ttft.js for why `typeof` was not it.
 const { isMeasuredTtft } = require('./utils/ttft');
@@ -265,11 +273,15 @@ function withTimeout(promise, ms, label) {
  * `noOutputBackstopReason` closure inside runHeadless just forwards to this
  * with the per-run `noOutputBackstopMs`/`backstopFromEnv`/engine-log/skew
  * values, so the two firing sites there stay identical to what's tested here.
+ * #251 item 1 adds a FOURTH clause on the same terms, after the session clause:
+ * `formatBackstopExtensionClause(extension)`, '' whenever the record has nothing
+ * to say.
  * @param {{ms: number, fromEnv: boolean, engineLogExcerpt?: string|null,
- *          engineSkew?: {server: string, installed: string}|null}} args
+ *          engineSkew?: {server: string, installed: string}|null,
+ *          sessionStatus?: object|null, extension?: object|null}} args
  * @returns {string}
  */
-function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSkew, sessionStatus }) {
+function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSkew, sessionStatus, extension }) {
   const observed = 'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in '
     + `${Math.round(ms / 1000)}s — `
     + (fromEnv
@@ -286,7 +298,13 @@ function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSke
   // failure instead of returning null — so a real backstop death always carries
   // this clause. That is the point: a missing clause used to mean four different
   // things and was reported as one.
-  return `${quoted}${formatSkewSuffix(engineSkew)}${formatSessionStatusSuffix(sessionStatus)}`;
+  //
+  // #251 item 1 adds the FOURTH clause, LAST, on the same append-only terms: a
+  // record that says nothing (idle, unknown, the pre-send site, or not a record
+  // at all) renders '', so every string the three clauses above could build
+  // stays byte-identical to the one 4.12.0 built.
+  return `${quoted}${formatSkewSuffix(engineSkew)}${formatSessionStatusSuffix(sessionStatus)}`
+    + `${formatBackstopExtensionClause(extension)}`;
 }
 
 /**
@@ -608,6 +626,14 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
   // wire it into a decision without that evidence — and read the RESIDUAL
   // CENSORING note on the stamp site in the poll loop before you do.
   let ttftMs = null;
+  // #251 item 1: the backstop's decision record (spec 2026-09-18 §5.2), written
+  // exactly once per leg at whichever firing site fires first and read by all
+  // three returns. Declared HERE, beside `ttftMs` and for the same reason (PR
+  // #203 round 1, A2): the outer catch is a return path like any other, and a leg
+  // whose backstop fired and which then threw must still report what was decided.
+  // One declaration only — a second one inside the try would shadow this and the
+  // catch would read `null` forever.
+  let backstopRecord = null;
 
   try {
     if (!externalServer) {
@@ -830,19 +856,27 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // lookup and does no I/O, so unlike the log read it needs no guard.
     //
     // #202 (piece 4): the closure is now ASYNC, because the third clause costs
-    // one bounded HTTP call. The engine's session status is asked for at
-    // headless.js:1295 only when `mirror.output.length > 0` — a gate a
-    // zero-output leg never satisfies — so the leg that most needs diagnosing
-    // was the only one that never asked, and every silent death reported a
-    // window with no cause.
-    // Asked for HERE instead, at the two firing sites and nowhere else, so a
-    // living leg still makes no extra call. The read is best-effort and
-    // bounded: `sessionStatusSafe` can neither throw nor hang (S-W4/S-W5).
-    const noOutputBackstopReason = async () => formatNoOutputBackstopReason({
-      ms: noOutputBackstopMs, fromEnv: backstopFromEnv,
+    // one bounded HTTP call. The engine's session status is asked for by the poll
+    // loop's own `getSessionStatus` probe below only when `mirror.output.length >
+    // 0` — a gate a zero-output leg never satisfies — so the leg that most needs
+    // diagnosing was the only one that never asked, and every silent death
+    // reported a window with no cause.
+    // Asked for HERE instead, at the two firing sites and, since #251 item 1,
+    // once more at the poll-loop site for the extension DECISION; a living leg
+    // still makes no extra call. The read is best-effort and bounded:
+    // `sessionStatusSafe` can neither throw nor hang (S-W4/S-W5).
+    const noOutputBackstopReason = async ({ sessionStatus, extension } = {}) => formatNoOutputBackstopReason({
+      // #251 item 1: the window in force at the kill — after an extension that is the
+      // extended window, because "no output in 480s" would be false for a leg silent for 912.
+      ms: (extension && extension.extended) ? extension.extendedToMs : noOutputBackstopMs,
+      fromEnv: backstopFromEnv,
       engineLogExcerpt: engineErrorExcerptSafe(sessionId, options._engineLog),
       engineSkew: currentEngineSkew(client),
-      sessionStatus: await sessionStatusSafe(getSessionStatus, client, sessionId, dirArgs, statusProbeMs),
+      // One HTTP call per kill: a caller that already read the status — the poll-loop
+      // site for the DECISION, the pre-send site for its record — passes it; only a
+      // SECOND firing, which never re-decides, reads here as before.
+      sessionStatus: sessionStatus || await sessionStatusSafe(getSessionStatus, client, sessionId, dirArgs, statusProbeMs),
+      extension,
     });
 
     // Send prompt asynchronously (returns immediately, we poll for results) —
@@ -857,6 +891,10 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const sendPromptLabel = 'sendPromptAsync';
     const sendPromptPromise = sendPromptAsync(client, sessionId, promptOptions);
     let promptResult = null;
+    // #251 item 1: the status the pre-send firing site read, carried to the
+    // seeding block below so the death report costs exactly one status call on
+    // this path too (see the catch branch).
+    let preSendStatus = null;
     try {
       promptResult = await withTimeout(sendPromptPromise, noOutputBackstopMs, sendPromptLabel);
       writeProgress(sessionDir, 'prompt_sent');
@@ -882,6 +920,18 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // Named mutant "ORPHANSENDS" (tests/headless-variant.test.js): drop the abort.
       sendAbort.abort();
       backstopFired = true;
+      // #251 item 1 (spec §3, ruling R3): this site never extends — the engine did not return
+      // from the prompt-send call, upstream of any provider stream. Read the status once for the
+      // record and the report; the clause renderer emits nothing for `why: 'pre-send'`, so the
+      // string is byte-identical to 4.12.0's (pinned: W8). `sessionError` is seeded below, where
+      // it is declared — writing it here would be the #202 TDZ trap again.
+      preSendStatus = await sessionStatusSafe(getSessionStatus, client, sessionId, dirArgs, statusProbeMs);
+      backstopRecord = decideBackstopExtension({
+        status: preSendStatus, windowMs: noOutputBackstopMs, firedAtMs: Date.now() - outputClockStartedAt,
+        legTimeoutMs: timeoutMs, clockStartedAt: outputClockStartedAt,
+      }).record;
+      backstopRecord = { ...backstopRecord, extended: false, why: 'pre-send' };
+      delete backstopRecord.extendedToMs; delete backstopRecord.retryNextIso;
       logger.warn('No-output backstop fired before the prompt send resolved', {
         taskId, sessionId, backstopMs: noOutputBackstopMs,
       });
@@ -897,8 +947,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // below does, so the run ends with a usable reason (the poll loop is
     // skipped entirely on this path — see the while-condition and the
     // backstop-abort block further down).
+    // #251 item 1: the status and the record the catch above already built ride
+    // along, so this path reads the engine exactly once and the report carries
+    // the `pre-send` record (whose clause is '', keeping the string unchanged).
     if (backstopFired) {
-      sessionError = await noOutputBackstopReason();
+      sessionError = await noOutputBackstopReason({ sessionStatus: preSendStatus, extension: backstopRecord });
     }
 
     // #218 PR 4: what was SENT, for the leg record (emit-when-sent; named mutants
@@ -1366,13 +1419,37 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           }
         }
 
-        // No-output backstop: one tick per poll. Fired is terminal — break the
-        // loop; the post-loop block below mirrors the timeout path.
+        // No-output backstop: one tick per poll. #251 item 1: `fired` is no longer the end of
+        // the leg by itself — the engine is asked ONCE what the session is doing, and a busy
+        // or retrying session gets exactly one more window (spec 2026-09-18 §3; the table is
+        // decideBackstopExtension, tested row by row). A second firing, or any status that is
+        // not evidence of life (idle, a probe that could not answer, an arm we do not know),
+        // kills as before; the post-loop block below mirrors the timeout path.
         if (noOutputBackstop.tick(substantiveActivity, Date.now()) === 'fired') {
-          backstopFired = true;
-          sessionError = await noOutputBackstopReason();
-          logger.warn('No-output backstop fired', { taskId, backstopMs: noOutputBackstopMs });
-          break;
+          const firedAtMs = Date.now() - outputClockStartedAt;
+          let decisionStatus = null;
+          let extendedNow = false;
+          if (!backstopRecord) {
+            decisionStatus = await sessionStatusSafe(getSessionStatus, client, sessionId, dirArgs, statusProbeMs);
+            const decision = decideBackstopExtension({
+              status: decisionStatus, windowMs: noOutputBackstopMs, firedAtMs,
+              legTimeoutMs: timeoutMs, clockStartedAt: outputClockStartedAt,
+            });
+            backstopRecord = decision.record;
+            extendedNow = decision.extendTo !== null && noOutputBackstop.extend(decision.extendTo);
+            if (extendedNow) {
+              logger.warn('No-output backstop extended once on session status', {
+                taskId, sessionId, status: backstopRecord.status, fromMs: noOutputBackstopMs,
+                toMs: backstopRecord.extendedToMs, atMs: firedAtMs,
+              });
+            }
+          }
+          if (!extendedNow) {
+            backstopFired = true;
+            sessionError = await noOutputBackstopReason({ sessionStatus: decisionStatus, extension: backstopRecord });
+            logger.warn('No-output backstop fired', { taskId, backstopMs: noOutputBackstop.deadline() - outputClockStartedAt });
+            break;
+          }
         }
 
         // B53: a wedged tool call (tool_use emitted, result never arrives) otherwise
@@ -1924,6 +2001,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // and must keep it. (PR #207 round 3, B3: emit-when-VALID too — see the
         // clock-skew ruling at the stamp site above.)
         ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
+        // #251 item 1: emit-when-set on the same terms — a leg the backstop never
+        // fired for carries no `backstop` key, so its documents stay byte-identical.
+        // Gated on the PREDICATE, never on truthiness: a forged or partial object
+        // is dropped rather than copied (spec §5.2).
+        ...(isBackstopRecord(backstopRecord) ? { backstop: backstopRecord } : {}),
         // #218 PR 3: the engine's finish for the last assistant message, emit-when-set like ttftMs.
         ...(typeof finish === 'string' ? { finish } : {}),
         error: sessionError
@@ -1946,6 +2028,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       opencodeSessionId: sessionId,
       // v4.9 W13 Task A: emit-when-set — see the sibling return above.
       ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
+      // #251 item 1: emit-when-set — see the sibling return above. A leg SAVED by
+      // the one extension completes through here and keeps its record (W2).
+      ...(isBackstopRecord(backstopRecord) ? { backstop: backstopRecord } : {}),
       // #218 PR 3: the engine's finish for the last assistant message, emit-when-set like ttftMs.
       ...(typeof finish === 'string' ? { finish } : {}),
       exitCode: 0
@@ -2040,6 +2125,10 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // second, silent loss on top of the first. Nothing is invented: a leg
       // that exploded before any poll observed activity still carries no key.
       ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
+      // #251 item 1: emit-when-set, the SAME rule as the two returns in the try
+      // body and for the same reason as ttftMs above — a backstop that fired and
+      // decided, on a leg that then exploded, still reported what it decided.
+      ...(isBackstopRecord(backstopRecord) ? { backstop: backstopRecord } : {}),
       error: error.message
     };
   }
