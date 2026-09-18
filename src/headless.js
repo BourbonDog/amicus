@@ -28,14 +28,16 @@ const { currentEngineSkew, formatSkewSuffix } = require('./utils/engine-skew');
 // #202: the session-status clause on a death report (see utils/session-status.js).
 const { formatSessionStatusSuffix, probeUnknown, isRenderableStatus } =
   require('./utils/session-status');
-// #251 item 1: the busy-aware backstop — the decision table (spec 2026-09-18 §3),
-// the record predicate every writer of a leg document gates on, and the death
-// report's fourth clause. Required at MODULE scope, unlike the state machine's own
-// `createNoOutputBackstop` below, because two consumers live outside runHeadless's
-// try block: `formatNoOutputBackstopReason` (module scope) and the outer catch's
-// return, which cannot see a `const` declared in the try body.
-const { decideBackstopExtension, isBackstopRecord, formatBackstopExtensionClause } =
-  require('./utils/no-output-backstop');
+// The no-output backstop (utils/no-output-backstop.js): the state machine the poll
+// loop ticks, its env resolver, and — since #251 item 1 — the decision table (spec
+// 2026-09-18 §3), the record predicate every writer of a leg document gates on, and
+// the death report's fourth clause. ONE require, at MODULE scope: the #251 consumers
+// live outside runHeadless's try block (`formatNoOutputBackstopReason` at module
+// scope, and the outer catch's return, which cannot see a `const` declared in the
+// try body), and the state machine was required inside it only by habit — no test
+// mocks this module, so the load timing was never load-bearing (fix round 1, F8).
+const { resolveNoOutputBackstopMs, createNoOutputBackstop, decideBackstopExtension,
+  isBackstopRecord, formatBackstopExtensionClause } = require('./utils/no-output-backstop');
 // v4.9 W13 Task A (PR #207 round 3, B3): the one honesty predicate every ttftMs
 // emit gate shares — see src/utils/ttft.js for why `typeof` was not it.
 const { isMeasuredTtft } = require('./utils/ttft');
@@ -271,8 +273,10 @@ function withTimeout(promise, ms, label) {
  * Kept module-scope and pure (not a closure over runHeadless locals) so it
  * can be asserted on directly in tests without driving the poll loop; the
  * `noOutputBackstopReason` closure inside runHeadless just forwards to this
- * with the per-run `noOutputBackstopMs`/`backstopFromEnv`/engine-log/skew
- * values, so the two firing sites there stay identical to what's tested here.
+ * with the window IN FORCE — the per-run `noOutputBackstopMs`, or
+ * `extension.extendedToMs` after the one extension (#251 item 1, spec §5.1) —
+ * plus the `backstopFromEnv`/engine-log/skew values, so the two firing sites
+ * there stay identical to what's tested here.
  * #251 item 1 adds a FOURTH clause on the same terms, after the session clause:
  * `formatBackstopExtensionClause(extension)`, '' whenever the record has nothing
  * to say.
@@ -792,7 +796,6 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // reasoning/settle — NOT the placeholder-compatible message/assistant-id
     // signals; see substantiveActivity); 0 (or negative) disables — the
     // send itself is unbounded in that case too (see withTimeout below).
-    const { resolveNoOutputBackstopMs, createNoOutputBackstop } = require('./utils/no-output-backstop');
     // v4.6.2 PR3 Task 1: Number.isFinite, not `!== undefined` — a non-number
     // (e.g. a string arriving from a CLI/JSON boundary) must fall through to
     // env resolution instead of reaching the deadline arithmetic below.
@@ -862,9 +865,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // diagnosing was the only one that never asked, and every silent death
     // reported a window with no cause.
     // Asked for HERE instead, at the two firing sites and, since #251 item 1,
-    // once more at the poll-loop site for the extension DECISION; a living leg
-    // still makes no extra call. The read is best-effort and bounded:
-    // `sessionStatusSafe` can neither throw nor hang (S-W4/S-W5).
+    // once more at the poll-loop site for the extension DECISION: a leg that never
+    // reaches its window still makes no extra call; a leg the backstop fires for
+    // pays one bounded read for the decision (and, if it dies later, one more for
+    // the report). The read is best-effort and bounded: `sessionStatusSafe` can
+    // neither throw nor hang (S-W4/S-W5).
     const noOutputBackstopReason = async ({ sessionStatus, extension } = {}) => formatNoOutputBackstopReason({
       // #251 item 1: the window in force at the kill — after an extension that is the
       // extended window, because "no output in 480s" would be false for a leg silent for 912.

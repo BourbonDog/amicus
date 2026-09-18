@@ -190,6 +190,55 @@ describe('#251 item 1 — decideBackstopExtension: the spec §3 table, row by ro
     expect(isBackstopRecord(atCap.record)).toBe(true);
     expect(atCap.record).toEqual({ windowMs: 912000, firedAtMs: 913904, status: 'busy', extended: false, why: 'at-cap' });
   });
+  /**
+   * Fix round 1, F3 — `status.next` is ENGINE-supplied and untrusted, and
+   * `Number.isFinite` does not bound the Date range: a unit bug upstream (µs or ns
+   * where ms was meant) puts `|next| > 8.64e15` on the wire, and
+   * `new Date(next).toISOString()` throws `RangeError: Invalid time value`. This
+   * function is called on the KILL path, whose whole point is that it cannot fail —
+   * a throw there returns the leg through runHeadless's outer catch with
+   * `error: 'Invalid time value'`, losing both the `NO_OUTPUT_BACKSTOP:` prefix
+   * `models-probe.js` classifies on and the `backstop` record.
+   *
+   * The record keeps the FACT (the engine scheduled its next attempt past the
+   * window) and reports the raw number when it cannot be an ISO instant — the
+   * classification is what the reader needs, and an unreadable timestamp is still
+   * evidence. Pinned end to end by W11 in the wiring suite.
+   */
+  test('D11 a `next` outside the Date range is recorded raw, never thrown (F3)', () => {
+    const beyond = 8.64e15 + 1;
+    const d = decideBackstopExtension({ ...base, status: { type: 'retry', attempt: 1, message: 'x', next: beyond } });
+    expect(d.extendTo).toBeNull();
+    expect(d.record.why).toBe('retry-beyond-window');
+    expect(d.record.retryNextIso).toBe(String(beyond));
+    expect(isBackstopRecord(d.record)).toBe(true);
+
+    // The NEGATIVE end of the Date range is the same defect. A far-past `next` does
+    // not reach this arm under a real clock (it is not `> extendTo`), so the clock
+    // origin is placed below it — this function is pure and `clockStartedAt` is just
+    // a number, which is exactly why the branch is reachable at the unit level.
+    const behind = -8.64e15 - 1;
+    // The origin has to sit a full extended window (912 s) BELOW `next`, or the arm is
+    // not reached and the leg simply extends — which the control below pins.
+    const neg = decideBackstopExtension({
+      ...base, clockStartedAt: -8.64e15 - 2000000, status: { type: 'retry', attempt: 1, message: 'x', next: behind },
+    });
+    expect(neg.extendTo).toBeNull();
+    expect(neg.record.why).toBe('retry-beyond-window');
+    expect(neg.record.retryNextIso).toBe(String(behind));
+    expect(isBackstopRecord(neg.record)).toBe(true);
+
+    // CONTROL: under an ordinary clock the same far-past value is simply not past the
+    // window, so it never reaches the formatter at all — it is an unscheduled retry.
+    expect(decideBackstopExtension({ ...base, status: { type: 'retry', next: behind } }).extendTo).toBe(1912000);
+
+    // `Infinity` and `NaN` are not finite, so they were never scheduled: extend.
+    for (const next of [Infinity, -Infinity, NaN]) {
+      const u = decideBackstopExtension({ ...base, status: { type: 'retry', attempt: 1, message: 'x', next } });
+      expect(u.extendTo).toBe(1912000);
+      expect(u.record).toEqual({ windowMs: 480000, firedAtMs: 480722, status: 'retry', extended: true, extendedToMs: 912000 });
+    }
+  });
 });
 
 describe('#251 item 1 — isBackstopRecord and the clause', () => {

@@ -87,6 +87,29 @@ function extendWindowMs(baseMs, legTimeoutMs) {
 }
 
 /**
+ * #251 item 1 fix round 1 (F3) — render an epoch as an instant, or as itself.
+ *
+ * `status.next` is ENGINE-supplied and untrusted, and `Number.isFinite` does not
+ * bound the Date range: a unit bug upstream (µs or ns where ms was meant) puts
+ * `|next| > 8.64e15` on the wire, and `new Date(next).toISOString()` throws
+ * `RangeError: Invalid time value`. Its caller runs on the KILL path, inside the
+ * poll body's own `catch (pollError)` — so the throw did not even surface as a
+ * named death: it was swallowed as a poll failure, the counter resets at the top
+ * of every poll, and a fired backstop re-threw on each one until the leg burned
+ * its whole `--timeout` and died as an ordinary timeout. MEASURED before the fix
+ * (W11 hung to Jest's 20s ceiling on a 60s leg).
+ *
+ * The record keeps the FACT — the engine scheduled its next attempt past the
+ * window — and reports the raw number when it cannot be an instant. A timestamp
+ * nobody can read is still evidence; a lost classification is not.
+ * @param {number} ms
+ * @returns {string}
+ */
+function isoOrNumber(ms) {
+  try { return new Date(ms).toISOString(); } catch (_) { return String(ms); }
+}
+
+/**
  * #251 item 1 — the decision at the poll-loop firing site (spec 2026-09-18 §3),
  * as a pure function so every row is testable without the poll loop.
  * Classifies on the RAW `status.type` and records the SANITISED identifier —
@@ -112,7 +135,7 @@ function decideBackstopExtension({ status, windowMs, firedAtMs, legTimeoutMs, cl
   if (!(extendedMs > windowMs)) { return { extendTo: null, record: { ...record, why: 'at-cap' } }; }
   const extendTo = clockStartedAt + extendedMs;
   if (status.type === 'retry' && Number.isFinite(status.next) && status.next > extendTo) {
-    return { extendTo: null, record: { ...record, why: 'retry-beyond-window', retryNextIso: new Date(status.next).toISOString() } };
+    return { extendTo: null, record: { ...record, why: 'retry-beyond-window', retryNextIso: isoOrNumber(status.next) } };
   }
   return { extendTo, record: { ...record, extended: true, extendedToMs: Math.floor(extendedMs) } };
 }
@@ -149,8 +172,9 @@ function isBackstopRecord(x) {
  * record has nothing to say (idle, unknown, an unknown arm, the pre-send site,
  * or not a record at all), so every such reason string is byte-identical to
  * one built before this clause existed. Every value here is a number amicus
- * measured, a sanitised type identifier, or an ISO timestamp amicus formatted —
- * no untrusted text enters.
+ * measured, a sanitised type identifier, or an ISO timestamp amicus formatted
+ * (or the raw number, when the engine publishes a `next` outside the Date
+ * range) — no untrusted text enters.
  * @param {*} record
  * @returns {string}
  */

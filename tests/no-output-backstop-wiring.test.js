@@ -417,7 +417,9 @@ describe('v4.6.2 PR3 Task 1: the noOutputBackstopMs coercion guard', () => {
  * the string can be asserted on without driving the whole runHeadless poll
  * loop. The two firing sites (pre-send and per-poll) both still call the
  * original in-closure wrapper, which just forwards to this helper with the
- * per-run `noOutputBackstopMs`/`backstopFromEnv` values — so proving the
+ * window IN FORCE — the per-run `noOutputBackstopMs`, or
+ * `extension.extendedToMs` after the one extension (#251 item 1, spec §5.1) —
+ * plus the `backstopFromEnv` value, so proving the
  * helper's output also proves what those sites will emit. (The wiring itself
  * — that a real runHeadless call actually reaches each branch — is proven
  * separately below, by extending two of the existing end-to-end tests.)
@@ -1501,23 +1503,31 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
     // Named mutant "UNKNOWNEXTENDS": drop `&& !isProbeOutcome(status)` from `isEngine` in decideBackstopExtension — the
     // forged-type case below (`{type:'busy'}` keyed under ANOTHER session, which unwraps to no-status) would then... stay
     // a kill; the mutant is caught by D6 in the unit file. Here the observable is the kill time and the clause.
+    // Fix round 1, F4: the `skipped` arm the title claims is now actually exercised —
+    // `statusProbeMs: 0` is the documented disable, and sessionStatusSafe answers
+    // `probeUnknown('skipped', 'no window')` without calling the engine at all. Each arm
+    // may therefore carry its own run options (the fourth tuple element).
     mockGetMessages.mockResolvedValue([]);
-    for (const [name, arm] of [
-      ['failed', () => mockGetSessionStatus.mockRejectedValue(new Error('ECONNRESET'))],
-      ['no-status', () => mockGetSessionStatus.mockResolvedValue({})],
-      ['keyed under another session', () => mockGetSessionStatus.mockResolvedValue({ ses_someone_else: { type: 'busy' } })],
+    for (const [name, arm, detail, opts] of [
+      ['failed', () => mockGetSessionStatus.mockRejectedValue(new Error('ECONNRESET')), /probe failed: ECONNRESET/, {}],
+      ['no-status', () => mockGetSessionStatus.mockResolvedValue({}), /probe no-status: /, {}],
+      ['keyed under another session', () => mockGetSessionStatus.mockResolvedValue({ ses_someone_else: { type: 'busy' } }), /probe no-status: /, {}],
+      ['skipped', () => {}, /probe skipped: no window/, { statusProbeMs: 0 }],
     ]) {
       jest.clearAllMocks();
       mockGetMessages.mockResolvedValue([]);
       arm();
       const started = Date.now();
-      const result = await run(`unk-${name.replace(/\W/g, '')}`);
+      const result = await run(`unk-${name.replace(/\W/g, '')}`, opts);
       expect(Date.now() - started).toBeLessThan(1900);
       expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 1s/);
       expect(String(result.error)).toMatch(/\(session: unknown — probe /);
+      expect(String(result.error)).toMatch(detail);
       expect(String(result.error)).not.toMatch(/extended/);
       expect(result.backstop).toEqual({ windowMs: 1000, firedAtMs: expect.any(Number), status: 'unknown', extended: false });
     }
+    // The skipped arm must have reached the engine ZERO times — that is what "skipped" means.
+    expect(mockGetSessionStatus).not.toHaveBeenCalled();
   }, 30000);
 
   test('W5a retry whose next attempt falls inside the extended window extends; W5b one scheduled past it kills now with the named clause', async () => {
@@ -1615,4 +1625,38 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
     expect(formatNoOutputBackstopReason({ ...base, extension: { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 } }))
       .toBe(`${before} — window extended once from 480s to 912s at 481s on session busy`);
   });
+
+  test('W11 a retry `next` outside the Date range still dies NAMED, never as `Invalid time value` (fix round 1, F3)', async () => {
+    // The end-to-end half of D11. `status.next` is engine-supplied: a upstream unit bug
+    // (µs/ns for ms) puts |next| > 8.64e15 on the wire, and the decision used to format it
+    // with `new Date(next).toISOString()` — which THROWS on the kill path. The leg then
+    // returned through runHeadless's outer catch as `error: 'Invalid time value'`, losing
+    // both the prefix models-probe.js classifies on and the record. RED before the fix with
+    // exactly that string.
+    mockGetMessages.mockResolvedValue([]);
+    const beyond = 8.64e15 + 1;
+    mockGetSessionStatus.mockResolvedValue({ type: 'retry', attempt: 1, message: 'x', next: beyond });
+    const started = Date.now();
+    const result = await run('retryhuge1');
+    expect(Date.now() - started).toBeLessThan(1900); // the original window: never extended
+    expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+    expect(String(result.error)).toMatch(/ — not extended: the engine schedules its next attempt at 8640000000000001, past the extended window$/);
+    expect(result.backstop.why).toBe('retry-beyond-window');
+    expect(result.backstop.retryNextIso).toBe(String(beyond));
+  }, 20000);
+
+  test('W12 the SHAPE CI actually produces: a session-keyed busy unwraps and buys the leg its one window (fix round 1, F5)', async () => {
+    // S-W11/S-W15 pin the unwrap on a KILL (their fixtures report `idle`, ruling 5(a)), so
+    // nothing pinned unwrap-then-EXTEND — which is the live shape: the engine answers a map
+    // keyed by session id, and the session inside it is busy. Named mutant
+    // "KEYEDUNWRAPDROPPED": in headless.js :: sessionStatusSafe replace `(raw && raw[sessionId])`
+    // with `null` — this leg then dies at 1 s with `probe no-status` instead of extending.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({ ses_parent: { type: 'busy' } });
+    const started = Date.now();
+    const result = await run('keyedbusy1');
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1900);
+    expect(String(result.error)).toMatch(/ \(session: busy\) — window extended once from 1s to 2s at 1s on session busy$/);
+    expect(result.backstop).toEqual({ windowMs: 1000, firedAtMs: expect.any(Number), status: 'busy', extended: true, extendedToMs: 2000 });
+  }, 20000);
 });

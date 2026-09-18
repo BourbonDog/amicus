@@ -47,9 +47,11 @@ function classify(rhs) {
   // both firing sites now hand it the status they already read and the extension
   // record. NOT a new site and NOT a new text origin: the record's clause is built
   // from numbers amicus measured, a sanitised status identifier and an ISO timestamp
-  // amicus formatted (utils/no-output-backstop.js :: formatBackstopExtensionClause),
-  // and the one engine-authored input on this path is still the engine-log excerpt,
-  // still redacted at its own seam.
+  // amicus formatted (utils/no-output-backstop.js :: formatBackstopExtensionClause).
+  // The engine-authored inputs on this path are the engine-log excerpt (redacted at
+  // its own seam) and the session clause's retry `message` (sanitised at render by
+  // `collapseExcerpt`); the extension clause carries only a sanitised type identifier,
+  // integers and an amicus-formatted timestamp.
   if (s.includes('noOutputBackstopReason(')) { return 'AMICUS:backstop (engine-log excerpt redacted at its own seam)'; }
   if (s.includes('promptResult.providerError')) { return 'AMICUS:client-boundary synthetic'; }
   if (s.includes('formatOutputLengthReason(')) { return 'AMICUS:output-length'; }
