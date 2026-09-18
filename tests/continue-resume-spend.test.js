@@ -252,6 +252,62 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
     expect(rows[0].variant).toBe('high'); // SOLOROWNOVARIANT
   });
 
+  // #251 item 1: a NO_OUTPUT_BACKSTOP death is `status: 'error'` too, so it takes the
+  // same branch as the OUTPUT_LENGTH pair above — the one that writes metadata.json
+  // directly and never calls finalizeSession.
+  const BACKSTOP_REC = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+  const backstopDeath = {
+    completed: false, summary: '', backstop: BACKSTOP_REC,
+    error: 'NO_OUTPUT_BACKSTOP: no output in 912s — window extended once from 480s to 912s at 481s on session busy',
+    usage: { tokens: { input: 5, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.01 },
+  };
+
+  it('a NO_OUTPUT_BACKSTOP continue stamps the backstop record on metadata.json', async () => {
+    // Named mutant "CONTINUEERRORNOBACKSTOP": drop `stampBackstop(meta, result)` from continue.js's error branch.
+    seedSession(projectDir, 'old0e2e7');
+    runHeadless.mockResolvedValue({ ...backstopDeath, timedOut: false, aborted: false, taskId: 'new0e2e7' });
+    await continueSidecar({
+      taskId: 'old0e2e7', newTaskId: 'new0e2e7', briefing: 'follow-up',
+      model: 'google/gemini-2.5-flash', project: projectDir,
+      headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'new0e2e7')), 'utf-8'));
+    expect(meta.status).toBe('error');
+    expect(meta.backstop).toEqual(BACKSTOP_REC); // CONTINUEERRORNOBACKSTOP
+  });
+
+  it('a NO_OUTPUT_BACKSTOP resume stamps the backstop record on metadata.json', async () => {
+    // Named mutant "RESUMEERRORNOBACKSTOP": drop `stampBackstop(updatedMetadata, result)` from
+    // resume.js's error branch. (resume.test.js drives only the exported helpers, never
+    // resumeSidecar — this file is the one that reaches that branch, as RESUMEERRORNOVARIANT does.)
+    seedSession(projectDir, 'res0e2e7');
+    runHeadless.mockResolvedValue({ ...backstopDeath, timedOut: false, aborted: false, taskId: 'res0e2e7' });
+    await resumeSidecar({
+      taskId: 'res0e2e7', project: projectDir, headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'res0e2e7')), 'utf-8'));
+    expect(meta.status).toBe('error');
+    expect(meta.backstop).toEqual(BACKSTOP_REC); // RESUMEERRORNOBACKSTOP
+  });
+
+  it("a COMPLETED resume does not inherit the previous attempt's backstop record", async () => {
+    // The reopen line drops it (named mutant "RESUMESTALEBACKSTOP", tests/sidecar/resume.test.js);
+    // this pins that it STAYS gone through the terminal write — resume.js's finalizeSession opts.
+    seedSession(projectDir, 'res0e2e8', { backstop: BACKSTOP_REC });
+    runHeadless.mockResolvedValue({
+      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'res0e2e8', usage,
+    });
+    await resumeSidecar({
+      taskId: 'res0e2e8', project: projectDir, headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'res0e2e8')), 'utf-8'));
+    expect(meta.status).toBe('complete');
+    expect('backstop' in meta).toBe(false);
+  });
+
   // #218 PR 4 whole-branch review (§C2 / TM-4, parked m6): the COMPLETE branch's
   // finalizeSession passthrough was unpinned at both reopen sites too.
   it('a COMPLETED continue stamps the variant it sent and no unverified flag', async () => {

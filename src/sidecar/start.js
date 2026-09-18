@@ -195,7 +195,7 @@ async function startSidecar(options) {
   }
 
   // Map the run result to a definitive terminal status + exit code (single source of truth).
-  const { resolveTerminalState } = require('./session-finalize');
+  const { resolveTerminalState, stampBackstop } = require('./session-finalize');
   const terminal = resolveTerminalState(result);
   if (terminal.status === 'error') {
     meta.status = 'error';
@@ -203,12 +203,13 @@ async function startSidecar(options) {
     if (result && typeof result.finish === 'string') { meta.finish = result.finish; } // #218 PR 3: emit-when-set; a fresh session's metadata has no prior finish to remove (resume's does -- resume.js)
     if (result && typeof result.variant === 'string') { meta.variant = result.variant; } // #218 PR 4: emit-when-set, like finish (named mutant "SOLOERRORNOVARIANT", tests/start-terminal-status.test.js)
     if (result && result.variantUnverified === true) { meta.variantUnverified = true; }
+    stampBackstop(meta, result); // #251 item 1: the backstop's decision record (named mutant "SOLOERRORNOBACKSTOP", tests/start-terminal-status.test.js)
     meta.completedAt = new Date().toISOString();
     writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Session completed with error', { taskId, error: meta.reason });
   } else {
     // complete / timed-out / aborted: persist the (possibly partial) summary with the correct status.
-    finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified });
+    finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified, backstop: result && result.backstop });
   }
 
   const { resolveUsage } = require('../utils/pricing');

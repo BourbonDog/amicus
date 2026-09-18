@@ -100,6 +100,21 @@ describe('result-schema', () => {
       expect('finish' in bogus).toBe(false);
     });
 
+    it('carries metadata.backstop emit-when-valid (#251 item 1)', () => {
+      // R5 AMENDED: this literal is the projection that writes the council wave doc's leg
+      // entries and `amicus read`'s run result, so a field not spelled here never reaches
+      // run.json and the corpus reads zero extended legs. Validity is isBackstopRecord's,
+      // not a typeof — metadata is read off disk, so a forged object reaches here.
+      // Named mutant "BACKSTOPCOERCED": `backstop: metadata.backstop || null` — the key appears as null.
+      const REC = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+      const withRec = buildRunResult({ taskId: 'b1', metadata: { ...baseMeta, backstop: REC }, result: { completed: true }, summary: 'ok' });
+      expect(withRec.backstop).toEqual(REC);
+      const forged = buildRunResult({ taskId: 'b2', metadata: { ...baseMeta, backstop: { windowMs: 'x' } }, result: { completed: true }, summary: 'ok' });
+      expect('backstop' in forged).toBe(false);
+      const without = buildRunResult({ taskId: 'b3', metadata: baseMeta, result: { completed: true }, summary: 'ok' });
+      expect('backstop' in without).toBe(false);
+    });
+
     it('carries metadata.variant and variantUnverified emit-when-set (#218 PR 4)', () => {
       const sent = buildRunResult({ taskId: 'v1', metadata: { ...baseMeta, variant: 'low' }, result: { completed: true }, summary: 's' });
       expect(sent.variant).toBe('low');

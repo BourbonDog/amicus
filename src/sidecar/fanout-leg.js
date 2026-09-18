@@ -4,8 +4,8 @@
 /**
  * @module fanout-leg
  * Per-leg helpers extracted from fanout.js to keep both files ≤300 lines.
- * Exports: legStatusFromResult, writeLegPatch, runLeg, runSingleAttempt,
- * buildRoutingFailureLeg (+ runLegWithFallback/recordAttemptSpend/
+ * Exports: legStatusFromResult, writeLegPatch, clearAttemptFields, runLeg,
+ * runSingleAttempt, buildRoutingFailureLeg (+ runLegWithFallback/recordAttemptSpend/
  * sumAttemptUsage, re-exported from ./fanout-leg-fallback — split out to keep
  * THIS file under the size gate; see that module for the substitution loop).
  */
@@ -16,6 +16,7 @@ const { logger } = require('../utils/logger');
 const { writeFileAtomic } = require('../utils/atomic-write');
 // v4.9 W13 Task A (PR #207 round 3, B3): the shared ttftMs honesty predicate.
 const { isMeasuredTtft } = require('../utils/ttft');
+const { isBackstopRecord } = require('../utils/no-output-backstop'); // #251 item 1
 
 /** Map a runHeadless result to a leg metadata status. */
 function legStatusFromResult(result) {
@@ -38,6 +39,23 @@ function writeLegPatch(legDir, patch) {
   const merged = { ...meta, ...defined };
   writeFileAtomic(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
   return merged;
+}
+
+/**
+ * #251 item 1 (whole-branch review F3): before a SUBSTITUTED attempt re-runs in this leg dir, drop the dead
+ * attempt's per-attempt fields, so a substitute that COMPLETES is not credited with the primary's `backstop`
+ * record (a "saved leg" it was not), nor with its `finish`/`ttftMs`/`variant`/`variantUnverified`. Mirrors
+ * `src/sidecar/resume.js :: updateSessionStatus`'s reopen deletes; writeLegPatch above drops only `undefined`
+ * keys, so nothing else clears them here. Best-effort at BOTH ends (council #269 r1, D3): a missing,
+ * unreadable OR unwritable metadata.json is left alone — this runs to tidy the NEXT attempt's document,
+ * and a hygiene write that throws must not sink the substitution that is about to run.
+ * @param {string} legDir
+ */
+function clearAttemptFields(legDir) {
+  const metaPath = path.join(legDir, 'metadata.json'); let meta;
+  try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { return; }
+  for (const k of ['backstop', 'finish', 'ttftMs', 'variant', 'variantUnverified']) { delete meta[k]; }
+  try { writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 }); } catch { /* best-effort: the attempt's own patch follows */ }
 }
 
 /**
@@ -218,6 +236,8 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // #218 PR 3: the engine's `finish` for the leg's last assistant message
     // ('length' = stopped at the reservation), emit-when-set like ttftMs above.
     finish: (result && typeof result.finish === 'string') ? result.finish : undefined,
+    // #251 item 1: the backstop's decision record (extended / at-cap / …), emit-when-valid. Named mutant "LEGBACKSTOPDROPPED" (tests/sidecar/fanout.test.js).
+    backstop: (result && isBackstopRecord(result.backstop)) ? result.backstop : undefined,
     // #218 PR 4: the effort level SENT (emit-when-sent) and whether the engine's
     // catalogue knew the model when it was sent. Named mutant "LEGVARIANTDROPPED"
     // (tests/sidecar/fanout.test.js).
@@ -267,6 +287,6 @@ async function runLeg(args) {
 }
 
 module.exports = {
-  legStatusFromResult, writeLegPatch, runLeg, buildRoutingFailureLeg, runSingleAttempt,
+  legStatusFromResult, writeLegPatch, clearAttemptFields, runLeg, buildRoutingFailureLeg, runSingleAttempt,
   ...require('./fanout-leg-fallback'),
 };

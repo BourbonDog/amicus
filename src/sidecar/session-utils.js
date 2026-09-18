@@ -10,6 +10,7 @@ const { detectConflicts, formatConflictWarning } = require('../conflict');
 const { logger } = require('../utils/logger');
 const { fenceSidecarOutput } = require('../utils/untrusted-fence');
 const { writeFileAtomic } = require('../utils/atomic-write');
+const { isBackstopRecord } = require('../utils/no-output-backstop'); // #251 item 1
 // isProcessAlive/checkSessionLiveness live in utils/abort-coordinator.js
 // (shared EPERM-aware liveness classification with isAlive); re-exported
 // below for backward-compatible imports.
@@ -72,7 +73,7 @@ function saveInitialContext(sessionDir, systemPrompt, userMessage) {
   fs.writeFileSync(SessionPaths.contextFile(sessionDir), content, { mode: 0o600 });
 }
 
-/** Finalize session - detect conflicts, save summary, update metadata. opts.finish (#218 PR 3) stamps metadata.finish when set and REMOVES a prior one otherwise; opts.variant / opts.variantUnverified (#218 PR 4) follow the same rule — a resumed run reuses the same metadata and must not inherit the last attempt's finish (council #232 r1 B1). */
+/** Finalize session - detect conflicts, save summary, update metadata. opts.finish (#218 PR 3) stamps metadata.finish when set and REMOVES a prior one otherwise; opts.variant / opts.variantUnverified (#218 PR 4) and opts.backstop (#251 item 1, validated by isBackstopRecord) follow the same rule — a resumed run reuses the same metadata and must not inherit the last attempt's finish (council #232 r1 B1). */
 function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   const metaPath = SessionPaths.metadataFile(sessionDir);
 
@@ -108,6 +109,7 @@ function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   // #218 PR 4: the effort level SENT and whether the engine's catalogue knew the model — the same emit-when-set / delete-when-absent rule as finish. Named mutants "SOLOVARIANTDROPPED" / "STALEVARIANT" (tests/sidecar/session-utils.test.js).
   if (typeof opts.variant === 'string') { metadata.variant = opts.variant; } else { delete metadata.variant; }
   if (opts.variantUnverified === true) { metadata.variantUnverified = true; } else { delete metadata.variantUnverified; }
+  if (isBackstopRecord(opts.backstop)) { metadata.backstop = opts.backstop; } else { delete metadata.backstop; } // #251 item 1: same rule as finish; this is the path a leg the extension SAVED takes (named mutants "SOLOBACKSTOPDROPPED" / "STALEBACKSTOP", tests/sidecar/session-utils.test.js)
   metadata.status = opts.status || (hasSummary ? 'complete' : 'error');
   metadata.completedAt = new Date().toISOString();
   writeFileAtomic(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });

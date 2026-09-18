@@ -178,6 +178,19 @@ describe('Resume Operations', () => {
       expect('variantUnverified' in onDisk).toBe(false);
     });
 
+    it("the running write drops the previous attempt's backstop record too (#251 item 1)", () => {
+      // Named mutant "RESUMESTALEBACKSTOP": drop `delete meta.backstop` from the reopen line — a
+      // resumed attempt the backstop never fired for would ship the PREVIOUS attempt's record,
+      // and the corpus would count one extension twice.
+      const REC = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+      fs.writeFileSync(path.join(tmpDir, 'metadata.json'), JSON.stringify({ taskId: 'abc123', status: 'error', thinking: 'high', backstop: REC }));
+      updateSessionStatus(tmpDir, 'running');
+      const onDisk = JSON.parse(fs.readFileSync(path.join(tmpDir, 'metadata.json'), 'utf-8'));
+      expect(onDisk.status).toBe('running');
+      expect(onDisk.thinking).toBe('high'); // the REQUEST is not per-attempt state
+      expect('backstop' in onDisk).toBe(false);
+    });
+
     it("the running write also drops the previous attempt's reason / completedAt (council #235 r5, J2/A4)", () => {
       // Named mutant "RESUMESTALEREASON": drop the `reason`/`completedAt` deletes — a resume that
       // crashes mid-attempt leaves metadata reading `status: 'running'` while still carrying the

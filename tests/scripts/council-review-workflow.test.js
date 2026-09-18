@@ -816,6 +816,25 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(ms).toBeGreaterThan(300000); // strictly more headroom than the default
       expect(ms).toBeLessThan(timeoutMinutes * 60000);
     });
+
+    // Green at HEAD by construction (Task 1 shipped `extendWindowMs`): this is a
+    // PRESERVATION pin on CI's geometry, not a new behaviour. Its named mutant is
+    // the WORKFLOW value, not the code — `--timeout 16` → `--timeout 8` in a scratch
+    // copy of the workflow: legCap becomes 480000, extendWindowMs(480000, 480000) =
+    // min(960000, 456000) = 456000, so the FIRST assertion (`extended > ms`) fails
+    // (456000 vs 480000). Measured 2026-09-18 on a scratch copy; the real workflow's
+    // values were not touched.
+    test('#251 item 1: one extension of the first attempt still fires before the leg cap, and the retry leg has no room to extend — both derived from the workflow\'s own values', () => {
+      const { extendWindowMs } = require('../../src/utils/no-output-backstop');
+      const cmd = councilRunCommand();
+      const ms = Number(cmd.match(/AMICUS_NO_OUTPUT_BACKSTOP_MS: '(\d+)'/)[1]);
+      const legCap = Number(cmd.match(/--timeout (\d+)/)[1]) * 60 * 1000;
+      const extended = extendWindowMs(ms, legCap);
+      expect(extended).toBeGreaterThan(ms);          // the first attempt CAN be extended in CI …
+      expect(extended).toBeLessThan(legCap);         // … and still dies under its own name, not `timeout`
+      expect(extendWindowMs(extended, legCap)).toBe(extended); // the retry (already at that window) cannot: `at-cap`
+      // The worst-case pin above is unchanged by design: its first term is already legCap.
+    });
   });
 
   /**

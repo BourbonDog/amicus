@@ -9062,10 +9062,51 @@ Deferred — one line each, none blocks anything:
   healed at TTFT 380 s; deepseek (unpinned) died busy at 480,487 ms and 913,904 ms → seat lost;
   glm's seat spoke at 438 s; judges glm 309 s and qwen 209 s completed. First `(session: busy)`
   and the first `OpenRouter credit ok` notice ($15.14 remaining).
-- r3 (4.12.0, blank default, $0.62): glm, qwen and deepseek first attempts ALL died busy at 481 s
+- r3 (4.12.0, blank default, $0.62): glm, deepseek and qwen first attempts ALL died busy at 481 s
   and ALL healed (TTFT 28 s / 133 s / 503 s); judges 4 of 4 (glm 259 s, qwen 179 s, deepseek 83 s,
   gpt 32 s); chair 24 s; seatsReviewed 4 of 4 (one unverified).
 - Ritual: label OFF the moment a round completes (unchanged). Monitor a labelled round by runs
   created AFTER the label time, never by head sha — a sha match picked up the push-time skipped run
   and removed the label 3 s after applying it (the round was unaffected; label-off is the safe
   end state).
+
+## #251 item 1 — filed at the PR (2026-09-18; one closed by council round 1)
+
+- [x] The poll loop's backstop block sits INSIDE the poll body's `try … catch (pollError)`
+  (`src/headless.js :: runHeadless`) and `consecutivePollFailures` is reset at the top of every poll
+  before that block runs, so a throw inside the block is swallowed as a poll failure and retried
+  every poll (5 ms in tests, 2 s at the default interval) until the leg `--timeout` — the leg then
+  dies a generic `timeout` with the `NO_OUTPUT_BACKSTOP:` diagnosis lost. Measured on this branch
+  when `decideBackstopExtension` still threw on an out-of-range `retry.next` (W11's RED was a 20 s
+  hang, not the RangeError). FIXED in PR #269 round 1 (council A1/B1/C2, three seats): the decision
+  block converts a throw into a kill under its own name — it owns an inner `catch (decisionErr)`
+  that sets `backstopFired`, names the failure in the session clause and breaks, so the leg dies at
+  its window with the `NO_OUTPUT_BACKSTOP:` prefix intact; pinned by
+  tests/headless-backstop-decision-throws.test.js (whose RED at that HEAD was the same 20 s hang).
+  (#251 item 1, Task 2 fix round)
+- [ ] `tests/no-output-backstop-wiring.test.js` runs ≈ 34 s (measured 2026-09-18; from ≈ 15 s): the
+  new W1/W2/W4/W5/W6/W11/W12 pins wait on real 1–2 s windows by design. Accepted cost; a fake-timer
+  rewrite of that describe would buy the time back. (#251 item 1)
+- [ ] `check-citations.js` proves a `file.js:NNN` citation is only IN RANGE, never that it still
+  names what it points at, and it does not scan `skills/**` or `docs/**` at all. Task 4's sweep
+  re-anchored all eight line citations at five comment sites in `src/headless.js`, and four of the five
+  in the `NO_OUTPUT_BACKSTOP` bullet of `skills/second-opinion/MODEL-NOTES.md`, to `file :: symbol` form.
+  Two line citations remain, both verified in range and correct at HEAD: `run.schema.json:23` in
+  `src/headless.js`, and `src/council/run-retry.js:97` left in place in that MODEL-NOTES bullet.
+  Nothing enforces the symbol convention, so the rot returns with the next file that moves.
+  (#251 item 1, Task 4)
+- [ ] `src/utils/result-schema.js` is at 300/300 with THREE emit-when-set spreads packed onto one
+  line of `buildRunResult`'s literal (`variant`, `variantUnverified` and `backstop`; `finish` still
+  has the line above to itself) plus a lazy `require` inside that hot
+  literal; the next field to reach `buildRunResult` has nowhere to go without splitting the file
+  (the run-result shape into its own leaf is the natural cut). (#251 item 1, Task 3)
+- [ ] The pre-commit hook regenerates and stages `docs/architecture-map.md` at commit time, i.e.
+  AFTER the developer has already run `npm test`, so a change that adds an export fails
+  `tests/scripts/generate-docs-check.test.js` on the stale map until `node scripts/generate-docs.js`
+  is run by hand first — it bit Tasks 1 and 3. Document the order in CONTRIBUTING, or have that test
+  regenerate before it compares. (#251 item 1, Task 3)
+- [ ] Mid-extension re-check: after an extension the status is not read again until the second
+  firing, so a session that goes idle at 600 s burns to 912 s. Measure first — the second firing's
+  session clause records exactly this case (`window extended once … (session: idle)`); if the corpus
+  shows it, re-read status every ~60 s during an extension and kill early on idle (never on unknown).
+  (#251 item 1, council #269 r2 D2)

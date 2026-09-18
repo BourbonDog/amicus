@@ -38,6 +38,12 @@ function readMeta(sdir) {
   return JSON.parse(fs.readFileSync(path.join(sdir, 'metadata.json'), 'utf-8'));
 }
 
+// #251 item 1: the backstop's decision record. REC is isBackstopRecord's fixed point
+// (a leg extended once from 480s to 912s); FORGED is the partial object a writer must
+// DROP rather than coerce.
+const REC = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+const FORGED = { windowMs: 'x', extended: 'yes' };
+
 describe('finalizeHeadlessResult (shared-server path)', () => {
   it('errored run → status error + reason from result.error (not complete)', () => {
     const sdir = tmpSession();
@@ -116,6 +122,28 @@ describe('finalizeHeadlessResult (shared-server path)', () => {
     // Named mutant "SHAREDNOVARIANT": drop the stamp/delete line in session-finalize.js.
     expect('variant' in m).toBe(false);
     expect('variantUnverified' in m).toBe(false);
+  });
+
+  it('#251 item 1: an error run carries its backstop record; a forged one is dropped and REMOVES a stale one', () => {
+    // Named mutant "SHAREDNOBACKSTOP": drop the `stampBackstop(metadata, result)` line in
+    // finalizeHeadlessResult's error branch — the NO_OUTPUT_BACKSTOP death that the record
+    // exists to explain is the one leg document that loses it.
+    const sdir = tmpSession();
+    finalizeHeadlessResult(sdir, { completed: false, error: 'NO_OUTPUT_BACKSTOP: no output in 912s', backstop: REC }, os.tmpdir(), readMeta(sdir));
+    expect(readMeta(sdir).backstop).toEqual(REC);
+    const stale = tmpSession({ backstop: REC });
+    finalizeHeadlessResult(stale, { completed: false, error: 'boom', backstop: FORGED }, os.tmpdir(), readMeta(stale));
+    expect('backstop' in readMeta(stale)).toBe(false);
+  });
+
+  it('#251 item 1: a completed run that was extended keeps the record through finalizeSession', () => {
+    // The SURVIVOR path: a leg the extension saved never touches the error branch, so
+    // opts.backstop is the only way its record reaches metadata.json.
+    const sdir = tmpSession();
+    finalizeHeadlessResult(sdir, { completed: true, summary: 'ok', backstop: REC }, os.tmpdir(), readMeta(sdir));
+    const m = readMeta(sdir);
+    expect(m.status).toBe('complete');
+    expect(m.backstop).toEqual(REC);
   });
 });
 

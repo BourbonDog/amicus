@@ -856,6 +856,12 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
     }
   });
 
+  test('#251 item 1: the retry window and the backstop extension are ONE function (identity, not equivalence)', () => {
+    const { retryBackstopMs } = require('../../src/council/run-retry-window');
+    const { extendWindowMs } = require('../../src/utils/no-output-backstop');
+    expect(retryBackstopMs).toBe(extendWindowMs);
+  });
+
   test('#219: the retry window is STRICTLY below the leg timeout, never equal', async () => {
     process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS = '480000';
     const launched = await runRetryCapturingLaunchOpts({ timeout: 16 }); // 960000 ms

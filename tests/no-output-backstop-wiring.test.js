@@ -84,7 +84,7 @@ beforeEach(() => {
   mockSendPromptAsync.mockResolvedValue(undefined);
   mockAbortSession.mockResolvedValue(undefined);
   mockGetChildren.mockResolvedValue([]);
-  mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
+  mockGetSessionStatus.mockResolvedValue({ type: 'idle' });
   mockStartServer.mockResolvedValue({
     client: {}, server: { url: 'http://127.0.0.1:1', close: jest.fn() },
   });
@@ -92,11 +92,14 @@ beforeEach(() => {
 
 // Poll fast (real wall-clock, no fake timers — same style as the rest of the
 // headless family) so every test here finishes in well under a second.
-// #202: every runHeadless death in this file now also carries the session clause,
-// because the suite-level default mock answers `{type:'busy'}`. These pins keep
-// asserting the WHOLE composed string, so they also guard the clause ORDER:
-// engine log -> engine skew -> session.
-const BUSY_SUFFIX = ' (session: busy)';
+// #202: every runHeadless death in this file now also carries the session clause.
+// #251 item 1: the suite-level default mock answers `{type:'idle'}` — a kill
+// decision that never extends (spec 2026-09-18 §3), so every death here still
+// carries a clause and still dies at its window; the busy/retry/unknown decisions
+// have their own `describe` below. These pins keep asserting the WHOLE composed
+// string, so they also guard the clause ORDER: engine log -> engine skew ->
+// session.
+const IDLE_SUFFIX = ' (session: idle)';
 
 const OPTS = {
   pollIntervalMs: 5, stableIdlePolls: 3, stableFinishedPolls: 2,
@@ -176,19 +179,21 @@ describe('runHeadless no-output backstop wiring', () => {
  * alongside result.error = 'NO_OUTPUT_BACKSTOP: ...'. That mattered because
  * result-schema.js :: statusFromResult checks `timedOut` BEFORE `error`,
  * so a backstop-killed leg read as an ordinary 'timeout'.
- * NO LONGER REACHABLE: headless.js:1522 now also requires `!backstopFired`
- * and headless.js:1540 requires `backstopFired`, so the two guards are
- * mutually exclusive by construction — see headless.js:1508-1521 for the
- * race they close. The test below pins it: exactly one abort, never both.
+ * NO LONGER REACHABLE: in `headless.js :: runHeadless`, the post-loop
+ * `--timeout` gate now also requires `!backstopFired` and the backstop-abort
+ * gate requires `backstopFired`, so the two guards are mutually exclusive by
+ * construction — the comment above the `--timeout` gate records the race they
+ * close. The test below pins it: exactly one abort, never both.
  *
- * ⚠️ These three citations were RE-DERIVED a THIRD time, against this tree
- * (#251 item 3, 2026-09-16) — 1147/1165/1139-1146 had rotted by ~313 lines
- * and pointed into an unrelated TTFT comment. They had already rotted twice
- * before that: once before W13 (993/1011/985-992 pointed into the stable-idle
- * gate), and again when W13 shipped values that landed inside the explanatory
- * comment rather than on the two `if`s. The gate cannot catch this class:
+ * ⚠️ These citations were NUMBERS until #251 item 1 (2026-09-18) and had
+ * rotted a FOURTH time — 1522/1540/1508-1521 were 33 lines off before this
+ * change even began, and the busy-aware firing site then moved the two `if`s
+ * another 77. Each earlier re-derivation (1147/1165/1139-1146 into an
+ * unrelated TTFT comment; 993/1011/985-992 into the stable-idle gate; W13's
+ * values landing inside the explanatory comment) was re-read against the tree
+ * and rotted anyway, so the fifth fix is to stop citing line numbers here:
  * check-citations.js only proves NNN is IN RANGE, and every stale value was.
- * The two numbers above are the `if` lines themselves, re-read, not shifted.
+ * The guards are named by what they test instead, which cannot shift.
  */
 describe('fix wave: the backstop and the ordinary --timeout must not both fire for one leg', () => {
   test('thresholds set close together: only the backstop fires, never both', async () => {
@@ -412,7 +417,9 @@ describe('v4.6.2 PR3 Task 1: the noOutputBackstopMs coercion guard', () => {
  * the string can be asserted on without driving the whole runHeadless poll
  * loop. The two firing sites (pre-send and per-poll) both still call the
  * original in-closure wrapper, which just forwards to this helper with the
- * per-run `noOutputBackstopMs`/`backstopFromEnv` values — so proving the
+ * window IN FORCE — the per-run `noOutputBackstopMs`, or
+ * `extension.extendedToMs` after the one extension (#251 item 1, spec §5.1) —
+ * plus the `backstopFromEnv` value, so proving the
  * helper's output also proves what those sites will emit. (The wiring itself
  * — that a real runHeadless call actually reaches each branch — is proven
  * separately below, by extending two of the existing end-to-end tests.)
@@ -523,7 +530,7 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
 
     expect(result.error).toBe(
-      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}${BUSY_SUFFIX}`);
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}${IDLE_SUFFIX}`);
     // The prefix models-probe.js classifies on is still the first bytes.
     expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/);
     expect(statusFromResult(result)).toBe('error');
@@ -562,7 +569,7 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
 
     expect(mockGetMessages).not.toHaveBeenCalled(); // proves it was the pre-send site
     expect(result.error).toBe(
-      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}${BUSY_SUFFIX}`);
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}${IDLE_SUFFIX}`);
   }, 20000);
 
   test('control — no engine log dir: the message is byte-identical to today\'s', async () => {
@@ -572,7 +579,7 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
     const result = await runHeadless(MODEL, 'sys', 'user', 'englogmiss1', '/proj', 60000, 'build',
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
-    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${IDLE_SUFFIX}`);
     expect(result.error).not.toMatch(/engine log/);
   }, 20000);
 
@@ -586,7 +593,7 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
     const result = await runHeadless(MODEL, 'sys', 'user', 'englogmiss2', '/proj', 60000, 'build',
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
 
-    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${IDLE_SUFFIX}`);
   }, 20000);
 
   test('a resolver that throws cannot break the death report — the leg still dies with today\'s message', async () => {
@@ -598,7 +605,7 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
         noOutputBackstopMs: 200,
         _engineLog: { dataDir: '/nope', fs: { existsSync: boom, readdirSync: boom, statSync: boom } } });
 
-    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${IDLE_SUFFIX}`);
     expect(result.completed).toBe(false);
     expect(mockAbortSession).toHaveBeenCalledTimes(1);
   }, 20000);
@@ -716,7 +723,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
 
     expect(result.error).toBe(
       `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}`
-      + ` — engine log: ${EXPECTED_EXCERPT}${SKEW_SUFFIX}${BUSY_SUFFIX}`);
+      + ` — engine log: ${EXPECTED_EXCERPT}${SKEW_SUFFIX}${IDLE_SUFFIX}`);
     expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/); // models-probe.js's prefix is still first
     expect(statusFromResult(result)).toBe('error');
   }, 20000);
@@ -736,7 +743,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
     expect(result.error).toBe(
-      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${SKEW_SUFFIX}${BUSY_SUFFIX}`);
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${SKEW_SUFFIX}${IDLE_SUFFIX}`);
     expect(result.error).not.toMatch(/engine log:/);
   }, 20000);
 
@@ -752,7 +759,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
     expect(mockGetMessages).not.toHaveBeenCalled(); // proves it was the pre-send site
     expect(result.error).toBe(
       `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}`
-      + ` — engine log: ${EXPECTED_EXCERPT}${SKEW_SUFFIX}${BUSY_SUFFIX}`);
+      + ` — engine log: ${EXPECTED_EXCERPT}${SKEW_SUFFIX}${IDLE_SUFFIX}`);
   }, 20000);
 
   test('control — no skew on the record: the enriched message is byte-identical to Task A\'s', async () => {
@@ -763,7 +770,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
 
     expect(result.error).toBe(
-      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}${BUSY_SUFFIX}`);
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}${IDLE_SUFFIX}`);
     expect(result.error).not.toMatch(/engine skew/);
   }, 20000);
 
@@ -777,7 +784,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
     const result = await runHeadless(MODEL, 'sys', 'user', 'skewmatch1', '/proj', 60000, 'build',
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
-    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${IDLE_SUFFIX}`);
   }, 20000);
 
   /**
@@ -796,7 +803,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
     const result = await runHeadless(MODEL, 'sys', 'user', 'skewother1', '/proj', 60000, 'build',
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
-    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${IDLE_SUFFIX}`);
     expect(result.error).not.toMatch(/engine skew/);
   }, 20000);
 
@@ -815,7 +822,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
     expect(result.error).toBe(
-      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${SKEW_SUFFIX}${BUSY_SUFFIX}`);
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${SKEW_SUFFIX}${IDLE_SUFFIX}`);
   }, 20000);
 
   test('a skew RETRACTED by a later matching session is not reported', async () => {
@@ -829,7 +836,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
     const result = await runHeadless(MODEL, 'sys', 'user', 'skewfixed1', '/proj', 60000, 'build',
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
-    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${IDLE_SUFFIX}`);
   }, 20000);
 
   test('formatNoOutputBackstopReason composes the two clauses independently', () => {
@@ -967,6 +974,12 @@ describe('v4.9 W13 Task A: the TTFT probe', () => {
     // ~2000 ms (the --timeout). `stableIdlePolls` is set absurdly high so the
     // leg cannot complete early and collapse that gap.
     const DELAY_MS = 150;
+    // #251 item 1: this leg must reach its --timeout, so the session must NOT be
+    // idle — the SDK idle gate completes a leg the instant it has output, and the
+    // suite default flipped to `idle` when the backstop decision arrived. Nothing
+    // about the backstop is exercised here (its window is 60 s, the leg 2 s), so
+    // `busy` restores exactly the pre-#251 fixture: a leg that runs to its cap.
+    mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
     let firstPollAt = null;
     mockGetMessages.mockImplementation(async () => {
       if (firstPollAt === null) { firstPollAt = Date.now(); }
@@ -1217,23 +1230,33 @@ describe('v4.9 W13 Task A: the TTFT probe survives a terminal first poll (PR #20
  */
 describe('#202 — a zero-output death names the engine session status', () => {
   const base = (ms = 200) => formatNoOutputBackstopReason({ ms, fromEnv: false });
-  const run = (taskId, opts = {}) => runHeadless(
-    MODEL, 'sys', 'user', taskId, '/proj', 60000, 'build',
+  // #251 item 1: `timeoutMs` is a PARAMETER now, defaulted to the value every test
+  // here already used, so only the pin that needs the at-cap geometry (S-W2) moves.
+  const run = (taskId, opts = {}, timeoutMs = 60000) => runHeadless(
+    MODEL, 'sys', 'user', taskId, '/proj', timeoutMs, 'build',
     { ...OPTS, noOutputBackstopMs: 200, statusProbeMs: 50, ...opts });
 
   test('S-W1 the leg that never satisfies the output gate STILL asks', async () => {
     mockGetMessages.mockResolvedValue([]);
     const result = await run('sstatus1');
     expect(mockGetSessionStatus).toHaveBeenCalled();
-    expect(result.error).toBe(`${base()} (session: busy)`);
+    // #251 item 1: the suite default is `idle` — the status this pin is about is
+    // whichever one the leg ASKED for and reported, not `busy` in particular.
+    expect(result.error).toBe(`${base()} (session: idle)`);
   }, 20000);
 
   test('S-W2 a retry status carries the upstream cause into the death report', async () => {
+    // #251 item 1: the SUBJECT here is the upstream cause a `retry` carries into the
+    // report, so the fixture must stay `retry` — and a retry is one of the two arms
+    // that now buy a leg another window. The at-cap geometry (window 950 ms against a
+    // 1 s leg cap) keeps this a KILL at its own window, which is what this pin has
+    // always measured; the fourth clause then says why it was not extended.
     mockGetMessages.mockResolvedValue([]);
     mockGetSessionStatus.mockResolvedValue({
       type: 'retry', attempt: 2, message: 'Provider returned error 429' });
-    const result = await run('sstatus2');
-    expect(result.error).toBe(`${base()} (session: retry attempt 2 — Provider returned error 429)`);
+    const result = await run('sstatus2', { noOutputBackstopMs: 950 }, 1000);
+    expect(result.error).toBe(`${base(950)} (session: retry attempt 2 — Provider returned error 429)`
+      + ' — not extended: the window is already at its clamp below the leg cap');
   }, 20000);
 
   test('S-W3 idle-with-nothing-produced is reported — the engine-side signature', async () => {
@@ -1341,10 +1364,14 @@ describe('#202 — a zero-output death names the engine session status', () => {
 
   test('S-W15 an empty top-level type no longer HIDES a keyed answer (D2)', async () => {
     mockGetMessages.mockResolvedValue([]);
+    // #251 item 1: the SUBJECT is the unwrap — that a keyed answer is found behind an
+    // empty top-level `type` — not which state it reports. `idle` proves it just as
+    // well and keeps this a plain kill at its own window (a `busy` fixture would now
+    // buy the leg a second window and make this pin about the extension instead).
     mockGetSessionStatus.mockImplementation(async (_c, sessionId) => (
-      { type: '', [sessionId]: { type: 'busy' } }));
+      { type: '', [sessionId]: { type: 'idle' } }));
     const result = await run('sstatus15');
-    expect(result.error).toBe(`${base()} (session: busy)`);
+    expect(result.error).toBe(`${base()} (session: idle)`);
   }, 20000);
 
   test('S-W16 a status map with no entry for THIS session is its own detail (A2)', async () => {
@@ -1370,10 +1397,12 @@ describe('#202 — a zero-output death names the engine session status', () => {
     // "the engine returned no status" — a false statement ABOUT THE ENGINE,
     // which is the exact defect class #251 item 3 exists to remove.
     mockGetMessages.mockResolvedValue([]);
+    // #251 item 1: the SUBJECT is the unwrap, not the state — see S-W15 above for why
+    // the fixture reports `idle` rather than `busy`.
     mockGetSessionStatus.mockImplementation(async (_c, sessionId) => (
-      { [sessionId]: { type: 'busy' } }));
+      { [sessionId]: { type: 'idle' } }));
     const result = await run('sstatus11');
-    expect(result.error).toBe(`${base()} (session: busy)`);
+    expect(result.error).toBe(`${base()} (session: idle)`);
   }, 20000);
 
   test('S-W12 no status READER at all is its own skip reason', () => {
@@ -1412,5 +1441,278 @@ describe('#202 — a zero-output death names the engine session status', () => {
     mockGetMessages.mockResolvedValue([]);
     const result = await run('sstatus7');
     expect(/^NO_OUTPUT_BACKSTOP:/.test(result.error)).toBe(true);
+  }, 20000);
+});
+
+describe('#251 item 1: the backstop consults the session before the kill', () => {
+  // Geometry (plan R-P6): window 1000 ms, leg cap 60 s → extendWindowMs = 2000 ms.
+  const GEO = { ...OPTS, noOutputBackstopMs: 1000 };
+  const run = (taskId, opts = {}, timeoutMs = 60000) =>
+    runHeadless(MODEL, 'sys', 'user', taskId, '/proj', timeoutMs, 'build', { ...GEO, ...opts });
+
+  test('W1 busy at the deadline: the leg gets one more window, then dies at the EXTENDED deadline with the clause and the record', async () => {
+    // Named mutant "REFUSEDEXTENDPUBLISHED": in headless.js, drop the record rewrite on a
+    // refused extend() — unobservable through W1 (extend() cannot refuse at the first firing
+    // without a stalled loop); the guarantee is the unit pin E6 plus this rewrite; see
+    // council #269 r1 D1. The end-to-end half lives in
+    // tests/headless-backstop-extend-refused.test.js, which injects the refusal at the seam.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
+    const started = Date.now();
+    const result = await run('ext1');
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeGreaterThanOrEqual(1900); // not the 1 s window
+    expect(elapsed).toBeLessThan(10000);           // not the 60 s cap
+    expect(result.completed).toBe(false);
+    expect(result.timedOut).toBeFalsy();
+    // #269 r1 (D5): the head reports the window IN FORCE (2 s) and the window phrase names
+    // the BASE it was extended from (1 s), so no reader attributes 2 s to the env var.
+    expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 2s — a caller-set window of 1s overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default, extended once/);
+    expect(String(result.error)).toMatch(/ \(session: busy\) — window extended once from 1s to 2s at 1s on session busy$/);
+    expect(result.backstop).toEqual({ windowMs: 1000, firedAtMs: expect.any(Number), status: 'busy', extended: true, extendedToMs: 2000 });
+    expect(result.backstop.firedAtMs).toBeGreaterThanOrEqual(1000);
+    expect(mockAbortSession).toHaveBeenCalledTimes(1);
+    // Two status reads: one for the decision at 1 s, one for the report at 2 s.
+    expect(mockGetSessionStatus).toHaveBeenCalledTimes(2);
+  }, 20000);
+
+  test('W2 busy at the deadline, then the model speaks inside the extension: the leg completes, keeps its ttftMs and carries the record (the lever\'s purpose)', async () => {
+    const started = Date.now();
+    // Silence for the first window; from 1.3 s on, a finished assistant message with text.
+    mockGetMessages.mockImplementation(async () => (Date.now() - started < 1300 ? [] : [{
+      info: { role: 'assistant', id: 'm1', time: { created: 1, completed: 2 } },
+      parts: [{ id: 't1', type: 'text', text: 'the answer' }],
+    }]));
+    mockGetSessionStatus.mockImplementation(async () => ({ type: Date.now() - started < 1300 ? 'busy' : 'idle' }));
+    const result = await run('saved1');
+    expect(result.completed).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.summary).toContain('the answer');
+    expect(result.ttftMs).toBeGreaterThanOrEqual(1000);
+    expect(result.backstop).toEqual({ windowMs: 1000, firedAtMs: expect.any(Number), status: 'busy', extended: true, extendedToMs: 2000 });
+    expect(mockAbortSession).not.toHaveBeenCalled();
+  }, 20000);
+
+  test('W3 idle at the deadline: kill at the ORIGINAL window, string byte-identical to 4.12.0, record says idle / not extended', async () => {
+    // Preservation pin, GREEN at HEAD by construction. Named mutant "IDLEEXTENDS": in
+    // decideBackstopExtension change `status.type !== 'busy' && status.type !== 'retry'` to
+    // `status.type !== 'busy' && status.type !== 'retry' && status.type !== 'idle'` — W3 reddens (dies at 2 s).
+    mockGetMessages.mockResolvedValue([]);
+    const started = Date.now();
+    const result = await run('idle1');
+    expect(Date.now() - started).toBeLessThan(1900);
+    expect(String(result.error)).toBe(
+      'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 1s — a caller-set window overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default (session: idle)');
+    expect(result.backstop).toEqual({ windowMs: 1000, firedAtMs: expect.any(Number), status: 'idle', extended: false });
+  }, 20000);
+
+  test('W4 a probe that answers nothing NEVER extends: failed / no-status / skipped all kill at the original window', async () => {
+    // Named mutant "UNKNOWNEXTENDS": drop `&& !isProbeOutcome(status)` from `isEngine` in decideBackstopExtension — the
+    // forged-type case below (`{type:'busy'}` keyed under ANOTHER session, which unwraps to no-status) would then... stay
+    // a kill; the mutant is caught by D6 in the unit file. Here the observable is the kill time and the clause.
+    // Fix round 1, F4: the `skipped` arm the title claims is now actually exercised —
+    // `statusProbeMs: 0` is the documented disable, and sessionStatusSafe answers
+    // `probeUnknown('skipped', 'no window')` without calling the engine at all. Each arm
+    // may therefore carry its own run options (the fourth tuple element).
+    mockGetMessages.mockResolvedValue([]);
+    for (const [name, arm, detail, opts] of [
+      ['failed', () => mockGetSessionStatus.mockRejectedValue(new Error('ECONNRESET')), /probe failed: ECONNRESET/, {}],
+      ['no-status', () => mockGetSessionStatus.mockResolvedValue({}), /probe no-status: /, {}],
+      ['keyed under another session', () => mockGetSessionStatus.mockResolvedValue({ ses_someone_else: { type: 'busy' } }), /probe no-status: /, {}],
+      ['skipped', () => {}, /probe skipped: no window/, { statusProbeMs: 0 }],
+    ]) {
+      jest.clearAllMocks();
+      mockGetMessages.mockResolvedValue([]);
+      arm();
+      const started = Date.now();
+      const result = await run(`unk-${name.replace(/\W/g, '')}`, opts);
+      expect(Date.now() - started).toBeLessThan(1900);
+      expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 1s/);
+      expect(String(result.error)).toMatch(/\(session: unknown — probe /);
+      expect(String(result.error)).toMatch(detail);
+      expect(String(result.error)).not.toMatch(/extended/);
+      expect(result.backstop).toEqual({ windowMs: 1000, firedAtMs: expect.any(Number), status: 'unknown', extended: false });
+    }
+    // The skipped arm must have reached the engine ZERO times — that is what "skipped" means.
+    expect(mockGetSessionStatus).not.toHaveBeenCalled();
+  }, 30000);
+
+  test('W5a retry whose next attempt falls inside the extended window extends; W5b one scheduled past it kills now with the named clause', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    const inside = Date.now() + 1500;
+    mockGetSessionStatus.mockResolvedValue({ type: 'retry', attempt: 2, message: '429 rate limited', next: inside });
+    let started = Date.now();
+    let result = await run('retryin1');
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1900);
+    expect(result.backstop.extended).toBe(true);
+    expect(result.backstop.status).toBe('retry');
+    expect(String(result.error)).toMatch(/ — window extended once from 1s to 2s at 1s on session retry$/);
+
+    jest.clearAllMocks();
+    mockGetMessages.mockResolvedValue([]);
+    const beyond = Date.now() + 60 * 60 * 1000;
+    mockGetSessionStatus.mockResolvedValue({ type: 'retry', attempt: 3, message: '503 upstream', next: beyond });
+    started = Date.now();
+    result = await run('retryout1');
+    expect(Date.now() - started).toBeLessThan(1900);
+    expect(String(result.error)).toMatch(/ \(session: retry attempt 3 — 503 upstream\) — not extended: the engine schedules its next attempt at \d{4}-\d{2}-\d{2}T[\d:.]+Z, past the extended window$/);
+    expect(result.backstop).toEqual({ windowMs: 1000, firedAtMs: expect.any(Number), status: 'retry', extended: false, why: 'retry-beyond-window', retryNextIso: new Date(beyond).toISOString() });
+  }, 30000);
+
+  test('W6 once means once: busy at both deadlines dies at the extended deadline, never a third window', async () => {
+    // ⚠️ MEASURED 2026-09-18 (#251 item 1): the named mutant "TWICE" — in
+    // no-output-backstop.js extend(), drop `|| extended` — does NOT redden W6. This file
+    // stays 68/68 under it. It is caught by tests/no-output-backstop.test.js :: E2, which
+    // owns extend()'s once-only guard, and that is the right place for a helper's mutant.
+    // A second extension is unreachable THREE ways over here: the poll loop decides only
+    // when `!backstopRecord`; extend() refuses once `extended`; and a re-decision derives
+    // its deadline from the ORIGINAL window, so the new deadline is never strictly later.
+    // Dropping the first two TOGETHER (`|| extended` plus `if (!backstopRecord)`) reddens
+    // W1 and W5a — the record is re-decided at the second firing and reports "at 2s"
+    // instead of "at 1s" — and still not W6, because the third mechanism holds alone.
+    // So W6 pins the OBSERVABLE the three produce (the leg dies at the extended deadline,
+    // never a third window) and is green by construction; W1 is the pin that owns the
+    // decide-once gate.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
+    const started = Date.now();
+    const result = await run('twice1', {}, 8000);
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeGreaterThanOrEqual(1900);
+    expect(elapsed).toBeLessThan(4000);
+    expect(result.timedOut).toBeFalsy();
+    // #269 r1 (D5): the extended head names the base window once, and the fourth clause
+    // says the same thing a second way — there is exactly ONE extension in either place.
+    expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 2s — a caller-set window of 1s overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default, extended once/);
+    expect(String(result.error)).toMatch(/ — window extended once from 1s to 2s at 1s on session busy$/);
+  }, 20000);
+
+  test('W7 at the cap: a window already at the clamp is not extended (the CI retry leg\'s shape), and the clause says so', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
+    const started = Date.now();
+    // Geometry (whole-branch review F14): `extendWindowMs(2850, 3000) = min(5700, 2850) = 2850`,
+    // so the window is still AT the clamp and still cannot be extended — the same row of spec §3,
+    // with 150 ms between the backstop and the leg cap instead of the 50 ms this pin used to run
+    // on (window 950 under a 1000 ms cap, measured at 966 ms). `timedOut` falsy is the assertion
+    // a stalled runner could flip, so the wall-clock bound is deliberately no tighter than it.
+    const result = await run('atcap1', { noOutputBackstopMs: 2850 }, 3000);
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(result.timedOut).toBeFalsy(); // the backstop, not the 3 s leg cap, ended it — the named diagnosis survives
+    expect(String(result.error)).toMatch(/ \(session: busy\) — not extended: the window is already at its clamp below the leg cap$/);
+    expect(result.backstop).toEqual({ windowMs: 2850, firedAtMs: expect.any(Number), status: 'busy', extended: false, why: 'at-cap' });
+  }, 20000);
+
+  test('W8 the pre-send site never extends: a prompt send that never resolves dies at the window with the byte-identical string, record why pre-send', async () => {
+    // Preservation pin. Named mutant "PRESENDEXTENDS" (MEASURED 2026-09-18: RED on W8 and on
+    // S-W6, 2 failed / 68): in headless.js's pre-send catch, delete the two lines that
+    // neutralise the decision — `backstopRecord = { ...backstopRecord, extended: false, why:
+    // 'pre-send' };` and the `delete` beside it — so the site publishes the decision's own
+    // record. The report then claims a 2 s window and an extension that never happened, which
+    // is exactly the byte-identity this pin holds. (The catch calls decideBackstopExtension
+    // for the RECORD only; the temptation the mutant models is letting that decision govern
+    // this site, which never observed a provider stream at all.)
+    mockSendPromptAsync.mockImplementation(() => new Promise(() => {}));
+    mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
+    const started = Date.now();
+    const result = await run('presend1');
+    expect(Date.now() - started).toBeLessThan(1900);
+    expect(String(result.error)).toBe(
+      'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 1s — a caller-set window overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default (session: busy)');
+    expect(result.backstop).toEqual({ windowMs: 1000, firedAtMs: expect.any(Number), status: 'busy', extended: false, why: 'pre-send' });
+  }, 20000);
+
+  test('W9 a leg the backstop never fires for carries NO backstop key (byte-identical documents)', async () => {
+    mockGetMessages.mockResolvedValue([{
+      info: { role: 'assistant', id: 'm1', time: { created: 1, completed: 2 } },
+      parts: [{ id: 't1', type: 'text', text: 'quick answer' }],
+    }]);
+    const result = await run('quick1');
+    expect(result.completed).toBe(true);
+    expect('backstop' in result).toBe(false);
+  }, 20000);
+
+  test('W10 formatNoOutputBackstopReason without `extension` is byte-identical; an extension changes the window phrase AND appends the clause LAST', () => {
+    const base = { ms: 480000, fromEnv: true, engineLogExcerpt: 'ERROR x', engineSkew: { server: '1.18.15', installed: '1.18.14' }, sessionStatus: { type: 'busy' } };
+    const before = formatNoOutputBackstopReason(base);
+    // Byte-identity, the fence this whole design stands on: a record with nothing to say
+    // leaves BOTH the head and the clause list exactly where 4.12.0 left them.
+    expect(formatNoOutputBackstopReason({ ...base, extension: undefined })).toBe(before);
+    expect(formatNoOutputBackstopReason({ ...base, extension: { windowMs: 480000, firedAtMs: 480722, status: 'idle', extended: false } })).toBe(before);
+    expect(formatNoOutputBackstopReason({ ...base, extension: { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: false, why: 'at-cap' } }))
+      .toBe(`${before} — not extended: the window is already at its clamp below the leg cap`);
+    // #269 r1 (D5): the CI composition, whole. `ms` is the window IN FORCE at the kill
+    // (912 s), and the phrase names the 480 s the env var actually holds — the two numbers
+    // are different facts and the sentence now says which is which.
+    expect(formatNoOutputBackstopReason({
+      ...base, ms: 912000,
+      extension: { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 },
+    })).toBe('NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 912s — the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables) of 480s, extended once'
+      + ' — engine log: ERROR x (engine skew: server 1.18.15 ≠ installed 1.18.14) (session: busy)'
+      + ' — window extended once from 480s to 912s at 481s on session busy');
+    // The caller-set arm of the same fact (a Stage-1 retry or the live probe).
+    expect(formatNoOutputBackstopReason({
+      ms: 60000, fromEnv: false, sessionStatus: { type: 'busy' },
+      extension: { windowMs: 30000, firedAtMs: 30011, status: 'busy', extended: true, extendedToMs: 60000 },
+    })).toBe('NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 60s — a caller-set window of 30s overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default, extended once'
+      + ' (session: busy) — window extended once from 30s to 60s at 30s on session busy');
+  });
+
+  test('W11 a retry `next` outside the Date range still dies NAMED, never as `Invalid time value` (fix round 1, F3)', async () => {
+    // The end-to-end half of D11. `status.next` is engine-supplied: a upstream unit bug
+    // (µs/ns for ms) puts |next| > 8.64e15 on the wire, and the decision used to format it
+    // with `new Date(next).toISOString()` — which THROWS on the kill path. The leg then
+    // returned through runHeadless's outer catch as `error: 'Invalid time value'`, losing
+    // both the prefix models-probe.js classifies on and the record. RED before the fix with
+    // exactly that string.
+    mockGetMessages.mockResolvedValue([]);
+    const beyond = 8.64e15 + 1;
+    mockGetSessionStatus.mockResolvedValue({ type: 'retry', attempt: 1, message: 'x', next: beyond });
+    const started = Date.now();
+    const result = await run('retryhuge1');
+    expect(Date.now() - started).toBeLessThan(1900); // the original window: never extended
+    expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+    expect(String(result.error)).toMatch(/ — not extended: the engine schedules its next attempt at 8640000000000001, past the extended window$/);
+    expect(result.backstop.why).toBe('retry-beyond-window');
+    expect(result.backstop.retryNextIso).toBe(String(beyond));
+  }, 20000);
+
+  test('W12 the SHAPE CI actually produces: a session-keyed busy unwraps and buys the leg its one window (fix round 1, F5)', async () => {
+    // S-W11/S-W15 pin the unwrap on a KILL (their fixtures report `idle`, ruling 5(a)), so
+    // nothing pinned unwrap-then-EXTEND — which is the live shape: the engine answers a map
+    // keyed by session id, and the session inside it is busy. Named mutant
+    // "KEYEDUNWRAPDROPPED": in headless.js :: sessionStatusSafe replace `(raw && raw[sessionId])`
+    // with `null` — this leg then dies at 1 s with `probe no-status` instead of extending.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({ ses_parent: { type: 'busy' } });
+    const started = Date.now();
+    const result = await run('keyedbusy1');
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1900);
+    expect(String(result.error)).toMatch(/ \(session: busy\) — window extended once from 1s to 2s at 1s on session busy$/);
+    expect(result.backstop).toEqual({ windowMs: 1000, firedAtMs: expect.any(Number), status: 'busy', extended: true, extendedToMs: 2000 });
+  }, 20000);
+
+  test('W13 the DECISION probe is bounded by the leg time left, so a slow engine cannot push the kill past the leg cap (council #269 r2, C1)', async () => {
+    // Geometry: the at-cap shape (window 2850 ms under a 3 000 ms cap), so ~150 ms of leg
+    // time remains when the backstop fires — and a status read that takes 2 s is far slower
+    // than that. MEASURED RED at a5a8d74a (with a 400 ms read): the probe ran its full 400 ms
+    // PAST the cap and the leg died at 3 273 ms carrying the engine's late `busy` — the right
+    // NAME on the wrong clock; a 2 s read makes the RED ~4.85 s against a GREEN bound of 3.5 s,
+    // so a loaded runner cannot flip the verdict (controller, after the r2 fix re-review).
+    // The decision read now gets `min(statusProbeMs, deadline - Date.now())`, and
+    // `sessionStatusSafe` skips a non-positive window, so a firing with no leg time left kills
+    // at once under its own name. Named mutant "PROBEUNBOUNDED": in headless.js pass
+    // `statusProbeMs` back to the decision read instead of `probeBudgetMs`.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockImplementation(() => new Promise(r => setTimeout(() => r({ type: 'busy' }), 2000)));
+    const started = Date.now();
+    const result = await run('probebound1', { noOutputBackstopMs: 2850 }, 3000);
+    expect(Date.now() - started).toBeLessThan(3500);
+    expect(result.timedOut).toBeFalsy(); // the backstop, not the 3 s leg cap, ended it
+    expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+    // Either arm is a correct kill under this name — the bounded read gave up, or there was
+    // no window left to give it. What must NOT reach the report is the engine's late `busy`.
+    expect(String(result.error)).toMatch(/\(session: unknown — probe (failed|skipped)/);
+    expect(result.backstop).toEqual({ windowMs: 2850, firedAtMs: expect.any(Number), status: 'unknown', extended: false });
   }, 20000);
 });

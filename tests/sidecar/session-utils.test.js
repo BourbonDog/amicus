@@ -321,6 +321,49 @@ describe('Session Utils', () => {
     });
   });
 
+  // #251 item 1: opts.backstop follows the same emit-when-valid / delete-when-absent
+  // rule as finish and variant. This is the COMPLETE / timed-out / aborted path — the
+  // only one a leg the extension SAVED ever takes (the four error branches cover deaths).
+  describe('finalizeSession opts.backstop (#251 item 1)', () => {
+    const REC = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+    const FORGED = { windowMs: 'x', extended: 'yes' };
+    let sessDir;
+
+    beforeEach(() => {
+      detectConflicts.mockReturnValue([]);
+      sessDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'finalize-backstop-'));
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
+    });
+
+    afterEach(() => {
+      fs.rmSync(sessDir, { recursive: true, force: true });
+    });
+
+    const readSaved = () => JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+
+    it('stamps metadata.backstop when opts carries a valid record — the survivor path', () => {
+      // Named mutant "SOLOBACKSTOPDROPPED": drop the set — a leg the extension saved records nothing.
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [] };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete', backstop: REC });
+      expect(readSaved().backstop).toEqual(REC);
+    });
+
+    it('REMOVES a prior record when opts carries none — a resumed run reuses the same metadata', () => {
+      // Named mutant "STALEBACKSTOP": drop the `else { delete metadata.backstop; }` — the previous
+      // attempt's record rides this one (council #232 r1 B1).
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [], backstop: REC };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete' });
+      expect('backstop' in readSaved()).toBe(false);
+    });
+
+    it('drops a forged record rather than coercing it', () => {
+      // Named mutant "SOLOBACKSTOPCOERCED": in session-utils.js :: finalizeSession, `metadata.backstop = opts.backstop || null;` — the key appears as null here.
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [] };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete', backstop: FORGED });
+      expect('backstop' in readSaved()).toBe(false);
+    });
+  });
+
   describe('outputSummary', () => {
     it('wraps the summary in the untrusted_sidecar_output fence (B03)', () => {
       const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
