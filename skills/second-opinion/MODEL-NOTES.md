@@ -4,9 +4,12 @@ This file is the `second-opinion` skill's evolving memory of **how to actually d
 well**. Read it before Stage 0 (council selection and launch); update it, with the user's
 approval, at the end of each run (Stage 6). Keep it tight — merge and prune rather than append.
 
-_Last updated: 2026-09-16 (the `NO_OUTPUT_BACKSTOP` global-rule and kimi-section bullets corrected —
+_Last updated: 2026-09-18 (the once-only extension, #251 item 1 — the backstop now reads
+`session.status` at its deadline and buys a busy session one more window; four stale line citations
+in the `NO_OUTPUT_BACKSTOP` bullet re-anchored to symbols). Prior: 2026-09-16 (the
+`NO_OUTPUT_BACKSTOP` global-rule and kimi-section bullets corrected —
 300s default, not 120s; the retry escalation formula; the tool-call disarm; `ttftMs` as the disarm
-moment; see changelog, #245). Prior: 2026-08-25 (per-section fold-back, both directions — the
+moment; see changelog, #245); 2026-08-25 (per-section fold-back, both directions — the
 `NO_OUTPUT_BACKSTOP` mechanism, conformance-vs-content plus the credit-exhaustion attribution
 correction, the inlined-source-pack technique, and per-model calibration nuances upstreamed from
 the field ledger; the `runStats` allowlist correction adopted back into the local ledger; see
@@ -51,30 +54,39 @@ peer-consensus≠evidence rule upstreamed)._
   while direct-routed seats on the same run keep working.
 - **`NO_OUTPUT_BACKSTOP` is a 300s no-FIRST-token deadline (NOT 120s — re-verified against v4.11.0
   source 2026-09-16; every number in the pre-2026-09 version of this bullet was stale).** Read the
-  code, not this file, before tuning: `src/utils/no-output-backstop.js:23` is
-  `DEFAULT_NO_OUTPUT_BACKSTOP_MS = 300000`. The 120s figure was correct only through ~v4.6.2; CI
+  code, not this file, before tuning: `src/utils/no-output-backstop.js :: DEFAULT_NO_OUTPUT_BACKSTOP_MS`
+  is `300000`. The 120s figure was correct only through ~v4.6.2; CI
   carried a `300000` override, the maintainer read that as evidence the default was wrong, and
   300s became the default (CHANGELOG, "the default was wrong rather than merely conservative").
   CI's `council-review.yml` runs 480s.
   - **Arms at leg launch, disarms PERMANENTLY on the first substantive tick** — output growth,
-    reasoning-token growth, **or a tool call**. Independent of `--timeout`. The only knob is
+    reasoning-token growth, **or a tool call**. Independent of `--timeout` — except for the ONE
+    extension (below), which is clamped by it. The only knob is
     `AMICUS_NO_OUTPUT_BACKSTOP_MS`; explicit `0` disables it (documented escape hatch, which is why
     the resolver uses `envNumber` and not `Number(env) || default`).
-  - **A leg's recorded `ttftMs` IS the disarm moment** (`src/headless.js:1167` measures from the
-    backstop's own clock origin to the first `substantiveActivity` poll), so `runStats[].ttftMs` is
+  - **A leg's recorded `ttftMs` IS the disarm moment** (`src/headless.js :: runHeadless` measures from
+    the backstop's own clock origin to the first `substantiveActivity` poll), so `runStats[].ttftMs` is
     directly comparable to the window — you can read the margin straight off a finished run.
     Measured 2026-09-16 (PR #254, CI, 480s window): the non-gpt seats first spoke at 282–468s;
     one glm leg had 12s of margin.
   - **The retry DOES escalate — the old "retry inherits the same threshold" claim is false.**
     `src/council/run-retry.js:97` forwards `escalatedBackstopMs`, and
-    `src/council/run-retry-window.js:59` computes `min(2 × base, floor(legTimeoutMs × 0.95))` —
-    doubled, and clamped *strictly below* the leg cap rather than to it, deliberately: an
+    `src/utils/no-output-backstop.js :: extendWindowMs` computes `min(2 × base,
+    floor(legTimeoutMs × 0.95))` — `run-retry-window.js :: retryBackstopMs` is now that same function
+    object, re-exported (#251 item 1 moved the formula; the value is unchanged) — doubled, and clamped
+    *strictly below* the leg cap rather than to it, deliberately: an
     equal-deadline tie let the backstop win only by poll-loop ordering, and losing it would downgrade
     a named `NO_OUTPUT_BACKSTOP` into a generic `timeout`. At defaults with `--timeout 20` the retry
     window is 600s; in CI (480s, `--timeout 16`) it is 912s.
+  - **Since #251 item 1 the first attempt can be extended ONCE.** At the deadline the engine's
+    `session.status` is read; `busy` or `retry` (next attempt within reach) re-arms the backstop at
+    `extendWindowMs(window, legCap)` = the retry's formula (CI: 480 s → 912 s); `idle`, an unknown
+    arm or a probe that could not answer kills at once. The CI retry leg is already at 912 s and
+    records `not extended: … leg cap`. Read `backstop` on the leg document (`extended`, `why`) and
+    the death report's last clause to tell a saved leg from a delayed death.
   - **A tool call disarms this detector, so it cannot catch a tool wedge.** A model that immediately
     fires a tool call disarms the backstop within seconds; only the separate
-    `TOOL_CALL_STALL_MS` (`src/headless.js:97`) can kill it after that, and *that* window is
+    `TOOL_CALL_STALL_MS` (`src/headless.js :: TOOL_CALL_STALL_MS`) can kill it after that, and *that* window is
     not doubled on retry. Since v4.9.8 review-mode seats run with no tools at all (`council-seat`),
     so this mostly concerns task mode and `--tools` opt-ins.
   - The error text ("likely a listed-but-not-serving model or a dead endpoint") names the

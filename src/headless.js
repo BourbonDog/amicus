@@ -136,7 +136,8 @@ const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 3000
 const STATUS_PROBE_MS = 5000;
 /**
  * v4.4 B1 — bounded post-loop usage reconciliation. The fold-marker fast path
- * (headless.js:1239) and the SDK-idle break (headless.js:1324) exit
+ * (`runHeadless`'s poll loop, the `findTrailingFoldMarker(...)` break) and the
+ * SDK-idle break (the same loop's `s.type === 'idle'` break) exit
  * WITHOUT requiring `info.time.completed`, but OpenCode stamps
  * `info.tokens`/`info.cost` at message finalization — so those
  * exits can win the race against the provider's usage payload and report a leg
@@ -250,9 +251,10 @@ function withTimeout(promise, ms, label) {
  *     resolveNoOutputBackstopMs())` and forwards it on `common` as a direct
  *     `noOutputBackstopMs` — so a 600s retry-fired backstop (the 300s env
  *     default, doubled) is "caller-set" by this predicate while still being
- *     *derived from* the env default. Only src/sidecar/models-probe.js:79's hardcoded,
- *     non-tunable 30s (PROBE_WINDOW_MS; docs/usage.md:406 promises it's "not
- *     tunable") is truly independent of the env var. Because a real
+ *     *derived from* the env default. Only `src/sidecar/models-probe.js ::
+ *     probeStoredAliases`'s hardcoded, non-tunable 30s (PROBE_WINDOW_MS;
+ *     docs/usage.md's `SILENT` row promises it's "not tunable") is truly
+ *     independent of the env var. Because a real
  *     `fromEnv` flag distinguishing those two cases would have to ride the
  *     same value through src/sidecar/fanout.js, which is line-locked at
  *     EXACTLY 300/300 this release, the caller-set branch instead names the
@@ -413,7 +415,8 @@ async function sessionStatusSafe(readStatus, client, sessionId, dirArgs, ms) {
   try {
     const raw = await withTimeout(
       readStatus(client, sessionId, ...(dirArgs || [])), ms, 'getSessionStatus(death-report)');
-    // The same READ the poll-loop probe does at headless.js:1295 — the
+    // The same READ the poll-loop probe does — `runHeadless`'s poll loop
+    // (`if (mirror.output.length > 0)` … `getSessionStatus`). The
     // engine answers either with the status or with a map keyed by session id,
     // and without the unwrap a keyed answer would be reported as "the engine
     // returned no status", a false statement about the engine.
@@ -1997,8 +2000,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         ...subtreeFlags,
         ...subtreeResult,
         ...sentVariantFields,
-        // #133 P1: sessionId was assigned at :413/:417, well before this
-        // return — guaranteed set here, same as `taskId` above.
+        // #133 P1: `sessionId` is assigned in `runHeadless` at the
+        // `createSession`/shared-session branches, well before this return —
+        // guaranteed set here, same as `taskId` above.
         opencodeSessionId: sessionId,
         // v4.9 W13 Task A: emit-when-set. This return is reached by legs that
         // failed with no USABLE output, which is not the same as no output at
@@ -2113,7 +2117,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       aborted: false,
       taskId,
       usage: emptyUsageTotals(),
-      // #133 P1: measured, not assumed — `sessionId` (:365) is in scope
+      // #133 P1: measured, not assumed — `sessionId` (assigned in `runHeadless`
+      // at the `createSession`/shared-session branches) is in scope
       // through this whole catch (it is already read at the `if (sessionId)`
       // abort-on-error above) but, unlike the two returns in the try body,
       // is NOT guaranteed assigned here: an exception thrown before session

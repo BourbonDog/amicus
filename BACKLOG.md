@@ -9069,3 +9069,33 @@ Deferred — one line each, none blocks anything:
   created AFTER the label time, never by head sha — a sha match picked up the push-time skipped run
   and removed the label 3 s after applying it (the round was unaffected; label-off is the safe
   end state).
+
+## #251 item 1 — filed, not fixed (2026-09-18)
+
+- [ ] The poll loop's backstop block sits INSIDE the poll body's `try … catch (pollError)`
+  (`src/headless.js :: runHeadless`) and `consecutivePollFailures` is reset at the top of every poll
+  before that block runs, so a throw inside the block is swallowed as a poll failure and retried
+  every poll (5 ms in tests, 2 s at the default interval) until the leg `--timeout` — the leg then
+  dies a generic `timeout` with the `NO_OUTPUT_BACKSTOP:` diagnosis lost. Measured on this branch
+  when `decideBackstopExtension` still threw on an out-of-range `retry.next` (W11's RED was a 20 s
+  hang, not the RangeError). The known thrower is gone; the shape is not — move the backstop block
+  out of the poll `try`, or count its failures toward the bail. (#251 item 1, Task 2 fix round)
+- [ ] `tests/no-output-backstop-wiring.test.js` runs ≈ 34 s (measured 2026-09-18; from ≈ 15 s): the
+  new W1/W2/W4/W5/W6/W11/W12 pins wait on real 1–2 s windows by design. Accepted cost; a fake-timer
+  rewrite of that describe would buy the time back. (#251 item 1)
+- [ ] `check-citations.js` proves a `file.js:NNN` citation is only IN RANGE, never that it still
+  names what it points at, and it does not scan `skills/**` or `docs/**` at all. Task 4's sweep
+  re-anchored all five line citations in `src/headless.js` comments and the four in the
+  `NO_OUTPUT_BACKSTOP` bullet of `skills/second-opinion/MODEL-NOTES.md` to `file :: symbol` form;
+  the one line citation left in `src/headless.js` is `run.schema.json:23`, verified correct at HEAD.
+  Nothing enforces the symbol convention, so the rot returns with the next file that moves.
+  (#251 item 1, Task 4)
+- [ ] `src/utils/result-schema.js` is at 300/300 with TWO emit-when-set spreads packed onto one line
+  of `buildRunResult`'s literal (`finish` and `backstop`) and a lazy `require` inside that hot
+  literal; the next field to reach `buildRunResult` has nowhere to go without splitting the file
+  (the run-result shape into its own leaf is the natural cut). (#251 item 1, Task 3)
+- [ ] The pre-commit hook regenerates and stages `docs/architecture-map.md` at commit time, i.e.
+  AFTER the developer has already run `npm test`, so a change that adds an export fails
+  `tests/scripts/generate-docs-check.test.js` on the stale map until `node scripts/generate-docs.js`
+  is run by hand first — it bit Tasks 1 and 3. Document the order in CONTRIBUTING, or have that test
+  regenerate before it compares. (#251 item 1, Task 3)

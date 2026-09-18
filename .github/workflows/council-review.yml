@@ -1284,6 +1284,15 @@ jobs:
           # strictly below the per-leg `--timeout 16` (960000 ms) set below, so
           # the backstop still fires FIRST and a genuinely silent seat is still
           # reported and retried rather than burning the whole wall clock.
+          # #251 item 1 (2026-09-18): the window is a FIRST cut, not the last. At 480 s a
+          # zero-output leg asks the engine what the session is doing; `busy`/`retry` buys
+          # the retry's window once (912 s here — still below --timeout, so the named
+          # diagnosis survives), anything else kills at once. Motive: on 4.12.0 all 6
+          # backstop kills across PR #266 rounds 2–3 read `(session: busy)`, and their
+          # retries first spoke at 28/133/503 s. The job's worst case does not move (the
+          # pin in tests/scripts/council-review-workflow.test.js already counts the first
+          # attempt at the leg cap). Read the death report's last clause / the leg's
+          # `backstop` record to see whether an extension saved a leg or delayed a death.
           # A truly silent population does remain (2 legs of 21 produced nothing
           # at all), which is why the backstop stays.
           # SINGLE-SPELLED on purpose: no `workflow_call` input, no
