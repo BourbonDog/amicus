@@ -17,14 +17,16 @@ All notable changes to Amicus are documented here. Format follows
   retry leg, already at 912 s), or `— not extended: the engine schedules its next attempt at …, past
   the extended window`; a kill that was never a candidate is byte-identical to 4.12.0's. Every leg
   the backstop fired for carries a `backstop` record on its document (`windowMs`, `firedAtMs`,
-  `status`, `extended`, and `extendedToMs` or `why`) — including a leg the extension SAVED, which
+  `status`, `extended`, and `extendedToMs` or `why` — with `retryNextIso` when the engine's next
+  attempt was the reason) — including a leg the extension SAVED, which
   is how the next corpus counts what the lever bought. Measured motive: on amicus 4.12.0 every one
-  of 6 backstop kills across two CI rounds reported `(session: busy)`, and the retries that healed
-  them first spoke at 28 s, 133 s and 503 s — the last past the 480 s wall. CI's job worst case is
+  of 6 backstop kills across two CI rounds reported `(session: busy)`, and the four retries that
+  healed them first spoke at 380 s, 28 s, 133 s and 503 s — the last past the 480 s wall — while the
+  fifth died busy again at 914 s. CI's job worst case is
   unchanged (a streaming first attempt was always bounded by the leg cap, not the backstop); the
   live model probe's 30 s window may now run to 60 s for a session the engine reports busy.
-  `AMICUS_NO_OUTPUT_BACKSTOP_MS=0` still disables everything. (#251 item 1; closes #135's adapt half
-  when released)
+  `AMICUS_NO_OUTPUT_BACKSTOP_MS=0` still disables everything. (#251 item 1; the owner ruled that
+  #135 closes when this ships)
 - **The CI council can pin a seat's OpenRouter upstream through `COUNCIL_PROVIDER_ROUTING`, and
   ships with it blank.** `.github/workflows/council-review.yml` writes an `opencode.json` carrying
   only `provider.openrouter.models.<id>.options.provider` into the run directory before the paid

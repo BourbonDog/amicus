@@ -1382,8 +1382,11 @@ need Claude or a live council run to regenerate it.
 
 A headless leg ends on the first of: the engine reporting `idle`; its last message
 finalizing (two stable polls); the no-output backstop (which, since #251 item 1, asks
-`session.status` at its deadline and extends once — doubled, clamped strictly below
-`--timeout` — when the engine reports `busy` or `retry`); the tool-stall detector; the
+`session.status` at its deadline and extends once, doubled and clamped strictly below
+`--timeout`, when the engine reports `busy` or `retry` — when the window has room below the
+leg cap (the CI retry leg, already at 912 s, has none and records `at-cap`), when a `retry`'s
+next attempt falls inside it, and only once per leg; the pre-send site never extends); the
+tool-stall detector; the
 tool-settle ceiling (when a tool call never settles); a retry the engine schedules
 past the leg deadline (`RETRY_BEYOND_DEADLINE`); or the leg `--timeout`. The
 flat-output heuristic that used to end a leg after 30 stable polls now runs only

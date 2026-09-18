@@ -1288,8 +1288,10 @@ jobs:
           # zero-output leg asks the engine what the session is doing; `busy`/`retry` buys
           # the retry's window once (912 s here — still below --timeout, so the named
           # diagnosis survives), anything else kills at once. Motive: on 4.12.0 all 6
-          # backstop kills across PR #266 rounds 2–3 read `(session: busy)`, and their
-          # retries first spoke at 28/133/503 s. The job's worst case does not move (the
+          # backstop kills across PR #266 rounds 2–3 read `(session: busy)`, and the four
+          # retries that healed them first spoke at 380 s, 28 s, 133 s and 503 s — the last
+          # past the 480 s wall — while the fifth died busy again at 914 s.
+          # The job's worst case does not move (the
           # pin in tests/scripts/council-review-workflow.test.js already counts the first
           # attempt at the leg cap). Read the death report's last clause / the leg's
           # `backstop` record to see whether an extension saved a leg or delayed a death.

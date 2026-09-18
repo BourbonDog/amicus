@@ -9085,13 +9085,14 @@ Deferred — one line each, none blocks anything:
   rewrite of that describe would buy the time back. (#251 item 1)
 - [ ] `check-citations.js` proves a `file.js:NNN` citation is only IN RANGE, never that it still
   names what it points at, and it does not scan `skills/**` or `docs/**` at all. Task 4's sweep
-  re-anchored all five line citations in `src/headless.js` comments and the four in the
-  `NO_OUTPUT_BACKSTOP` bullet of `skills/second-opinion/MODEL-NOTES.md` to `file :: symbol` form;
+  re-anchored all eight line citations at five comment sites in `src/headless.js`, and the four in
+  the `NO_OUTPUT_BACKSTOP` bullet of `skills/second-opinion/MODEL-NOTES.md`, to `file :: symbol` form;
   the one line citation left in `src/headless.js` is `run.schema.json:23`, verified correct at HEAD.
   Nothing enforces the symbol convention, so the rot returns with the next file that moves.
   (#251 item 1, Task 4)
-- [ ] `src/utils/result-schema.js` is at 300/300 with TWO emit-when-set spreads packed onto one line
-  of `buildRunResult`'s literal (`finish` and `backstop`) and a lazy `require` inside that hot
+- [ ] `src/utils/result-schema.js` is at 300/300 with THREE emit-when-set spreads packed onto one
+  line of `buildRunResult`'s literal (`variant`, `variantUnverified` and `backstop`; `finish` still
+  has the line above to itself) plus a lazy `require` inside that hot
   literal; the next field to reach `buildRunResult` has nowhere to go without splitting the file
   (the run-result shape into its own leaf is the natural cut). (#251 item 1, Task 3)
 - [ ] The pre-commit hook regenerates and stages `docs/architecture-map.md` at commit time, i.e.
