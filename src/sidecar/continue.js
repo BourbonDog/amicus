@@ -242,7 +242,7 @@ async function continueSidecar(options) {
   // status explicitly also preserves the interactive empty-summary carve-out:
   // a clean interactive run finalizes 'complete' without tripping the #36
   // empty-summary guard.
-  const { resolveTerminalState } = require('./session-finalize');
+  const { resolveTerminalState, stampBackstop } = require('./session-finalize');
   const terminal = resolveTerminalState(result);
   if (terminal.status === 'error') {
     meta.status = 'error';
@@ -250,11 +250,12 @@ async function continueSidecar(options) {
     if (result && typeof result.finish === 'string') { meta.finish = result.finish; } // #218 PR 3: emit-when-set; a fresh session's metadata has no prior finish to remove (resume's does -- resume.js)
     if (result && typeof result.variant === 'string') { meta.variant = result.variant; } // #218 PR 4: emit-when-set, like finish (named mutant "CONTINUEERRORNOVARIANT", tests/continue-resume-spend.test.js)
     if (result && result.variantUnverified === true) { meta.variantUnverified = true; }
+    stampBackstop(meta, result); // #251 item 1: the backstop's decision record (named mutant "CONTINUEERRORNOBACKSTOP", tests/continue-resume-spend.test.js)
     meta.completedAt = new Date().toISOString();
     writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Continuation completed with error', { taskId: newTaskId, error: meta.reason });
   } else {
-    finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified }); // named mutant "CONTINUEVARIANTDROPPED" (tests/continue-resume-spend.test.js): drop the variant args
+    finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified, backstop: result && result.backstop }); // named mutant "CONTINUEVARIANTDROPPED" (tests/continue-resume-spend.test.js): drop the variant args
   }
   // v4.3: attribute continue spend (C9/E4). Reload meta, write usage + append a
   // ledger row (status: statusFromResult, matching start.js — not terminal.status).

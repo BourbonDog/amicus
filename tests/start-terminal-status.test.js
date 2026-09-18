@@ -157,6 +157,30 @@ describe('start.js terminal state classification', () => {
     expect('finish' in metadata).toBe(false);
   });
 
+  // #251 item 1: a NO_OUTPUT_BACKSTOP death resolves to `status: 'error'` too, so it
+  // takes the same branch as OUTPUT_LENGTH above — the one that writes metadata.json
+  // directly and never calls finalizeSession.
+  it('a NO_OUTPUT_BACKSTOP result stamps the backstop record on metadata (#251 item 1)', async () => {
+    // Named mutant "SOLOERRORNOBACKSTOP": drop the `stampBackstop(meta, result)` line from start.js's error branch.
+    const REC = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+    const { code, metadata } = await runWith({
+      completed: false, timedOut: false, aborted: false, summary: '', taskId: 'test0b1',
+      error: 'NO_OUTPUT_BACKSTOP: no output in 912s — window extended once from 480s to 912s at 481s on session busy',
+      backstop: REC,
+    });
+    expect(code).toBe(1);
+    expect(metadata.status).toBe('error');
+    expect(metadata.backstop).toEqual(REC); // SOLOERRORNOBACKSTOP
+  });
+
+  it('a completed result with no backstop leaves the key off metadata (emit-when-set)', async () => {
+    const { metadata } = await runWith({
+      completed: true, timedOut: false, aborted: false, summary: 'done', taskId: 'test0b2'
+    });
+    expect(metadata.status).toBe('complete');
+    expect('backstop' in metadata).toBe(false);
+  });
+
   // #218 PR 4: variant/variantUnverified ride the same error branch as finish.
   // Named mutant "SOLOERRORNOVARIANT" (delete the `meta.variant` / `meta.variantUnverified`
   // lines from start.js's error branch).

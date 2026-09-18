@@ -16,6 +16,7 @@ const { logger } = require('../utils/logger');
 const { writeFileAtomic } = require('../utils/atomic-write');
 // v4.9 W13 Task A (PR #207 round 3, B3): the shared ttftMs honesty predicate.
 const { isMeasuredTtft } = require('../utils/ttft');
+const { isBackstopRecord } = require('../utils/no-output-backstop'); // #251 item 1
 
 /** Map a runHeadless result to a leg metadata status. */
 function legStatusFromResult(result) {
@@ -218,6 +219,8 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // #218 PR 3: the engine's `finish` for the leg's last assistant message
     // ('length' = stopped at the reservation), emit-when-set like ttftMs above.
     finish: (result && typeof result.finish === 'string') ? result.finish : undefined,
+    // #251 item 1: the backstop's decision record (extended / at-cap / …), emit-when-valid. Named mutant "LEGBACKSTOPDROPPED" (tests/sidecar/fanout.test.js).
+    backstop: (result && isBackstopRecord(result.backstop)) ? result.backstop : undefined,
     // #218 PR 4: the effort level SENT (emit-when-sent) and whether the engine's
     // catalogue knew the model when it was sent. Named mutant "LEGVARIANTDROPPED"
     // (tests/sidecar/fanout.test.js).

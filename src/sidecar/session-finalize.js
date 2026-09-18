@@ -24,6 +24,20 @@ function resolveTerminalState(result, signal) {
 }
 
 /**
+ * #251 item 1: copy a leg result's backstop record onto metadata, or REMOVE a
+ * stale one — the same emit-when-set / delete-when-absent rule `finish` and
+ * `variant` follow (council #232 r1 B1), in one place for the four solo error
+ * branches (start, continue, resume, the shared-server path) that used to each
+ * spell their own copy of that rule. A forged or partial object is dropped.
+ * @param {object} meta - mutated
+ * @param {{backstop?: *}|null} result
+ */
+function stampBackstop(meta, result) {
+  const { isBackstopRecord } = require('../utils/no-output-backstop');
+  if (result && isBackstopRecord(result.backstop)) { meta.backstop = result.backstop; } else { delete meta.backstop; }
+}
+
+/**
  * Finalize a headless run by routing through resolveTerminalState — the single
  * source of truth shared with the CLI start.js path. An errored run writes
  * status='error' + reason (and an EXISTING 0-byte summary.md so amicus_read hits
@@ -54,6 +68,7 @@ function finalizeHeadlessResult(sessionDir, result, project, metadata) {
     if (result && typeof result.finish === 'string') { metadata.finish = result.finish; } else { delete metadata.finish; } // #218 PR 3: emit-when-set; a stale one is removed (council #232 r1 B1)
     if (result && typeof result.variant === 'string') { metadata.variant = result.variant; } else { delete metadata.variant; } // #218 PR 4: same rule as finish (named mutant "SHAREDNOVARIANT", tests/shared-server-finalize.test.js)
     if (result && result.variantUnverified === true) { metadata.variantUnverified = true; } else { delete metadata.variantUnverified; }
+    stampBackstop(metadata, result); // #251 item 1: same rule again (named mutant "SHAREDNOBACKSTOP", tests/shared-server-finalize.test.js)
     metadata.completedAt = new Date().toISOString();
     writeFileAtomic(
       path.join(sessionDir, 'metadata.json'),
@@ -64,7 +79,7 @@ function finalizeHeadlessResult(sessionDir, result, project, metadata) {
   }
   // complete / timed-out / aborted: persist the (possibly partial) summary with
   // the resolved status. Explicit status means the #36 guard won't re-classify.
-  finalizeSession(sessionDir, (result && result.summary) || '', project, metadata, { status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified });
+  finalizeSession(sessionDir, (result && result.summary) || '', project, metadata, { status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified, backstop: result && result.backstop });
 }
 
-module.exports = { resolveTerminalState, finalizeHeadlessResult };
+module.exports = { resolveTerminalState, finalizeHeadlessResult, stampBackstop };

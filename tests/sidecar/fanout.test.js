@@ -601,6 +601,27 @@ describe('runFanout orchestrator', () => {
     expect('finish' in wave.legs[1]).toBe(false);
   });
 
+  it("#251 item 1: a leg's backstop record reaches BOTH the leg document and the wave doc", async () => {
+    // TWO writers, neither covering the other: `legPatch` (fanout-leg.js) writes the leg's
+    // metadata.json, and the `buildRunResult` spread (result-schema.js) writes the wave doc's
+    // leg entry — an enumerated literal, so a field not spelled there never reaches run.json.
+    // Named mutants "LEGBACKSTOPDROPPED" (drop the `backstop:` line in legPatch) and
+    // "BACKSTOPCOERCED" (result-schema.js); each reddens exactly one of the two pairs below.
+    const REC = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+    mockRunHeadless
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), backstop: REC }))
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId)); // the backstop never fired
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'bks12345' });
+    const legMeta1 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'bks12345-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta1.backstop).toEqual(REC);
+    expect(wave.legs[0].backstop).toEqual(REC);
+    const legMeta2 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'bks12345-2', 'metadata.json'), 'utf-8'));
+    expect('backstop' in legMeta2).toBe(false);
+    expect('backstop' in wave.legs[1]).toBe(false);
+  });
+
   it('#218 PR 4: a leg\'s variant and unverified flag reach the leg document', async () => {
     // Named mutant "LEGVARIANTDROPPED": drop the two `legPatch` fields.
     mockRunHeadless

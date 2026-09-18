@@ -675,7 +675,7 @@ evals/
 | `sidecar/reopen-notices.js` | The stderr Notice a reopen owes the user for the effort level it does NOT carry (#218 PR 4, council #235 r5 J1/A3). | `formatDroppedLevelNotice()`, `noticeDroppedLevel()` |
 | `sidecar/reopen-spend.js` | Spend finalization for a REOPENED session (continue/resume). Split out of | `finalizeSpendForReopen()` |
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
-| `sidecar/session-finalize.js` |  | `resolveTerminalState()`, `finalizeHeadlessResult()` |
+| `sidecar/session-finalize.js` |  | `resolveTerminalState()`, `finalizeHeadlessResult()`, `stampBackstop()` |
 | `sidecar/session-utils.js` | Sidecar Session Utilities - Shared functionality for session management | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |
 | `sidecar/setup-local.js` | The readline setup wizard's local / self-hosted provider add step (v4.2 §4.6, Task 12). | `addLocalProviderInteractive()` |
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
