@@ -1699,7 +1699,7 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
     // PAST the cap and the leg died at 3 273 ms carrying the engine's late `busy` — the right
     // NAME on the wrong clock; a 2 s read makes the RED ~4.85 s against a GREEN bound of 3.5 s,
     // so a loaded runner cannot flip the verdict (controller, after the r2 fix re-review).
-    // clock. The decision read now gets `min(statusProbeMs, deadline - Date.now())`, and
+    // The decision read now gets `min(statusProbeMs, deadline - Date.now())`, and
     // `sessionStatusSafe` skips a non-positive window, so a firing with no leg time left kills
     // at once under its own name. Named mutant "PROBEUNBOUNDED": in headless.js pass
     // `statusProbeMs` back to the decision read instead of `probeBudgetMs`.
