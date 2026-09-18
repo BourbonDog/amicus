@@ -27,8 +27,9 @@ function resolveTerminalState(result, signal) {
  * #251 item 1: copy a leg result's backstop record onto metadata, or REMOVE a
  * stale one — the same emit-when-set / delete-when-absent rule `finish` and
  * `variant` follow (council #232 r1 B1), in one place for the four solo error
- * branches (start, continue, resume, the shared-server path) that used to each
- * spell their own copy of that rule. A forged or partial object is dropped.
+ * branches (start, continue, resume, the shared-server path) — which each spell
+ * their own copy of the SAME rule for `finish` and `variant`; `backstop` gets
+ * the shared implementation from the start. A forged or partial object is dropped.
  * @param {object} meta - mutated
  * @param {{backstop?: *}|null} result
  */

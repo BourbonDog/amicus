@@ -174,6 +174,7 @@ describe('start.js terminal state classification', () => {
   });
 
   it('a completed result with no backstop leaves the key off metadata (emit-when-set)', async () => {
+    // Named mutant "SOLOBACKSTOPCOERCED": in session-utils.js :: finalizeSession, `metadata.backstop = opts.backstop || null;` — the key appears as null here.
     const { metadata } = await runWith({
       completed: true, timedOut: false, aborted: false, summary: 'done', taskId: 'test0b2'
     });

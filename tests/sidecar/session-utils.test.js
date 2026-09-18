@@ -357,6 +357,7 @@ describe('Session Utils', () => {
     });
 
     it('drops a forged record rather than coercing it', () => {
+      // Named mutant "SOLOBACKSTOPCOERCED": in session-utils.js :: finalizeSession, `metadata.backstop = opts.backstop || null;` — the key appears as null here.
       const metadata = { createdAt: new Date().toISOString(), filesWritten: [] };
       finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete', backstop: FORGED });
       expect('backstop' in readSaved()).toBe(false);
