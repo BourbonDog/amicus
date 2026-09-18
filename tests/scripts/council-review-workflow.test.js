@@ -1069,10 +1069,15 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
     test('the shipped default is BLANK — infrastructure on, no pin in force', () => {
       // Owner's decision after two live rounds (#266 r1 and r2) pinned qwen to
-      // reka and did not move the #202 tail: 3 of 3 first attempts still died,
-      // with the `(session: busy)` signature rather than an OpenRouter refusal.
-      // A merge-gating seat does not stay on a single upstream for no measured
-      // benefit, so the machinery ships armed and unfired.
+      // reka and did not move the #202 tail. Stated as measured (re-review N8):
+      // five legs ran under the pin across the two rounds and three failed —
+      // both FIRST attempts died at the 480 s backstop, round 1's retry died
+      // too (912 s) and lost the seat, and round 2's retry and judge leg
+      // COMPLETED through reka (first token 380 s and 209 s). The
+      // `(session: busy)` clause is on exactly one pinned leg; round 1 ran on
+      // 4.11.0, which had no such clause. A merge-gating seat does not stay on
+      // a single upstream for no measured benefit, so the machinery ships armed
+      // and unfired.
       expect(routingValue()).toBe('');
       assertRoutingDocument(routingValue());
       const cmd = routingRunCommand();
@@ -1504,6 +1509,37 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // the routing value; and both print what was pinned and what is seated.
       expect(cmd).toContain('a fault in the MAP');
       expect(cmd).toContain('The map seats: ${KNOWN}');
+    });
+
+    test('N7 — the health program is invoked with no stray argument', () => {
+      // Re-review N7: the invocation carried a literal `\n` (backslash + n, not
+      // a line continuation — there was no end-of-line between them), so bash
+      // read it as an escaped `n` and the runner executed
+      // `node …/routing-health.cjs n || echo …`. Harmless at runtime (the
+      // program never reads argv) but a textbook shellcheck SC1001, and this
+      // repo's actionlint+shellcheck baseline is zero findings across all six
+      // workflows with no suppressions — a gate no development machine here can
+      // run, which is exactly why it gets a pin instead of a promise.
+      const lines = healthStep().split('\n').filter((l) => l.includes('node "$HT/routing-health.cjs"'));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(/^\s*node "\$HT\/routing-health\.cjs" \|\| echo "::warning::routing health check could not run: /);
+      // No escaped character anywhere on the line, and no continuation either:
+      // one physical line, one command, one fallback.
+      expect(lines[0].split('node "$HT/routing-health.cjs"')[1]).not.toContain('\\');
+    });
+
+    test('N9 — the notice does not claim to have verified upstreams a document never named', () => {
+      const cmd = routingRunCommand();
+      // A sort-only or ignore-only document names no only/order slugs, so the
+      // pre-run check consults nothing — and "every named upstream was
+      // verified" is then true but empty.
+      expect(cmd).toContain('VERIFIED=$(jq -r');
+      expect(cmd).toContain('${VERIFIED}');
+      expect(cmd).toContain('((.only // []) + (.order // []))[]');
+      expect(cmd).toContain('Every named upstream was verified listed and serving');
+      expect(cmd).toContain('No upstream is named by this document (no only/order), so there was nothing to verify.');
+      // The vacuous unconditional form must be gone from the notice itself.
+      expect(cmd).not.toMatch(/\$\{ATTRIB\}\. Every named upstream/);
     });
 
     test('C1 — the notice says self-attributing only when exactly one upstream may serve', () => {

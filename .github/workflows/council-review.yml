@@ -145,9 +145,17 @@ jobs:
       # PROVIDER PINNING — OpenRouter fans a model out across several upstreams,
       # so a slow upstream is indistinguishable from a slow model. Two live
       # rounds of THIS PR ran with qwen pinned to a single upstream
-      # (only: ["reka"]). The tail did not move: 3 of 3 first attempts died, with
-      # the `(session: busy)` signature rather than an OpenRouter refusal. A pin
-      # is therefore not a fix, and shipping one by default would leave a
+      # (only: ["reka"]). The tail did not move, and the measurement is worth
+      # stating exactly, because it is narrower than "the pin failed": across the
+      # two rounds FIVE legs ran under the pin and THREE failed. Both rounds'
+      # FIRST attempts died at the 480 s no-output backstop (2 of 2). Round 1's
+      # retry died too, at 912 s, and the seat was lost; round 2's retry
+      # COMPLETED (first token at 380 s) and so did its Stage-2 judge leg (209 s),
+      # both through reka. The `(session: busy)` clause appears on exactly ONE
+      # pinned leg — round 2's failed first attempt; round 1 ran on 4.11.0, which
+      # had no such clause, and round 2's other busy deaths belong to the
+      # UNPINNED deepseek seat, which is the seat that round lost. A pin is
+      # therefore not a fix, and shipping one by default would leave a
       # merge-gating seat on a single upstream for no measured benefit. The
       # machinery stays because the NEXT question needs it, and because it is
       # cheaper to keep a gated, tested lever than to rebuild it.
@@ -1149,6 +1157,12 @@ jobs:
           # document is a legitimate experiment and is allowed through, but
           # calling it self-attributing would be false.
           ATTRIB=$(jq -r 'if ([.provider[].models[].options.provider] | length > 0) and ([.provider[].models[].options.provider | ((.only // []) | length) == 1] | all) then "self-attributing (exactly one upstream may serve each pinned model, so a leg outcome belongs to that upstream)" else "NOT self-attributing (more than one upstream may serve a pinned model, and nothing records which one did — read this run as evidence about the pin, not about a provider)" end' <<< "$COUNCIL_PROVIDER_ROUTING")
+          # ⚠️ AND THE VERIFICATION SENTENCE IS COMPUTED, NOT ASSERTED (council
+          # #266 r2 re-review, N9). A sort-only or ignore-only document names no
+          # upstream, so the pre-run check correctly consults nothing — and
+          # "every named upstream was verified" is then true but empty. Say which
+          # of the two happened.
+          VERIFIED=$(jq -r 'if ([.provider[].models[].options.provider | ((.only // []) + (.order // []))[]] | length) > 0 then "Every named upstream was verified listed and serving before this was written." else "No upstream is named by this document (no only/order), so there was nothing to verify." end' <<< "$COUNCIL_PROVIDER_ROUTING")
           # ⚠️ WORDED AS A REQUEST, NOT AN OBSERVATION (council #266 r1, A1).
           # This step writes a file; it cannot see a request body, and neither
           # can the run — no amicus artifact records the routing block or the
@@ -1158,7 +1172,7 @@ jobs:
           # R12/R14, keyless, on every push), not observed here. Saying otherwise
           # would let an engine bump that stopped honouring the file read exactly
           # like a working experiment.
-          echo "::notice::#202 Lever 2 — OpenRouter provider routing REQUESTED for ${PINNED}: ${ROUTING}. This document is ${ATTRIB}. Every named upstream was verified listed and serving before this was written. Written to ${RUN_DIR}/opencode.json and shipped in the council-run evidence artifact. That this file reaches the model's request body is pinned by tests/probe-provider-routing-canary.integration.test.js (probe rows R12/R14), not observed in this run — nothing here records the routing block or the serving upstream. Read this run's leg errors for an OpenRouter 4xx before reading its stalls."
+          echo "::notice::#202 Lever 2 — OpenRouter provider routing REQUESTED for ${PINNED}: ${ROUTING}. This document is ${ATTRIB}. ${VERIFIED} Written to ${RUN_DIR}/opencode.json and shipped in the council-run evidence artifact. That this file reaches the model's request body is pinned by tests/probe-provider-routing-canary.integration.test.js (probe rows R12/R14), not observed in this run — nothing here records the routing block or the serving upstream. Read this run's leg errors for an OpenRouter 4xx before reading its stalls."
 
       - name: Run the adjudicated council (amicus council run, headless)
         if: steps.gate.outputs.available == 'true'
@@ -1501,7 +1515,7 @@ jobs:
           # like a healthy round — silence. Still never a job failure: a dead
           # pinned leg is a datum about the experiment, not a reason to fail a
           # merge gate, and neither is a broken check.
-          node "$HT/routing-health.cjs" \n            || echo "::warning::routing health check could not run: node exited $? (see the log above); a pinned model's leg loss would not have been reported this run"
+          node "$HT/routing-health.cjs" || echo "::warning::routing health check could not run: node exited $? (see the log above); a pinned model's leg loss would not have been reported this run"
 
       - name: Publish the Council Review check run
         if: steps.gate.outputs.available == 'true'
