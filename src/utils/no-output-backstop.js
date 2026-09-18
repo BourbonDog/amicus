@@ -120,6 +120,29 @@ function isoOrNumber(ms) {
   try { return new Date(ms).toISOString(); } catch (_) { return String(ms); }
 }
 
+/** Council #269 r2 (A2/D3) — the ONE classification of a session status, shared by
+ *  `decideBackstopExtension` and `undecidedBackstopRecord` so the two firing sites can never
+ *  classify the same status differently. ENGINE evidence (a renderable status the engine published,
+ *  not an amicus probe outcome) records its SANITISED type; anything else records 'unknown'. */
+function isEngineStatus(status) { return isRenderableStatus(status) && !isProbeOutcome(status); }
+function statusTypeOf(status) {
+  return isEngineStatus(status) ? collapseExcerpt(status.type, MAX_STATUS_TYPE_CHARS) : 'unknown';
+}
+
+/**
+ * The record for a kill that never reaches the decision — today only the pre-send firing site
+ * (the engine did not return from the prompt send; spec R3). Pure, total: the status is
+ * classified exactly as decideBackstopExtension classifies it, and nothing here can throw
+ * (council #269 r2, A2/D3). That site used to build this record by calling
+ * `decideBackstopExtension` UNGUARDED and then discarding its verdict — a call to a function
+ * that CAN throw, on a kill path, for an answer the site is forbidden to act on.
+ * @param {{status:*, windowMs:number, firedAtMs:number, why:'pre-send'}} a
+ * @returns {object} an isBackstopRecord-valid record with extended: false
+ */
+function undecidedBackstopRecord({ status, windowMs, firedAtMs, why }) {
+  return { windowMs: Math.floor(windowMs), firedAtMs: Math.floor(firedAtMs), status: statusTypeOf(status), extended: false, why };
+}
+
 /**
  * #251 item 1 — the decision at the poll-loop firing site (spec 2026-09-18 §3),
  * as a pure function so every row is testable without the poll loop.
@@ -140,6 +163,12 @@ function isoOrNumber(ms) {
  * RETRY_BEYOND_DEADLINE gate) — so it is compared here against a deadline derived from
  * `Date.now()` without a skew correction, and a non-finite `next` is treated as
  * unscheduled by the same `Number.isFinite` rule that site uses.
+ *
+ * Fix round 2 (D1, council deepseek, answered): a `retry` whose `next` is already in the PAST
+ * still extends — a past `next` with the status still `retry` means the engine is BETWEEN
+ * attempts (it fired and the status has not yet moved to `busy`); the owner ruled "extend once
+ * on busy/retry", and `headless.js`'s `RETRY_BEYOND_DEADLINE` gate treats a past `next` the
+ * same way (it acts only on `next > deadline`).
  * @param {{status:*, windowMs:number, firedAtMs:number, legTimeoutMs:number, clockStartedAt:number}} a
  *   status — sessionStatusSafe's answer: an engine SessionStatus or a probeUnknown outcome
  *   windowMs — the window in force at this firing; firedAtMs — elapsed on the backstop's clock
@@ -147,13 +176,11 @@ function isoOrNumber(ms) {
  * @returns {{extendTo: number|null, record: object}} extendTo is the new deadline (epoch ms) or null
  */
 function decideBackstopExtension({ status, windowMs, firedAtMs, legTimeoutMs, clockStartedAt }) {
-  const isEngine = isRenderableStatus(status) && !isProbeOutcome(status);
-  const type = isEngine ? collapseExcerpt(status.type, MAX_STATUS_TYPE_CHARS) : 'unknown';
   // #251 item 1 fix round 1 (F2): the record must be valid by construction — floor here rather
   // than trust the caller's inputs to already be integers (envNumber accepts any finite number,
   // fractions included), so isBackstopRecord never rejects what this function just built.
-  const record = { windowMs: Math.floor(windowMs), firedAtMs: Math.floor(firedAtMs), status: type, extended: false };
-  if (!isEngine || (status.type !== 'busy' && status.type !== 'retry')) { return { extendTo: null, record }; }
+  const record = { windowMs: Math.floor(windowMs), firedAtMs: Math.floor(firedAtMs), status: statusTypeOf(status), extended: false };
+  if (!isEngineStatus(status) || (status.type !== 'busy' && status.type !== 'retry')) { return { extendTo: null, record }; }
   const extendedMs = Math.floor(extendWindowMs(windowMs, legTimeoutMs));
   if (!(extendedMs > windowMs)) { return { extendTo: null, record: { ...record, why: 'at-cap' } }; }
   const extendTo = clockStartedAt + extendedMs;
@@ -205,9 +232,18 @@ function formatBackstopExtensionClause(record) {
   if (!isBackstopRecord(record)) { return ''; }
   const s = (ms) => `${Math.round(ms / 1000)}s`;
   if (record.extended) {
-    return ` — window extended once from ${s(record.windowMs)} to ${s(record.extendedToMs)} at ${s(record.firedAtMs)} on session ${record.status}`;
+    // Council #269 r2 (D4): whole-second rounding rendered a REAL extension as "from 3s to 3s"
+    // whenever the two round the same way — the 0.95 clamp does exactly that (2800 → 2850). A
+    // collision renders BOTH in ms (`firedAtMs` collides with nothing); 480 000 → 912 000 does not.
+    const collide = Math.round(record.windowMs / 1000) === Math.round(record.extendedToMs / 1000);
+    const from = collide ? `${record.windowMs}ms` : s(record.windowMs);
+    const to = collide ? `${record.extendedToMs}ms` : s(record.extendedToMs);
+    return ` — window extended once from ${from} to ${to} at ${s(record.firedAtMs)} on session ${record.status}`;
   }
-  if (record.why === 'at-cap') { return ' — not extended: the window is already at the leg cap'; }
+  // Council #269 r2 (A1): the window that cannot be extended sits at the 0.95 CLAMP, strictly
+  // BELOW the leg cap (the schema's gloss, "already at the leg-cap clamp", was right all along).
+  // Only the sentence was wrong — the `at-cap` TOKEN every reader matches on is unchanged.
+  if (record.why === 'at-cap') { return ' — not extended: the window is already at its clamp below the leg cap'; }
   if (record.why === 'retry-beyond-window') {
     return ` — not extended: the engine schedules its next attempt at ${record.retryNextIso}, past the extended window`;
   }
@@ -219,5 +255,6 @@ function formatBackstopExtensionClause(record) {
 
 module.exports = {
   resolveNoOutputBackstopMs, createNoOutputBackstop, extendWindowMs, decideBackstopExtension,
-  isBackstopRecord, formatBackstopExtensionClause, BACKSTOP_WHY, DEFAULT_NO_OUTPUT_BACKSTOP_MS,
+  undecidedBackstopRecord, isBackstopRecord, formatBackstopExtensionClause, BACKSTOP_WHY,
+  DEFAULT_NO_OUTPUT_BACKSTOP_MS,
 };

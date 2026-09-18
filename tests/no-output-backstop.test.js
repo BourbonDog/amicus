@@ -2,7 +2,7 @@
 
 const {
   resolveNoOutputBackstopMs, createNoOutputBackstop, extendWindowMs, decideBackstopExtension,
-  isBackstopRecord, formatBackstopExtensionClause, BACKSTOP_WHY,
+  isBackstopRecord, formatBackstopExtensionClause, BACKSTOP_WHY, undecidedBackstopRecord,
 } = require('../src/utils/no-output-backstop');
 const { probeUnknown } = require('../src/utils/session-status');
 
@@ -311,11 +311,18 @@ describe('#251 item 1 — isBackstopRecord and the clause', () => {
     expect(isBackstopRecord({ windowMs: 1, firedAtMs: 2, status: 'busy\nINJECTED', extended: false })).toBe(false);
     expect(isBackstopRecord({ windowMs: 1, firedAtMs: 2, status: 'x'.repeat(41), extended: false })).toBe(false);
   });
-  test('C1 the five clause strings, byte-exact (spec §5.1)', () => {
+  test('C1 the five clause strings, byte-exact (spec §5.1), and the ms rendering when two rounded seconds collide', () => {
     expect(formatBackstopExtensionClause({ windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 }))
       .toBe(' — window extended once from 480s to 912s at 481s on session busy');
+    // Council #269 r2 (D4): whole-second rounding rendered a REAL extension as "from 3s to 3s"
+    // — a sentence that says nothing happened for a leg that got 50 ms more. When the two
+    // rounded values collide, BOTH are rendered in milliseconds; `firedAtMs` stays in seconds
+    // because it collides with nothing. Production values (480 000 → 912 000, above) never
+    // collide and are byte-identical.
+    expect(formatBackstopExtensionClause({ windowMs: 2800, firedAtMs: 2850, status: 'busy', extended: true, extendedToMs: 2850 }))
+      .toBe(' — window extended once from 2800ms to 2850ms at 3s on session busy');
     expect(formatBackstopExtensionClause({ windowMs: 912000, firedAtMs: 913904, status: 'busy', extended: false, why: 'at-cap' }))
-      .toBe(' — not extended: the window is already at the leg cap');
+      .toBe(' — not extended: the window is already at its clamp below the leg cap');
     expect(formatBackstopExtensionClause({ windowMs: 480000, firedAtMs: 480722, status: 'retry', extended: false, why: 'retry-beyond-window', retryNextIso: '2026-09-18T12:34:56.000Z' }))
       .toBe(' — not extended: the engine schedules its next attempt at 2026-09-18T12:34:56.000Z, past the extended window');
     // Council #269 r1 (C1/D1): the extension was decided and then REFUSED because its
@@ -329,5 +336,52 @@ describe('#251 item 1 — isBackstopRecord and the clause', () => {
     expect(formatBackstopExtensionClause({ windowMs: 480000, firedAtMs: 480722, status: 'unknown', extended: false })).toBe('');
     expect(formatBackstopExtensionClause({ forged: true })).toBe('');
     expect(formatBackstopExtensionClause(undefined)).toBe('');
+  });
+});
+
+/**
+ * Council #269 r2 (A2 + D3): the pre-send firing site used to build its record by calling
+ * `decideBackstopExtension` and then throwing the decision away — an unguarded call to a
+ * function that CAN throw (it formats an engine-supplied `next`), on a kill path, for a
+ * verdict the site is forbidden to act on (spec R3: the engine never returned from the
+ * prompt send). `undecidedBackstopRecord` is what that site needs and nothing more: the
+ * same classification, no decision, nothing that can throw.
+ */
+describe('#251 item 1 — undecidedBackstopRecord (council #269 r2, A2/D3)', () => {
+  const base = { windowMs: 1000, firedAtMs: 1002, why: 'pre-send' };
+
+  test('U1 an engine status records its own sanitised type; a probe outcome and an unrenderable one record `unknown`', () => {
+    expect(undecidedBackstopRecord({ ...base, status: { type: 'busy' } }).status).toBe('busy');
+    expect(undecidedBackstopRecord({ ...base, status: probeUnknown('failed', 'connection refused') }).status).toBe('unknown');
+    expect(undecidedBackstopRecord({ ...base, status: { type: '' } }).status).toBe('unknown');
+    // The classification is the one `decideBackstopExtension` uses — ONE implementation
+    // (the private `statusTypeOf`), so the two firing sites can never disagree about the
+    // same status. Named mutant "TWOCLASSIFIERS": give undecidedBackstopRecord its own
+    // copy that returns `status.type` raw — this row then reads '' for the third case.
+    for (const status of [{ type: 'busy' }, { type: 'retry', attempt: 1, message: 'x' }, probeUnknown('skipped', 'no window'), { type: '' }, null, undefined, 'busy']) {
+      expect(undecidedBackstopRecord({ ...base, status }).status)
+        .toBe(decideBackstopExtension({ ...base, status, legTimeoutMs: 60000, clockStartedAt: 0 }).record.status);
+    }
+  });
+
+  test('U2 the record is isBackstopRecord-valid, never extended, and carries the caller\'s `why`', () => {
+    const rec = undecidedBackstopRecord({ ...base, status: { type: 'busy' } });
+    expect(rec).toEqual({ windowMs: 1000, firedAtMs: 1002, status: 'busy', extended: false, why: 'pre-send' });
+    expect(isBackstopRecord(rec)).toBe(true);
+    expect(rec.extendedToMs).toBeUndefined();
+    expect(rec.retryNextIso).toBeUndefined();
+  });
+
+  test('U3 the two measured numbers are floored, so the record is valid by construction', () => {
+    const rec = undecidedBackstopRecord({ windowMs: 1000.7, firedAtMs: 1002.9, status: { type: 'busy' }, why: 'pre-send' });
+    expect(rec.windowMs).toBe(1000);
+    expect(rec.firedAtMs).toBe(1002);
+    expect(isBackstopRecord(rec)).toBe(true);
+  });
+
+  test('U4 pure and total: the shapes that make decideBackstopExtension work hardest cannot throw here', () => {
+    for (const status of [null, undefined, 'busy', 42, { type: 'retry', attempt: 1, message: 'x', next: 8.64e15 + 1 }]) {
+      expect(() => undecidedBackstopRecord({ ...base, status })).not.toThrow();
+    }
   });
 });

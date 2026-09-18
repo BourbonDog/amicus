@@ -39,7 +39,8 @@ const { formatSessionStatusSuffix, probeUnknown, isRenderableStatus } =
 // tests/headless-backstop-extend-refused.test.js); jest.mock hoists above every require,
 // so module-scope loading is exactly what lets them work (fix round 1, F8; council #269 r1).
 const { resolveNoOutputBackstopMs, createNoOutputBackstop, decideBackstopExtension,
-  isBackstopRecord, formatBackstopExtensionClause } = require('./utils/no-output-backstop');
+  undecidedBackstopRecord, isBackstopRecord,
+  formatBackstopExtensionClause } = require('./utils/no-output-backstop');
 // v4.9 W13 Task A (PR #207 round 3, B3): the one honesty predicate every ttftMs
 // emit gate shares — see src/utils/ttft.js for why `typeof` was not it.
 const { isMeasuredTtft } = require('./utils/ttft');
@@ -304,9 +305,15 @@ function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSke
   // was never extended can build (idle, a probe outcome, an unknown arm, the pre-send site)
   // stays byte-identical to 4.12.0's, which is what pins W3 and W8 hold.
   const extendedOnce = !!(extension && extension.extended);
+  // Council #269 r2 (D4): the same collision rule `formatBackstopExtensionClause` applies to the
+  // pair it renders. The base window is named here beside a head that reports the EXTENDED one;
+  // when both round to the same second the base is rendered in ms so the two stay distinguishable
+  // (2800 → 2850 at the 0.95 clamp). Production (480 000 → 912 000) never collides: `of 480s`.
+  const base = extendedOnce && Math.round(extension.windowMs / 1000) === Math.round(extension.extendedToMs / 1000)
+    ? `${extension.windowMs}ms` : (extendedOnce ? s(extension.windowMs) : '');
   const windowPhrase = fromEnv
-    ? `the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)${extendedOnce ? ` of ${s(extension.windowMs)}, extended once` : ''}`
-    : `a caller-set window${extendedOnce ? ` of ${s(extension.windowMs)}` : ''} overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default${extendedOnce ? ', extended once' : ''}`;
+    ? `the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)${extendedOnce ? ` of ${base}, extended once` : ''}`
+    : `a caller-set window${extendedOnce ? ` of ${base}` : ''} overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default${extendedOnce ? ', extended once' : ''}`;
   const observed = 'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in '
     + `${s(ms)} — ${windowPhrase}`;
   // Append-only: absent/empty excerpt ⇒ the string above, unchanged byte for byte.
@@ -949,13 +956,18 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // record and the report; the clause renderer emits nothing for `why: 'pre-send'`, so the
       // string is byte-identical to 4.12.0's (pinned: W8). `sessionError` is seeded below, where
       // it is declared — writing it here would be the #202 TDZ trap again.
+      //
+      // Council #269 r2 (A2 + D3): the record is built by `undecidedBackstopRecord`, NOT by
+      // calling `decideBackstopExtension` and then neutralising its verdict. The old shape ran an
+      // unguarded call to a function that CAN throw (it formats an engine-supplied `retry.next`)
+      // on a kill path, and discarded the whole decision afterwards — this site is forbidden to
+      // act on it. The helper is pure and total and shares the ONE status classification, so the
+      // record here is exactly the one the poll-loop site would have recorded for this status.
       preSendStatus = await sessionStatusSafe(getSessionStatus, client, sessionId, dirArgs, statusProbeMs);
-      backstopRecord = decideBackstopExtension({
-        status: preSendStatus, windowMs: noOutputBackstopMs, firedAtMs: Date.now() - outputClockStartedAt,
-        legTimeoutMs: timeoutMs, clockStartedAt: outputClockStartedAt,
-      }).record;
-      backstopRecord = { ...backstopRecord, extended: false, why: 'pre-send' };
-      delete backstopRecord.extendedToMs; delete backstopRecord.retryNextIso;
+      backstopRecord = undecidedBackstopRecord({
+        status: preSendStatus, windowMs: noOutputBackstopMs,
+        firedAtMs: Date.now() - outputClockStartedAt, why: 'pre-send',
+      });
       logger.warn('No-output backstop fired before the prompt send resolved', {
         taskId, sessionId, backstopMs: noOutputBackstopMs,
       });
@@ -1455,7 +1467,16 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             let decisionStatus = null;
             let extendedNow = false;
             if (!backstopRecord) {
-              decisionStatus = await sessionStatusSafe(getSessionStatus, client, sessionId, dirArgs, statusProbeMs);
+              // Council #269 r2 (C1): bounded by the LEG time left, not by the probe's own 5 s —
+              // the poll loop's own status read is already bounded that way, and this one runs at
+              // the firing instant, which at the at-cap geometry (a 0.95 clamp) can be within a
+              // few hundred ms of the leg cap. `sessionStatusSafe` SKIPS a non-positive window
+              // (`probeUnknown('skipped', 'no window')`), so a firing with no leg time left kills
+              // at once under its own name instead of pushing the kill past the cap. The REPORT
+              // read inside noOutputBackstopReason keeps `statusProbeMs`: it already runs on a leg
+              // being killed, and changing it is out of scope.
+              const probeBudgetMs = Math.min(statusProbeMs, deadline - Date.now());
+              decisionStatus = await sessionStatusSafe(getSessionStatus, client, sessionId, dirArgs, probeBudgetMs);
               const decision = decideBackstopExtension({
                 status: decisionStatus, windowMs: noOutputBackstopMs, firedAtMs,
                 legTimeoutMs: timeoutMs, clockStartedAt: outputClockStartedAt,
@@ -1500,8 +1521,17 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             // `ms` is the BASE window: the decide-once gate (`if (!backstopRecord)`) makes this
             // catch reachable only at the first firing, before any extension. If that gate ever
             // moves, a throw at the second firing would need `extension.extendedToMs` here.
+            // Council #269 r2 (B2): the abnormal death carries the SAME witnesses as a normal
+            // one. These are the two "safe" helpers the shared closure above uses — the excerpt
+            // reader is "wrapped so it can never become the failure it reports on" (its own
+            // docblock) and the skew read is a Map lookup that does no I/O — so the one death
+            // that means "something in the kill path itself broke" is no longer the one death
+            // with neither the engine's own error line nor a version skew on it. Clause order is
+            // unchanged: engine log → engine skew → session.
             sessionError = formatNoOutputBackstopReason({
               ms: noOutputBackstopMs, fromEnv: backstopFromEnv,
+              engineLogExcerpt: engineErrorExcerptSafe(sessionId, options._engineLog),
+              engineSkew: currentEngineSkew(client),
               sessionStatus: probeUnknown('failed', `backstop decision failed: ${decisionErr && decisionErr.message}`),
             });
             logger.error('No-output backstop decision threw; killing the leg under its own name', { taskId, error: decisionErr && decisionErr.message });

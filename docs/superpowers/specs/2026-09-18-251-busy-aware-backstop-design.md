@@ -67,7 +67,10 @@ the owner on 2026-09-18. Closes #135 when it ships (owner ruling, 2026-09-18). B
 At the tick where the backstop reports `fired`, before anything is killed:
 
 1. Read the status once: `status = await sessionStatusSafe(getSessionStatus, client, sessionId,
-   dirArgs, statusProbeMs)`.
+   dirArgs, probeBudgetMs)`, where `probeBudgetMs = Math.min(statusProbeMs, deadline - Date.now())`
+   — the DECISION read is bounded by the leg time left as well as by its own 5 s (council #269 r2, C1;
+   R7 as amended). `sessionStatusSafe` skips a non-positive window, so a firing with no leg time left
+   kills at once under its own name.
 2. Compute the extension target: `extendedMs = extendWindowMs(noOutputBackstopMs, timeoutMs)` (§4) and
    `extendedDeadline = outputClockStartedAt + extendedMs` (the backstop's own clock origin,
    `headless.js`, `const outputClockStartedAt = Date.now()` just before the backstop is created).
@@ -100,13 +103,22 @@ Two boundaries, both ruled by council #269 round 1:
   why: 'elapsed'}` (no `extendedToMs`) and kills — the leg never got the window, so nothing may claim
   it did.
 
+- **The decision read never outlives the leg** (council #269 round 2, C1): at the at-cap geometry the
+  0.95 clamp puts the firing within a few hundred ms of the leg cap, and an unbounded 5 s read pushed
+  the kill PAST that cap — the right name on the wrong clock (measured: a 400 ms read on a 3 000 ms cap
+  killed at 3 273 ms). The REPORT read inside `noOutputBackstopReason` keeps `statusProbeMs`: it
+  already runs on a leg being killed.
+
 **A throw inside the decision block is a KILL, never a retry** (A1 + B1 + C2). The block sits inside
 the poll body's `try … catch (pollError)`, whose counter resets at the top of every poll, so a throw
 there was swallowed and retried until `--timeout` and the leg died a generic `timeout` with the
 `NO_OUTPUT_BACKSTOP:` diagnosis lost. The block therefore owns an inner `try … catch (decisionErr)`
 that sets `backstopFired`, names the failure in the session clause (`probeUnknown('failed', 'backstop
 decision failed: …')`), records `{…, status: 'unknown', extended: false}` and breaks. Nothing on the
-path is expected to throw — this is the structural guarantee, not a repair.
+path is expected to throw — this is the structural guarantee, not a repair. That report carries the
+SAME witnesses as a normal one — the engine-log excerpt and the engine-skew clause, in the normal order
+(council #269 round 2, B2): the one death that means the kill path itself broke must not also be the
+one death with no evidence from outside amicus on it.
 
 4. On **extend**: `logger.warn('No-output backstop extended once on session status', { taskId,
    sessionId, status: type, fromMs: noOutputBackstopMs, toMs: extendedMs, atMs })` and the record (§5.2)
@@ -165,12 +177,20 @@ integers, `Math.round(ms / 1000)`):
 
 - extended, then died: ` — window extended once from 480s to 912s at 481s on session busy`
   (`busy` or `retry`, the status at the extension)
-- busy/retry but the window was already at the clamp: ` — not extended: the window is already at the
-  leg cap`
+- busy/retry but the window was already at the clamp: ` — not extended: the window is already at its
+  clamp below the leg cap` (council #269 round 2, A1: the window that cannot be extended sits at the
+  0.95 clamp, strictly BELOW the cap, so "already at the leg cap" named the wrong number; the `at-cap`
+  TOKEN is unchanged)
 - retry whose next attempt lies past the extended window: ` — not extended: the engine schedules its
   next attempt at 2026-09-18T12:34:56.000Z, past the extended window`
 - the extension was decided and then refused because its deadline had already passed (council #269 r1,
   C1 + D1): ` — not extended: the extended window had already passed when the decision ran`
+
+When the two window values ROUND TO THE SAME SECOND — the 0.95 clamp produces exactly that, e.g.
+2 800 → 2 850 — both are rendered in milliseconds instead, in the clause and in the window phrase
+(` — window extended once from 2800ms to 2850ms at 3s on session busy`; council #269 round 2, D4).
+`firedAtMs` stays in seconds: it collides with nothing. The production pair (480 000 → 912 000) never
+collides, so every string already in the corpus is byte-identical.
 
 `idle`, probe outcomes, unknown arms and the pre-send site append NOTHING — those strings are
 byte-identical to 4.12.0's. The head sentence's `in Ns` reports the window IN FORCE at the kill (912 s
@@ -216,7 +236,10 @@ backstop: {
 The decision itself is a pure function, `decideBackstopExtension({ status, windowMs, firedAtMs,
 legTimeoutMs, clockStartedAt }) → { extendTo: number|null, record }`, in
 `src/utils/no-output-backstop.js`, so the table in §3 is tested row by row without driving the poll
-loop; `headless.js` only calls it, applies `extendTo` to the backstop, and keeps the record. It
+loop; `headless.js` only calls it, applies `extendTo` to the backstop, and keeps the record. The
+PRE-SEND site does not call it at all (council #269 round 2, A2 + D3): it builds its record with the
+pure, total `undecidedBackstopRecord({status, windowMs, firedAtMs, why: 'pre-send'})`, which shares the
+one status classification (a private `statusTypeOf`) and cannot throw. It
 classifies on the RAW `status.type` and records the SANITISED identifier (the #219 r2 rule in
 `session-status.js`); a probe outcome records `'unknown'`.
 
@@ -321,9 +344,12 @@ documents, `wave.json` (now carrying `backstop`), the leg documents, and `run.js
 - **R6 — The runStats projection and the ledger do not carry the field.** `verdict.json`'s schema is
   unchanged; the corpus reads leg documents. *Cost if wrong:* a future census needs the leg docs, which
   the evidence artifact already ships.
-- **R7 — The status probe budget stays `STATUS_PROBE_MS` (5 s), and a kill-path read that answers
+- **R7 — The status probe budget is `STATUS_PROBE_MS` (5 s), and a kill-path read that answers
   `unknown` kills exactly as today.** A slower probe on a loaded engine converts to a longer kill, never
-  to an extension. *Cost if wrong:* none new — today's behaviour.
+  to an extension. *Cost if wrong:* none new — today's behaviour. **AMENDED by council #269 round 2
+  (C1):** the DECISION read is bounded by `min(STATUS_PROBE_MS, deadline - now)` — 5 s was never a
+  bound on a leg whose cap is minutes away, but at the at-cap geometry it let the kill run past the leg
+  cap. The REPORT read keeps the flat 5 s.
 - **R8 — The live model probe (`models --check --live`) gets the extension like every other leg.** Its
   30 s window doubles to 60 s for a session the engine reports busy, under its 2-minute ceiling; its
   classification (`/^NO_OUTPUT_BACKSTOP:/` → `accepted-but-silent`) is unchanged and `docs/usage.md`'s
@@ -340,11 +366,11 @@ documents, `wave.json` (now carrying `backstop`), the leg documents, and `run.js
 
 ```
 poll N: substantiveActivity=false ─► backstop.tick ─► 'fired'
-        ─► sessionStatusSafe (≤ 5 s)
+        ─► sessionStatusSafe (≤ 5 s AND ≤ the leg time left — r2 C1)
               ├─ busy / retry(next inside) & room ─► backstop.extend(deadline) ─► record{extended:true} ─► poll N+1 …
               │       └─ later: activity ─► disarmed ─► … normal completion; result.backstop rides out
               │       └─ later: 'fired' again ─► status read for the REPORT ─► kill; clause "extended once …"
-              ├─ busy / retry & no room ─► record{extended:false, why:'at-cap'} ─► kill; clause "not extended: … leg cap"
+              ├─ busy / retry & no room ─► record{extended:false, why:'at-cap'} ─► kill; clause "not extended: … its clamp below the leg cap"
               ├─ retry(next beyond) ─► record{why:'retry-beyond-window'} ─► kill; clause "… past the extended window"
               └─ idle / unknown / other ─► record{extended:false} ─► kill; string byte-identical to 4.12.0
 result ─► fanout-leg.js (leg doc) / session-finalize.js + start.js (solo metadata) ─► `backstop` field

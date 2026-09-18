@@ -1256,7 +1256,7 @@ describe('#202 — a zero-output death names the engine session status', () => {
       type: 'retry', attempt: 2, message: 'Provider returned error 429' });
     const result = await run('sstatus2', { noOutputBackstopMs: 950 }, 1000);
     expect(result.error).toBe(`${base(950)} (session: retry attempt 2 — Provider returned error 429)`
-      + ' — not extended: the window is already at the leg cap');
+      + ' — not extended: the window is already at its clamp below the leg cap');
   }, 20000);
 
   test('S-W3 idle-with-nothing-produced is reported — the engine-side signature', async () => {
@@ -1599,7 +1599,7 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
     const result = await run('atcap1', { noOutputBackstopMs: 2850 }, 3000);
     expect(Date.now() - started).toBeLessThan(3000);
     expect(result.timedOut).toBeFalsy(); // the backstop, not the 3 s leg cap, ended it — the named diagnosis survives
-    expect(String(result.error)).toMatch(/ \(session: busy\) — not extended: the window is already at the leg cap$/);
+    expect(String(result.error)).toMatch(/ \(session: busy\) — not extended: the window is already at its clamp below the leg cap$/);
     expect(result.backstop).toEqual({ windowMs: 2850, firedAtMs: expect.any(Number), status: 'busy', extended: false, why: 'at-cap' });
   }, 20000);
 
@@ -1640,7 +1640,7 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
     expect(formatNoOutputBackstopReason({ ...base, extension: undefined })).toBe(before);
     expect(formatNoOutputBackstopReason({ ...base, extension: { windowMs: 480000, firedAtMs: 480722, status: 'idle', extended: false } })).toBe(before);
     expect(formatNoOutputBackstopReason({ ...base, extension: { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: false, why: 'at-cap' } }))
-      .toBe(`${before} — not extended: the window is already at the leg cap`);
+      .toBe(`${before} — not extended: the window is already at its clamp below the leg cap`);
     // #269 r1 (D5): the CI composition, whole. `ms` is the window IN FORCE at the kill
     // (912 s), and the phrase names the 480 s the env var actually holds — the two numbers
     // are different facts and the sentence now says which is which.
@@ -1690,5 +1690,27 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
     expect(Date.now() - started).toBeGreaterThanOrEqual(1900);
     expect(String(result.error)).toMatch(/ \(session: busy\) — window extended once from 1s to 2s at 1s on session busy$/);
     expect(result.backstop).toEqual({ windowMs: 1000, firedAtMs: expect.any(Number), status: 'busy', extended: true, extendedToMs: 2000 });
+  }, 20000);
+
+  test('W13 the DECISION probe is bounded by the leg time left, so a slow engine cannot push the kill past the leg cap (council #269 r2, C1)', async () => {
+    // Geometry: the at-cap shape (window 2850 ms under a 3 000 ms cap), so ~150 ms of leg
+    // time remains when the backstop fires — and a status read that takes 400 ms is slower
+    // than that. MEASURED RED at a5a8d74a: the probe ran its full 400 ms PAST the cap and the
+    // leg died at ~3 25x ms carrying the engine's late `busy` — the right NAME on the wrong
+    // clock. The decision read now gets `min(statusProbeMs, deadline - Date.now())`, and
+    // `sessionStatusSafe` skips a non-positive window, so a firing with no leg time left kills
+    // at once under its own name. Named mutant "PROBEUNBOUNDED": in headless.js pass
+    // `statusProbeMs` back to the decision read instead of `probeBudgetMs`.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockImplementation(() => new Promise(r => setTimeout(() => r({ type: 'busy' }), 400)));
+    const started = Date.now();
+    const result = await run('probebound1', { noOutputBackstopMs: 2850 }, 3000);
+    expect(Date.now() - started).toBeLessThan(3100);
+    expect(result.timedOut).toBeFalsy(); // the backstop, not the 3 s leg cap, ended it
+    expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+    // Either arm is a correct kill under this name — the bounded read gave up, or there was
+    // no window left to give it. What must NOT reach the report is the engine's late `busy`.
+    expect(String(result.error)).toMatch(/\(session: unknown — probe (failed|skipped)/);
+    expect(result.backstop).toEqual({ windowMs: 2850, firedAtMs: expect.any(Number), status: 'unknown', extended: false });
   }, 20000);
 });

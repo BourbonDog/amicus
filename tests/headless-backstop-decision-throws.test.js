@@ -99,6 +99,36 @@ const OPTS = {
 };
 
 describe('#269 r1 (A1/B1/C2): a throw in the backstop decision block KILLS, it is never retried', () => {
+  // Council #269 r2 (B2): the second test needs the two witnesses the NORMAL death report
+  // carries. The engine log is a real directory read through the UNMOCKED fs (the rest of
+  // this file mocks it), and the skew is real module state, armed exactly as a skewed
+  // `createSession` arms it and reset around every case so none leaks.
+  const realFs = jest.requireActual('fs');
+  const os = require('os');
+  const path = require('path');
+  const skewMod = require('../src/utils/engine-skew');
+  const MADE = [];
+  const ERROR_LINE = 'time=2026-09-18T18:55:32Z level=ERROR service=session '
+    + 'session.id=ses_parent error="SQLiteError: no such column: fixture_seq"';
+
+  /** A synthetic data dir holding `opencode/log/<one file>`. FIXTURE ONLY. */
+  function fixtureDataDir(lines) {
+    const dir = realFs.mkdtempSync(path.join(os.tmpdir(), 'amicus-269r2-'));
+    MADE.push(dir);
+    const logDir = path.join(dir, 'opencode', 'log');
+    realFs.mkdirSync(logDir, { recursive: true });
+    realFs.writeFileSync(path.join(logDir, '2026-09-18T185532.log'), `${lines.join('\n')}\n`);
+    return dir;
+  }
+
+  beforeEach(() => { skewMod._resetEngineSkew(); });
+  afterEach(() => { skewMod._resetEngineSkew(); });
+  afterAll(() => {
+    for (const dir of MADE) {
+      try { realFs.rmSync(dir, { recursive: true, force: true }); } catch (_e) { /* best effort */ }
+    }
+  });
+
   test('the leg dies at its own window under its own name, with the failure in the session clause', async () => {
     mockGetMessages.mockResolvedValue([]);
     const started = Date.now();
@@ -123,5 +153,34 @@ describe('#269 r1 (A1/B1/C2): a throw in the backstop decision block KILLS, it i
     expect(mockLogger.error).toHaveBeenCalledWith(
       'No-output backstop decision threw; killing the leg under its own name',
       expect.objectContaining({ error: 'injected decision failure' }));
+  }, 20000);
+
+  test('the abnormal death carries the SAME witnesses as a normal one — engine log, then skew, then session (council #269 r2, B2)', async () => {
+    // B2: the catch built its report from `ms`/`fromEnv`/`sessionStatus` alone, so the one
+    // death that means "something in the kill path itself broke" was also the one death that
+    // named neither the engine's own error line nor a version skew — the two witnesses #133
+    // added precisely because a silent leg's cause sits outside amicus. Both helpers are the
+    // "safe" ones the normal closure uses: `engineErrorExcerptSafe` is "wrapped so it can
+    // never become the failure it reports on", and the skew read is a Map lookup.
+    // MEASURED RED (2026-09-18, at a5a8d74a): the report was
+    // `… default (session: unknown — probe failed: backstop decision failed: injected
+    // decision failure)` — neither witness present.
+    // Named mutant "CATCHLOSESWITNESSES": drop the two keys from the catch's
+    // formatNoOutputBackstopReason call.
+    mockGetMessages.mockResolvedValue([]);
+    skewMod.noteSessionVersion('1.17.3', {
+      readInstalledVersion: () => '1.18.15',
+      notify: () => {}, // the notice itself is pinned in tests/utils/engine-skew.test.js
+    });
+    const dataDir = fixtureDataDir([ERROR_LINE]);
+    const result = await runHeadless(MODEL, 'sys', 'user', 'decidethrow2', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 1000, _engineLog: { dataDir, fs: realFs } });
+    // Clause order is the normal one: engine log → engine skew → session.
+    expect(String(result.error)).toBe(
+      'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 1s'
+      + ' — a caller-set window overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default'
+      + ' — engine log: SQLiteError: no such column: fixture_seq'
+      + ' (engine skew: server 1.17.3 ≠ installed 1.18.15)'
+      + ' (session: unknown — probe failed: backstop decision failed: injected decision failure)');
   }, 20000);
 });
