@@ -869,6 +869,7 @@ Then run the six mutants from Step 4 against the committed tree and add their re
 - Modify: `docs/configuration.md` (the `AMICUS_NO_OUTPUT_BACKSTOP_MS` table row)
 - Modify: `skills/second-opinion/MODEL-NOTES.md` (the `NO_OUTPUT_BACKSTOP` bullet and its `_Last updated_` line)
 - Modify: `.github/workflows/council-review.yml` (comment lines only, in the block above `AMICUS_NO_OUTPUT_BACKSTOP_MS: '480000'`)
+- Modify: `docs/usage.md` (the `SILENT` row, ≈ line 442) and `src/headless.js` (four rotted line citations in comments → symbol anchors; comments only)
 - Test: `tests/scripts/council-review-workflow.test.js` (inside `describe('no-output backstop headroom (v4.9 W13 Task B)')`)
 
 **Interfaces:**
@@ -956,6 +957,8 @@ Under `## [Unreleased]` → `### Changed`, as the FIRST bullet:
           # `backstop` record to see whether an extension saved a leg or delayed a death.
    ```
 6. **Sweep the promises:** run `grep -rn "fired is terminal\|disarms permanently\|Independent of \`--timeout\`\|fires first\|FIRST\b.*backstop\|terminal — break" src docs skills README.md .github CHANGELOG.md` (UNCAPPED — pipe to `wc -l` first, then read every hit). For each hit, decide: still true / amended above / a fence that needs the "⚠️ do not read that as" repair. List every hit and its disposition in the report.
+7. **`docs/usage.md`, the `SILENT` row of the `models --check --live` table (≈ line 442):** after "(no output within the probe window)" add " — the probe's 30 s window may run once to 60 s when the engine reports the session busy (#251 item 1); its leg cap is 2 minutes (`src/sidecar/models-probe.js`, `timeout: 2`)". Measured by the controller on `a74ed58c`: `PROBE_WINDOW_MS = 30000`, `timeout: 2`, so `extendWindowMs(30000, 120000) = 60000`.
+8. **Rotted line citations in `src/headless.js` comments (pre-existing, found by Task 2):** the comments citing `:413`/`:417` and `:365` for where `sessionId` is assigned, and `headless.js:1295` inside `sessionStatusSafe`'s docblock for the poll loop's own status read, point at lines that moved long ago (`check-citations.js` proves only in-range). Replace each with a symbol anchor: the assignment sites → "`sessionId` is assigned in `runHeadless` at the `createSession`/shared-session branches, well before this return"; the poll-loop read → "`runHeadless`'s poll loop (`if (mirror.output.length > 0)` … `getSessionStatus`)". Comments only; run `npx jest tests/no-output-backstop-wiring.test.js` afterwards to confirm nothing else moved; include `src/headless.js` in this task's commit.
 
 - [ ] **Step 4: Gates and commit**
 
