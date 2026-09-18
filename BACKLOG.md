@@ -9070,7 +9070,7 @@ Deferred — one line each, none blocks anything:
   and removed the label 3 s after applying it (the round was unaffected; label-off is the safe
   end state).
 
-## #251 item 1 — filed, not fixed (2026-09-18)
+## #251 item 1 — filed at the PR (2026-09-18; one closed by council round 1)
 
 - [x] The poll loop's backstop block sits INSIDE the poll body's `try … catch (pollError)`
   (`src/headless.js :: runHeadless`) and `consecutivePollFailures` is reset at the top of every poll

@@ -59,8 +59,10 @@ function classify(rhs) {
   // already handling a failure), with no engine-log excerpt and no skew: its only variable
   // text is `decisionErr.message`, an amicus-authored exception from amicus's own decision
   // code, carried through `probeUnknown` and sanitised at render by `collapseExcerpt`
-  // (utils/session-status.js). No provider prose can reach it — a NEW site, deliberately
-  // classified, not a shape that slipped in.
+  // (utils/session-status.js). The load-bearing reason no provider prose reaches it:
+  // `sessionStatusSafe` converts every engine/SDK rejection into a `probeUnknown` RETURN,
+  // never a throw, and the decision is pure — so the only throwable inside the block is
+  // amicus's own code. A NEW site, deliberately classified, not a shape that slipped in.
   if (s.includes('formatNoOutputBackstopReason(')) { return 'AMICUS:backstop decision failure (no engine text)'; }
   if (s.includes('promptResult.providerError')) { return 'AMICUS:client-boundary synthetic'; }
   if (s.includes('formatOutputLengthReason(')) { return 'AMICUS:output-length'; }

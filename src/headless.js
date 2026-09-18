@@ -34,8 +34,10 @@ const { formatSessionStatusSuffix, probeUnknown, isRenderableStatus } =
 // the death report's fourth clause. ONE require, at MODULE scope: the #251 consumers
 // live outside runHeadless's try block (`formatNoOutputBackstopReason` at module
 // scope, and the outer catch's return, which cannot see a `const` declared in the
-// try body), and the state machine was required inside it only by habit — no test
-// mocks this module, so the load timing was never load-bearing (fix round 1, F8).
+// try body), and the state machine was required inside it only by habit. Two tests DO
+// mock this module (tests/headless-backstop-decision-throws.test.js and
+// tests/headless-backstop-extend-refused.test.js); jest.mock hoists above every require,
+// so module-scope loading is exactly what lets them work (fix round 1, F8; council #269 r1).
 const { resolveNoOutputBackstopMs, createNoOutputBackstop, decideBackstopExtension,
   isBackstopRecord, formatBackstopExtensionClause } = require('./utils/no-output-backstop');
 // v4.9 W13 Task A (PR #207 round 3, B3): the one honesty predicate every ttftMs
@@ -1495,6 +1497,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             // guarantee, pinned by tests/headless-backstop-decision-throws.test.js.
             backstopFired = true;
             backstopRecord = backstopRecord || { windowMs: Math.floor(noOutputBackstopMs), firedAtMs: Math.floor(Date.now() - outputClockStartedAt), status: 'unknown', extended: false };
+            // `ms` is the BASE window: the decide-once gate (`if (!backstopRecord)`) makes this
+            // catch reachable only at the first firing, before any extension. If that gate ever
+            // moves, a throw at the second firing would need `extension.extendedToMs` here.
             sessionError = formatNoOutputBackstopReason({
               ms: noOutputBackstopMs, fromEnv: backstopFromEnv,
               sessionStatus: probeUnknown('failed', `backstop decision failed: ${decisionErr && decisionErr.message}`),
