@@ -24,11 +24,19 @@
  * child_process and asserts on the one JSON line it prints, so the real
  * `await import('@opencode-ai/sdk')` only ever runs in a plain node process.
  *
+ * THIS SCRIPT DOES NOT SCRUB ITS OWN ENVIRONMENT (unlike scripts/probe-max-
+ * tokens.js and scripts/probe-provider-routing.js, which re-exec themselves
+ * under buildKeylessEnv). It sends no prompt, so it cannot spend — but it does
+ * start a real engine, so run it through the keyless rail
+ * (`node scripts/run-integration-keyless.js tests/council-agents-engine.integration.test.js`,
+ * which is how CI runs it) or wrap it in buildKeylessEnv by hand.
+ *
  * Usage: node scripts/probe-council-agents.js
  * Prints `PROBE_JSON <json>`, `PROBE_TREE_JSON <json>`, `PROBE_TREE_ENV_JSON
- * <json>`, `PROBE_TREE_GREP_JSON <json>`, `PROBE_TREE_EXTDIR_JSON <json>` and
- * `PROBE_TREE_FIELDS_JSON <json>`, then exits 0. Exits 1 with the error on
- * stderr if the engine never starts or never answers GET /agent.
+ * <json>`, `PROBE_TREE_GREP_JSON <json>`, `PROBE_TREE_EXTDIR_JSON <json>`,
+ * `PROBE_TREE_FIELDS_JSON <json>` and `PROBE_TREE_ROUTING_JSON <json>`, then
+ * exits 0. Exits 1 with the error on stderr if the engine never starts, never
+ * answers GET /agent, or if the routing tree below moves anything.
  *
  * PROBE_TREE_JSON (ruling P2-R33, council #247 round 2): the same server,
  * queried for a SECOND directory — a temp tree whose own opencode.json widens
@@ -51,6 +59,34 @@
  * {mode, permission} like the others) — a tree can set a council agent's
  * system prompt, model and sampling directly, which `verifyAgentRendering`
  * never checked (it only ever reads `permission`). Measured 2026-09-13.
+ *
+ * PROBE_TREE_ROUTING_JSON (#202 Lever 2, 2026-09-17): the case that pays for
+ * the CI experiment. council-review.yml now writes an opencode.json into its
+ * run directory carrying ONLY
+ * `provider.openrouter.models.<id>.options.provider` — PR #265 measured that
+ * shape reaching the OpenRouter request body (cases R12/R14: a file in the
+ * per-call directory is live, because the engine walks up from the session
+ * directory). That file therefore lands inside exactly the surface the three
+ * rulings above police, so the invariant "PR code is never executed, and the
+ * council agents are what this run registered" has to be MEASURED here, not
+ * argued in the PR body: the routed rendering of `council-seat` and
+ * `council-support` is diffed against a no-tree baseline on the SAME server —
+ * the permission rule list with its ORDER intact (the engine evaluates by
+ * findLast, so order IS the fact) plus every field `verifyAgentFields` reads.
+ * ⚠️ ONE SEGMENT OF THAT ORDER IS THE ENGINE'S OWN COIN FLIP, not a fact about
+ * any file: its global `external_directory` ALLOW rules (one per skill
+ * directory it scans) come back in a different order on every query. That is
+ * why this case carries a CONTROL arm — a SECOND no-tree directory — and
+ * compares through probe-council-agents-canon.js :: canonicaliseRules, which
+ * sorts each contiguous run of those rules and touches nothing else. Both
+ * `controlMovedNothing` and `routingTreeMovedNothing` are printed, and the
+ * script exits 1 if EITHER is false: a false control means the normalisation
+ * no longer matches the engine and the routing verdict is worthless.
+ * That reordering leaves every row ABOVE this one, and the production tripwire,
+ * untouched — they assert relationally and read only past the last `*`/`*`
+ * rule, which sits after the reordered run. The evidence is in
+ * probe-council-agents-canon.js's canonicaliseRules docblock; read it before
+ * concluding anything here is order-flaky.
  */
 
 'use strict';
@@ -61,6 +97,8 @@ const path = require('path');
 const { buildCouncilAgents } = require('../src/council/seat-tools');
 const oc = require('../src/opencode-client');
 require('../src/utils/path-setup').ensureNodeModulesBinInPath();
+
+const { canonicaliseRules, extAllowRunShape } = require('./probe-council-agents-canon');
 
 async function main() {
   const sdk = await import('@opencode-ai/sdk');
@@ -104,7 +142,12 @@ async function main() {
     const treeFor = async (config, { full = false } = {}) => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'probe-c4-tree-'));
       treeDirs.push(dir);
-      fs.writeFileSync(path.join(dir, 'opencode.json'), JSON.stringify(config));
+      // `config: null` writes NO opencode.json. That is the no-tree BASELINE
+      // the #202 routing case diffs against: same server, same kind of fresh
+      // empty temp directory, so the FILE is the only difference between the
+      // two renderings — a baseline taken at process.cwd() would also differ
+      // by the repo tree itself.
+      if (config !== null) { fs.writeFileSync(path.join(dir, 'opencode.json'), JSON.stringify(config)); }
       const res = await client.app.agents({ query: { directory: dir } });
       const treeList = (res && Array.isArray(res.data)) ? res.data : [];
       const byNameTree = {};
@@ -172,6 +215,51 @@ async function main() {
       },
     }, { full: true });
     process.stdout.write(`PROBE_TREE_FIELDS_JSON ${JSON.stringify({ agents: fieldsAgents })}\n`);
+
+    // #202 Lever 2: the ROUTING-ONLY tree — byte-for-byte the document
+    // council-review.yml writes into $RUN_DIR/opencode.json. Three renderings
+    // off ONE server: two directories with no opencode.json at all (baseline
+    // and CONTROL — see canonicaliseRules for why the control exists), and one
+    // carrying the routing document. Compared as JSON.stringify over a FIXED
+    // key list rather than over the raw agent objects, so the permission
+    // ARRAY's order is pinned (the P2-R44 fact) without the engine's own
+    // object key order — no part of the claim — being able to flip the
+    // verdict. The field list is exactly what the launch-time tripwire reads:
+    // the rule list, plus every field verifyAgentFields inspects.
+    const ROUTING_TREE = { provider: { openrouter: { models: { 'qwen/qwen3.8-27b': { options: { provider: { only: ['reka'] } } } } } } };
+    const ROUTING_FIELDS = ['mode', 'native', 'model', 'prompt', 'temperature', 'topP',
+      'variant', 'steps', 'hidden', 'color', 'options', 'permission'];
+    const projectAgents = (rendered) => ['council-seat', 'council-support'].map((name) => {
+      const agent = rendered[name];
+      const row = { name, present: Boolean(agent) };
+      for (const f of ROUTING_FIELDS) { row[f] = (agent && agent[f] !== undefined) ? agent[f] : null; }
+      // The offsets and lengths of the runs canonicaliseRules sorts, kept as
+      // their own compared field: a rule ADDED to (or removed from) one of
+      // those runs, or a run that moved, shows up here even though the sort
+      // hides the order WITHIN a run.
+      row.extAllowRuns = extAllowRunShape(row.permission);
+      row.permission = canonicaliseRules(row.permission);
+      return row;
+    });
+    const baseline = projectAgents(await treeFor(null, { full: true }));
+    const control = projectAgents(await treeFor(null, { full: true }));
+    const routed = projectAgents(await treeFor(ROUTING_TREE, { full: true }));
+    const controlMovedNothing = JSON.stringify(baseline) === JSON.stringify(control);
+    const routingTreeMovedNothing = JSON.stringify(baseline) === JSON.stringify(routed);
+    process.stdout.write(`PROBE_TREE_ROUTING_JSON ${JSON.stringify({
+      routingTreeMovedNothing, controlMovedNothing, tree: ROUTING_TREE, baseline, control, routed,
+    })}\n`);
+    if (!controlMovedNothing) {
+      throw new Error('#202 Lever 2: the CONTROL moved — two directories with NO opencode.json '
+        + 'rendered differently even after canonicaliseRules, so this engine\'s nondeterminism is '
+        + 'wider than the one run shape that normalisation covers and the routing verdict below '
+        + 'means nothing. Re-measure before reading PROBE_TREE_ROUTING_JSON as evidence.');
+    }
+    if (!routingTreeMovedNothing) {
+      throw new Error('#202 Lever 2: the routing-only tree MOVED a council agent rule or field — '
+        + 'see the PROBE_TREE_ROUTING_JSON line above for the two renderings. The CI experiment '
+        + 'cannot ship in this form; the engine now merges provider blocks into the agents.');
+    }
   } finally {
     for (const dir of treeDirs) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort */ } }
     await server.close();

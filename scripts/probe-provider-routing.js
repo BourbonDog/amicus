@@ -22,7 +22,7 @@
  * The INNER half refuses to start an engine unless every scrubbed name is
  * undefined, HOME is a probe sandbox and cwd is inside it. `apiKey: 'probe-key'`
  * is defence in depth: the provider points at a local capture server, so nothing
- * leaves the box. R11-R14 write `opencode.json` inside that sandbox cwd only.
+ * leaves the box. R11-R15 write `opencode.json` inside that sandbox cwd only.
  * Usage: node scripts/probe-provider-routing.js [--out probe-3/wire-capture.json] [--only R1,R3]
  * One line per case: `case id — path — carried: yes/no — shape`.
  */
@@ -143,6 +143,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // run-server.js:18-24: the server itself is directory-agnostic); `scopeTo` scopes the calls
 // at an EMPTY fresh dir. R4-R8 take one routing key each.
 const TREE = { provider: { openrouter: { models: { [KIMI]: { options: { provider: ROUTE } } } } } };
+// The shape council-review.yml documents as its example, byte-for-byte (case R15).
+const TREE_ONLY = { provider: { openrouter: { models: { [QWEN_CI]: { options: { provider: { only: ['reka'] } } } } } } };
 const perKey = (id, provider) => ({ id, model: KIMI, or: { [KIMI]: { options: { provider } } }, path: `(a) options.provider.${Object.keys(provider)[0]}` });
 const CASES = [
   { id: 'R0', path: 'control — bare {} descriptor', model: KIMI, or: { [KIMI]: {} } },
@@ -168,6 +170,13 @@ const CASES = [
   // R14 is the Stage-2 judge shape: run-server.js:16-30 scopes judges at <runDir>/_scratch.
   { id: 'R14', path: '(h) opencode.json at the scoped dir, calls scoped at its _scratch CHILD (the judge shape)',
     model: KIMI, or: { [KIMI]: {} }, scopedTreeConfig: TREE, scopeChild: '_scratch' },
+  // R15 (council #266 r3, A1/D4): R12's geometry carrying the SHIPPED shape — a
+  // real CI model id, a single-slug `only`, no `allow_fallbacks`. R12/R14 carry
+  // the probe's own `order` preference, so an engine regression specific to
+  // `only` handling would have tripped nothing. Real values, not sentinels: the
+  // assertion is on the request body and nothing is ever sent to a provider.
+  { id: 'R15', path: '(f) the SHIPPED shape: single-slug only, real CI model, in the per-call directory',
+    model: QWEN_CI, or: { [QWEN_CI]: {} }, scopedTreeConfig: TREE_ONLY },
 ];
 
 /** Every JSON path in `value` whose key or value is one of SENTINELS. The probe must

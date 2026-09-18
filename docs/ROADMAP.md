@@ -13,15 +13,16 @@ lives under **Backlog (tracked, not scheduled)** with everything else that is re
 Nothing about the content changed and no judgment about its value is implied; only its status. When
 an org buyer and the org to support them exist, it earns a number then.
 
-Amicus is at **v4.11.0** (2026-09-16). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.12.0** (2026-09-17). Each 4.x rev below leads with the benefit, not the
 plumbing; the v4.9.x patch releases carry no section of their own, because each corrected a
 defect rather than adding scope — where one added a surface (v4.9.4's `--thinking` refusals and
 `output-budget` doctor row, v4.9.5's Electron digest gate, v4.9.6's artifact custody, v4.9.7's dual name-table rescue boundary, v4.9.8's per-run seat tool allowlist and its unverified/refused seat census) it did so to
 make an existing promise true, not to widen it. v4.10.0 added a surface (`amicus aliases`) and
 v4.11.0 finished it (owner mode, the setup window's Needs-review section, the once-a-day notice),
-so each gets a section. See `CHANGELOG.md` for what each one contained.
+and v4.12.0 added one of its own (the CI council's credit preflight), so each gets a section. See
+`CHANGELOG.md` for what each one contained.
 
-**Status:** v4.0 through **v4.11.0** have **shipped**, plus the v4.9.1–v4.9.8 patch releases —
+**Status:** v4.0 through **v4.12.0** have **shipped**, plus the v4.9.1–v4.9.8 patch releases —
 everything on this page is a record of what landed, not a plan. Composition — the scope that
 carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
 release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
@@ -508,7 +509,58 @@ against a catalog that refreshes itself in the background once a week.
 > compare-and-swap on the owner sink, the one-write Finish and the truthful Step 2 card, and the
 > move of the notice's timestamps out of `config.json` into a machine-owned state directory all
 > came out of them. The council's own leg failures during those rounds (the 480 s no-output
-> backstop, an OpenRouter credit refusal) are tracked in `BACKLOG.md`.
+> backstop, an OpenRouter credit refusal) were the material for the next rev: both are answered in
+> v4.12.0 below — the refusal by the credit preflight, the silent backstop kills by the session
+> clause on the death report.
+
+## v4.12 — "No round is lost to an unnamed cause" *(the CI credit preflight, the session clause on a death report, the key-store refusals)* — ✅ SHIPPED v4.12.0, 2026-09-17
+**Benefit:** a CI council no longer dispatches a bench the money on the key cannot fund — it says
+so and refuses before a seat burns its once-only retry on a provider refusal — and when a leg does
+die at the no-output backstop, the artifact says what the engine thought the session was doing
+instead of going silent. Around those two: a key store that refuses a blank write rather than
+wiping the credential already there, and a `config.json` a mid-write crash can no longer truncate.
+
+- **★ The CI credit preflight** — before any seat is dispatched, `council-review.yml` prices what
+  OpenRouter actually refuses on (each bench row's per-request `max_tokens` reservation, from a
+  keyless catalog read) against the smaller of the key's monthly cap and the account's balance. It
+  **refuses** (exit 1, nothing dispatched) only when even the CHEAPEST bench seat cannot be funded,
+  **warns** when a refusal is merely likely or when anything could not be read, and clamps
+  `--max-cost` to the money as a spend bound; the chair is priced but never gates the bench, cent
+  arithmetic is exact, and nothing but a genuine refusal can fail the step. Every decision message
+  states what the check does and does not guarantee, and the key never appears in any output.
+  Motivated by run 35143585179, where four of seven legs were refused in 2–3 s for $0.003. (#256)
+  *(L)*
+- **★ A death report names the session probe's answer** — the engine's `session.status` is a map
+  keyed by session id, and the death-report formatter required a top-level string `type`, so every
+  real answer was dropped: across 27 CI artifact sets, 240 of 240 `NO_OUTPUT_BACKSTOP` reasons
+  carry no session clause at all. The keyed answer is now unwrapped exactly as the poll loop
+  unwraps it, and the probe's own outcomes (skipped, failed, no-status) render as `unknown` with
+  the detail, so "the engine reported X" is finally distinguishable from "nobody asked". The
+  `thin-cross-review` note and the still-dead retry note name their own causes on the same
+  principle, and provider key-management URLs are redacted before any of it reaches `run.json`.
+  (#251 item 3, #202, #256) *(M)*
+- **The key store refuses a blank key** — a whitespace-only `amicus key` silently WIPED a working
+  credential and reported success; it is refused at the store boundary now, so the CLI, the setup
+  window and `provider add`'s bearer are all covered by one check. The setup window's
+  `sidecar:save-key` validates in the MAIN process before it persists (the renderer's order was
+  advisory, and a CDP session on `AMICUS_DEBUG_PORT` could bypass it), and the `.env` writers
+  refuse to write the real user's key store from inside a test run. The key IPC handlers moved to
+  `electron/ipc-keys.js` for the size gate; channels and behaviour are unchanged. (#212) *(M)*
+- **`config.json` is written atomically** — temp plus rename, so a process crash mid-write can no
+  longer truncate it (crash atomicity only; power-loss durability is not claimed). An existing
+  symlinked config is followed rather than replaced, and the alias-conversion Notices print only
+  after the write lands, so a failed write no longer reports conversions that did not happen.
+  (#258) *(S)*
+- **The provider-routing wire probe** — a keyless probe (`scripts/probe-provider-routing.js`, repo
+  only, not in the tarball) that captures what an OpenRouter provider-routing preference does on
+  the wire through the engine, with its digest tracked. Evidence for #202 Lever 2, not a user
+  surface *(S)*
+> Why here: three council rounds on #264 alone rewrote the preflight's rule — a clamp became a
+> rethink became a cheapest-seat gate — and the #263 round is why the session clause is gated on a
+> module-private Symbol rather than a forgeable wire field. Two of these reach CI only through a
+> release: the workflow installs `amicus@latest`, so the preflight and the death-report fix were
+> inert on main. The judge-death investigation (#202) is downstream of this cut for exactly that
+> reason.
 
 ## Backlog (tracked, not scheduled)
 

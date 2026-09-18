@@ -8946,3 +8946,126 @@ Deferred by the reviews — one line each, none blocks anything:
 - CI ritual: the `council-review` label comes OFF the moment a round completes — a fix push on a
   still-labelled PR auto-starts a paid round (happened once; cancelled inside its first minute,
   $0.04).
+
+## Waves 2–3.0 — zero-spend probes, the v4.12.0 cut, the Lever 2 experiment (2026-09-17/18)
+
+Two probes, four boundary reads and six adversarial verifications ran at $0 (digests in the owner's
+vault, `output/2026-09-17-amicus-wave2-probes-report.md` and
+`output/2026-09-17-amicus-wave3-0-boundary-reads-report.md`; data and ledgers under
+`.superpowers/sdd/2026-09-17-wave2-probes/` and `.superpowers/sdd/2026-09-17-wave3-0-boundary-reads/`).
+They answered #251 item 2, re-specified item 1, found the reason no death report ever carried a
+session clause, put the v4.12.0 cut on the critical path, and took #202's Lever 2 from "untried" to
+measured. Shipped on the back of them:
+
+- #265 — `scripts/probe-provider-routing.js` + `probe-3/wire-capture-digest.json`: a keyless probe
+  that shows what `provider.openrouter.models.<id>.options.provider` puts on the wire. No council
+  round (probe script only, owner's call).
+- **v4.12.0** (2026-09-18; window v4.11.0 → #265). Ships #263's `(session: …)` clause, #264's
+  credit preflight, #260–#262. The #263 CHANGELOG bullet was corrected at the window sweep: the
+  released formatter had been reading an SDK **map keyed by session id** as if it were a status
+  object, so it rendered `''` for every real answer — the probe was blind, not silent.
+- #266 — the #202 Lever 2 infrastructure in `council-review.yml`, **shipped with
+  `COUNCIL_PROVIDER_ROUTING` blank**: shape/allowlist/type gates (`jq -e`), a keyless pre-run
+  endpoint check (fail-closed: the pin is skipped, never the job), a `.routing-pin-written` marker
+  that keys the post-run health warning, a `find` assertion that no other `opencode.json` sits under
+  the run dir, and a canary (`tests/probe-provider-routing-canary.integration.test.js`, R12/R14/R15)
+  that pins the shipped `only` shape on the engine. THREE rounds ($0.41 + $0.62 + $0.62), every
+  finding fixed or refuted with evidence; merged on the in-branch reviews.
+- #267 filed — the hidden title-generation request (below). #268 open, unlabelled — the Wave 3.0
+  probe scripts (`probe-agent-wire.js`, `probe-shared-server.js`, `probe-wire-64k.js`,
+  `probe-sandbox.js`, `probe-session-obs.js`) and digests; the same class as #265.
+
+**Records — measured, for the next person to read before designing against #251 / #202**
+- **`k × input` never binds.** 27 local artifact sets, 295 legs, 57 backstop kills: TTFT slope
+  k = 1.58 ms/token pooled, 0.170 on Stage-1 first attempts; the largest predicted allowance is
+  272 s against the 480 s floor. #251 item 2 is dropped. A fixed 720 s floor would have saved 9 of
+  57 kills in 4 of 8 sets and recovered 0 lost seats.
+- **Judge deaths are a regime, not a tail.** 0 of 49 judge legs died before 2026-09-14, 17 of 54
+  after (gpt-as-judge 0/14, the chair 0/14 under the same `council-support` agent). Both named
+  v4.9.8 candidates are eliminated at the code level (the fallback/refusal branches never executed;
+  `council-support` sends no `tools` array but every bench endpoint supports tools and Stage-1
+  seats lost the identical array without moving); the tool-call hypothesis is refuted and inverted
+  (the judge prompt forbade tools in BOTH eras; v4.9.8 added that sentence to Stage 1); size
+  explains ~2× of a ~7× hazard; v4.9.8 removed nothing measurable (Stage-2 builders byte-identical,
+  disarm set sha256-identical). Weekend/weekday is perfectly collinear with the boundary (Fri–Sun
+  13/13 vs Mon–Thu 14/14) — a Saturday round is the cheapest discriminator.
+- **The death has a name.** On 4.12.0, 6 of 6 backstop kills across #266 rounds 2–3 printed
+  `(session: busy)`: an open, active provider stream that persisted nothing for 480 s (deepseek once
+  for 914 s). Not `retry`, not `unknown`, not amicus. Round 3's three dead seats all healed on retry
+  with TTFTs 28 s / 133 s / 503 s — the last past the 480 s wall and saved only by the 912 s retry
+  window. **#251 item 1 is actionable:** move the kill-path status read above the kill; extend once
+  on `busy`/`retry`, never on `unknown`; cap at the leg cap; record which case each kill was.
+- **Lever 2, answered.** Routing reaches the wire (all six documented keys); there is no per-request
+  channel; any `opencode.json` in an ancestor of the run dir is live; the serving upstream is
+  persisted NOWHERE (no assistant-message field carries it), so only a single-slug `only` is
+  self-attributing. Under `only: ["reka"]` on qwen across two rounds: both pinned first attempts died
+  at the backstop, round 1's retry died at 914 s (seat lost), round 2's retry (TTFT 380 s) and judge
+  leg (209 s) completed — 3 of 5 pinned legs failed. reka serves the model and does not remove the
+  tail. That is why the default is blank.
+- **The hidden second request (#267).** `session.create` carries no title
+  (`src/opencode-client.js:147-148`), so the engine generates one first — to
+  `google/gemini-3.8-flash`, the leg's FULL prompt, the same `max_tokens` reservation (64000 under
+  the CI budget), no `usage` key, no assistant message. `spend-ledger.jsonl` never sees it by
+  construction. Inferred upper bound $0.05–$0.42 per round against $0.28–$0.58 ledgered.
+  Suppression is one line (`body: {title}`); the engine's `small_model` is a second lever.
+- **64000 on the wire.** CI's `outputBudget: 64000` reaches every leg as `max_tokens` and rides the
+  title request too; at 64000 the tool-eligible endpoint counts are glm 34/34, deepseek 28/29,
+  qwen 14/16.
+- **The engine reorders its own rules.** `external_directory` allow rules come back in a different
+  order on every query (a 21-rule run at indices 3–23); the deciding `**` rule sits at index 31 in
+  all renderings. `scripts/probe-council-agents-canon.js` canonicalises the comparison with a control
+  arm; the launch-time tripwire never touches that segment. Accepted limitation: a permutation
+  INSIDE the engine-owned run is indistinguishable from the coin flip (offsets and lengths are
+  compared as their own field, so a rule added, removed or moved across a run is caught).
+- The engine adds a `$schema` key to `opencode.json` on load — the artifact's copy carries it, so a
+  byte comparison against the source document must strip it.
+- Bookkeeping: the backstop-kill population is 57 of 60 errored legs (34 Stage-1 first attempts at
+  480 s, 4 retries at 912 s, 17 judges, 2 repair solos; the other 3 are tool-call stalls).
+- #266 D1 (round 3) stands on OpenRouter's documentation, not a wire measurement: `only` bounds the
+  pool, so `allow_fallbacks` is inert under a single-slug `only` and a dead upstream costs the seat.
+  The pre-run check is a snapshot; the post-run health warning is the net.
+
+Deferred — one line each, none blocks anything:
+
+**Council leg lifecycle**
+- [ ] #251 item 1 — build it as specified above; it is the first change the busy clause unlocks.
+- [ ] Two post-boundary **repair-solo** deaths carry an EMPTY `deathReason` (55 of 57 kills carry a
+  reason string) — a surface gap of the #251-item-3 class; name the cause on that path.
+- [ ] #267 — reconcile the OpenRouter dashboard against `spend-ledger.jsonl` for one known round
+  (free) to size the hidden spend, then suppress the title request or set `small_model`.
+
+**Engine tripwire**
+- [ ] #266 C6 — the launch-time tripwire in `run-seat-tools-verify.js` reads rendered rule objects
+  (no text a comment could enter), but a future RULE rendered after the deciding `**` wildcard is
+  reached by no check. Assert that nothing follows the deciding rule.
+
+**Lever 2 follow-through**
+- [ ] Persist the serving upstream per leg — engine-blocked today; re-run
+  `scripts/probe-provider-routing.js` (R0–R15) after every engine bump to see whether a field appears.
+- [ ] A first-class `providerRouting` feature (M, openrouter-only, validated document) only if a pin
+  ever earns its place; the CI step is the prototype and the gates are its spec.
+- [ ] `scripts/probe-provider-routing.js` is 308 lines (`scripts/` is outside the size gate; five
+  siblings are larger) — split `CASES` and the tree constants into a sibling when a round adds cases.
+
+**Data custody**
+- [ ] The 27-set corpus behind every number above is local-only
+  (`.superpowers/sdd/2026-09-17-wave2-probes/probe-4/legs.tsv`, 295 rows, + `rounds.tsv`) in a
+  gitignored directory, and the CI artifacts it was built from expire. Archive both files under
+  `docs/` or a data branch before the next boundary question needs them.
+
+**Council infrastructure — frequency record, #266's three rounds (continues the Wave 1 record)**
+- r1 (4.11.0, $0.41): qwen, pinned to reka, died at 480,637 ms and 913,975 ms → seat lost;
+  deepseek died once and healed (TTFT 392 s); glm 316 s; three judges survived (glm 185 s, gpt
+  24 s, deepseek 4 s); chair 18 s. No clause — the runner installed 4.11.0 minutes before the
+  4.12.0 publish.
+- r2 (4.12.0, $0.62; the first published-build round): qwen (pinned) died busy at 480,722 ms, retry
+  healed at TTFT 380 s; deepseek (unpinned) died busy at 480,487 ms and 913,904 ms → seat lost;
+  glm's seat spoke at 438 s; judges glm 309 s and qwen 209 s completed. First `(session: busy)`
+  and the first `OpenRouter credit ok` notice ($15.14 remaining).
+- r3 (4.12.0, blank default, $0.62): glm, qwen and deepseek first attempts ALL died busy at 481 s
+  and ALL healed (TTFT 28 s / 133 s / 503 s); judges 4 of 4 (glm 259 s, qwen 179 s, deepseek 83 s,
+  gpt 32 s); chair 24 s; seatsReviewed 4 of 4 (one unverified).
+- Ritual: label OFF the moment a round completes (unchanged). Monitor a labelled round by runs
+  created AFTER the label time, never by head sha — a sha match picked up the push-time skipped run
+  and removed the label 3 s after applying it (the round was unaffected; label-off is the safe
+  end state).
