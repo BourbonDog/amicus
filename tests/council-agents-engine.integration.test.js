@@ -51,6 +51,17 @@
  * hole is real on the pinned engine (the transcribed evaluator) and that
  * `verifyAgentRendering` catches it; GREP and EXTDIR prove the other two
  * round-4 claims are not reachable on this engine.
+ *
+ * #202 Lever 2 (2026-09-17): the probe also prints `PROBE_TREE_ROUTING_JSON` —
+ * a tree carrying ONLY `provider.openrouter.models.<id>.options.provider`, the
+ * document the council-review workflow now writes into its run directory so a
+ * CI seat's OpenRouter upstream is pinned to one provider. That file lands
+ * inside the very surface the three rulings above police, so the experiment's
+ * invariant argument is MEASURED here rather than argued: the routed rendering
+ * of both council agents is identical to the no-tree baseline on the same
+ * server, rule ORDER included. This is the canary — an engine bump that starts
+ * letting a provider block reach the agents fails CI instead of silently
+ * widening the surface underneath the workflow.
  */
 
 const path = require('path');
@@ -212,6 +223,33 @@ test('the pinned engine registers council-seat/council-support as amicus expects
   const fieldsVerified = verifyAgentFields(fieldsSeat);
   expect(fieldsVerified.ok).toBe(false);
   expect(fieldsVerified.reason).toContain('model');
+
+  // #202 Lever 2: the routing-ONLY tree moves NOTHING. Asserted three ways so
+  // an engine bump cannot pass one of them by accident: the probe's own
+  // deep-equal verdict, the two renderings side by side (toEqual is
+  // order-sensitive on the permission arrays, which is the P2-R44 fact), and
+  // the launch-time tripwire itself run over the routed rendering.
+  const routing = findProbeLine('PROBE_TREE_ROUTING_JSON');
+  // The CONTROL first: two directories with NO opencode.json. It is what makes
+  // the verdict below mean anything — this engine renders its own global
+  // `external_directory` allow rules in a different order on every query, so
+  // the comparison runs through a canonicaliser, and a control that moved would
+  // mean the canonicaliser no longer matches the engine.
+  expect(routing.controlMovedNothing).toBe(true);
+  expect(routing.control).toEqual(routing.baseline);
+  expect(routing.routingTreeMovedNothing).toBe(true);
+  expect(routing.routed).toEqual(routing.baseline);
+  // The document under test is the one the workflow writes — if the workflow's
+  // shape changes, this measurement stops covering it.
+  expect(Object.keys(routing.tree)).toEqual(['provider']);
+  expect(Object.keys(routing.tree.provider.openrouter.models['qwen/qwen3.8-27b'])).toEqual(['options']);
+  const routedByName = Object.fromEntries(routing.routed.map((a) => [a.name, a]));
+  for (const name of ['council-seat', 'council-support']) {
+    expect(routedByName[name].present).toBe(true);
+    const seatIds = name === 'council-seat' ? ['grep', 'read', 'webfetch'] : [];
+    expect(verifyAgentRendering(routedByName[name].permission, seatIds)).toEqual({ ok: true });
+    expect(verifyAgentFields(routedByName[name])).toEqual({ ok: true });
+  }
 
   // Ruling P2-R34 (B2/C2): the transcribed evaluator applied to the REAL seat
   // rule list — the `.env` deny/allow split the seat agent depends on.

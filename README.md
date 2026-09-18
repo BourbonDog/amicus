@@ -140,6 +140,24 @@ The council is the hero — start with the everyday way, and reach for the more 
 
 The same pipeline runs with no Claude runtime at all: `amicus council run --prompt-file briefing.md --models gemini,glm --chair deepseek --json` executes the review waves, the anonymized cross-review, the tally, and the chair verdict in one command, and writes the full run directory (`verdict.json` with the chair's parsed `overallVerdict`, `report.html`, every review and judge output). That is what powers the repo's own **Council Review GitHub Action v2** — on PRs labeled `council-review` it posts an adjudicated verdict as a check run plus a sticky comment, uploads the run directory as an evidence artifact, and gates merges by default via its `fail_on` input (fails only on a `Fundamental rethink` verdict; pass `fail_on: fix` to require `Ship it`, or `fail_on: none` for report-only). Reference: [docs/council.md](./docs/council.md#amicus-council-run).
 
+**That action can pin a seat's OpenRouter upstream — and ships with no pin in force (#202).**
+OpenRouter serves one model from several upstream providers, and nothing a run records says which
+one served a leg, so a slow upstream is indistinguishable from a slow model. Setting the workflow's
+`COUNCIL_PROVIDER_ROUTING` to a routing document makes it write an `opencode.json` into the run
+directory before the paid step, pinning one bench model's upstream
+(`provider.openrouter.models.<id>.options.provider`); with a single-slug `only` that model's legs
+become attributable by construction. **It ships blank.** The #202 Lever 2 experiment ran two live
+rounds with qwen pinned to one upstream and the time-to-first-token tail did not move: in both rounds
+the pinned seat's *first* attempt died at the no-output backstop, round 1's retry died too (912 s)
+and lost the seat, and only in round 2 did the retry — and its judge leg — complete through that same
+upstream (3 of the 5 pinned legs across the two rounds failed). So a pin is not a fix, and a merge-gating seat does not sit on a single upstream for no
+measured benefit. The
+machinery stays, gated and tested, for the next question. When a pin *is* set: the document is
+validated before it is written, a keyless pre-run check skips the pin for that run if a named
+upstream is not listed and serving, a keyless canary pins that the engine still carries the file to
+the request body, and a post-run step warns when a pinned model's leg died. To read such a run, open
+its `council-run` evidence artifact — the `opencode.json` inside it is the routing that was in force.
+
 <p align="center"><img src="./docs/cards/ship-gate.svg" alt="A council gating a release pipeline: exit 0 ships it, exit 1 sends it back"></p>
 
 ### Free council (zero-cost)

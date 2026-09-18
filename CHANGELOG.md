@@ -3,6 +3,29 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Changed
+
+- **The CI council can pin a seat's OpenRouter upstream through `COUNCIL_PROVIDER_ROUTING`, and
+  ships with it blank.** `.github/workflows/council-review.yml` writes an `opencode.json` carrying
+  only `provider.openrouter.models.<id>.options.provider` into the run directory before the paid
+  step, so a pinned bench model is served by the upstream(s) named and — with a single-slug `only` —
+  its outcomes are attributable by construction, since nothing in a run records the serving
+  upstream. **No pin is in force by default:** the #202 Lever 2 experiment ran two live rounds with
+  qwen pinned to `reka` and did not remove the tail: both pinned first attempts died at the
+  no-output backstop, round 1's retry died too (912 s) and lost the seat, and round 2's retry and
+  judge leg then completed through `reka` — so a merge-gating seat is not left on a single upstream
+  for no measured benefit. When a pin is set, the document is validated before it
+  is written — structure, documented OpenRouter routing keys, and that every pinned model id is one
+  this run's provisioned alias map actually seats, each failing the job loudly; a keyless pre-run
+  check asks OpenRouter's public endpoints route whether every named upstream is listed and serving
+  and SKIPS the pin for that run if not (fail-closed, warning only); the engine's forwarding of the
+  file is pinned by a keyless canary
+  (`tests/probe-provider-routing-canary.integration.test.js`); and a post-run step warns, never
+  fails, when a pinned model's leg died. The file ships inside the `council-run` evidence artifact,
+  so an archived run says what routing was in force for it. (#202)
+
 ## [4.12.0] - 2026-09-17
 
 ### Added

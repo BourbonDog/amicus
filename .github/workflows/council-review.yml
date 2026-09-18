@@ -124,6 +124,121 @@ jobs:
       # path at 120000 and looked like a fix that changed nothing.
       DIFF_CAP: ${{ inputs.diff_cap_bytes || '240000' }}
       RUN_DIR: council-run
+      # ⚠️ INFRASTRUCTURE ON, NO PIN IN FORCE (#202, Lever 2). This value ships
+      # BLANK: the machinery below runs on every gated council, but it writes
+      # nothing and the bench routes exactly as OpenRouter would route it
+      # anyway. Set it to a routing document to run an experiment; blank it
+      # again to stop. KEEP THE KEY either way — its presence is what documents
+      # the switch and what the steps below read.
+      #
+      # ⚠️ A WHITESPACE-ONLY VALUE IS NOT BLANK (re-review N5). GitHub
+      # expressions have no trim and neither does `[ -z ]` after the runner has
+      # handed the value over as-is, so `' '` is a non-empty string: the step
+      # proceeds and the first gate refuses it loudly as "not a JSON object".
+      # That is deliberate and the alternative is worse — silently treating a
+      # typo as the off-switch is the exact "ran as no experiment" degrade every
+      # gate here exists to prevent.
+      #
+      # WHY BLANK, AND WHAT THE EXPERIMENT FOUND. #202 is the council's
+      # frequency record: CI legs die at the 480 s no-output backstop on a heavy
+      # time-to-first-token tail. Its one untried cause-level lever was OpenRouter
+      # PROVIDER PINNING — OpenRouter fans a model out across several upstreams,
+      # so a slow upstream is indistinguishable from a slow model. Two live
+      # rounds of THIS PR ran with qwen pinned to a single upstream
+      # (only: ["reka"]). The tail did not move, and the measurement is worth
+      # stating exactly, because it is narrower than "the pin failed": across the
+      # two rounds FIVE legs ran under the pin and THREE failed. Both rounds'
+      # FIRST attempts died at the 480 s no-output backstop (2 of 2). Round 1's
+      # retry ALSO died, at 912 s, and that round lost the seat. Only ROUND 2's
+      # retry completed (first token at 380 s), and so did its Stage-2 judge leg
+      # (209 s), both through reka — one round's retry, not both. The `(session: busy)` clause appears on exactly ONE
+      # pinned leg — round 2's failed first attempt; round 1 ran on 4.11.0, which
+      # had no such clause, and round 2's other busy deaths belong to the
+      # UNPINNED deepseek seat, which is the seat that round lost. A pin is
+      # therefore not a fix, and shipping one by default would leave a
+      # merge-gating seat on a single upstream for no measured benefit. The
+      # machinery stays because the NEXT question needs it, and because it is
+      # cheaper to keep a gated, tested lever than to rebuild it.
+      #
+      # THE DOCUMENTED EXAMPLE — the document the two rounds ran, which is also
+      # the fixture the workflow test exercises every gate with:
+      #
+      #   COUNCIL_PROVIDER_ROUTING: '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"only":["reka"]}}}}}}}'
+      #
+      # Scope note: the pin is on the MODEL ID, and the engine walks up from the
+      # session directory, so it governs every call that model makes in the run —
+      # its Stage-1 review, its Stage-1 retry, and its Stage-2 judge leg (which
+      # runs in $RUN_DIR/_scratch, a child) alike. No other seat is touched.
+      #
+      # THE MEASUREMENT IT RIDES ON (PR #265, keyless, on the pinned engine):
+      # a per-model `options.provider` block reaches the OpenRouter request body
+      # verbatim, and an `opencode.json` written into the PER-CALL directory is
+      # live — the engine walks UP from the session directory, so a file in
+      # $RUN_DIR reaches a Stage-1 seat, whose call is scoped at $RUN_DIR itself
+      # (case R12), and the SAME file still reaches a judge leg, whose call is
+      # scoped at $RUN_DIR/_scratch, a child (case R14 — the file sat at the
+      # scoped directory and the call at its `_scratch` child, which is exactly
+      # the geometry of the scope note above).
+      #
+      # WHAT `only` BUYS, AND WHAT IT COSTS. A single-slug `only` leaves exactly
+      # one upstream able to serve the leg, which is what makes a result
+      # SELF-ATTRIBUTING — nothing in a run records the serving upstream, so
+      # attribution is by construction or not at all. It also makes
+      # `allow_fallbacks` inert: there is nothing to fall back to, so a dead
+      # upstream costs the seat. `order`/`ignore` documents are allowed too and
+      # are NOT self-attributing; the run's own ::notice:: says which it is
+      # (council #266 r2, C1).
+      #
+      # ⚠️ THE OFF-SWITCH IS NO LONGER ONLY MANUAL (council #266 r2, A5/C2).
+      # Before any non-blank document is written, a keyless pre-run check asks
+      # OpenRouter's public endpoints route whether every slug named in
+      # `only`/`order` is listed for that model and serving. If one is missing,
+      # not serving, or the check itself cannot run, the pin is SKIPPED for that
+      # run — fail-closed, warning only, never a job failure. A post-run step
+      # still warns when a pinned model's leg died. So a dead upstream now costs
+      # at most the experiment, not the round.
+      #
+      # WHAT THE RUN RECORDS: nothing about routing. No amicus artifact names
+      # the serving upstream — not run.json, not the spend ledger. And the
+      # engine validates none of this: a wrong provider slug would ship silently
+      # and the leg would be refused by OpenRouter, which is why the pre-run
+      # check exists and why a run's leg errors should be read for a 4xx before
+      # its stalls.
+      #
+      # ⚠️ AND SO REACHABILITY IS PINNED, NOT OBSERVED (council #266 r1, A1).
+      # Because a run records neither the routing block nor the upstream, a
+      # SILENT NO-OP — an engine bump that stops walking up from the session
+      # directory, or stops forwarding `options.provider` — would be
+      # indistinguishable from a working experiment. The standing check is
+      # tests/probe-provider-routing-canary.integration.test.js, which runs three
+      # probe rows against a local capture server, keyless and $0, on every push:
+      # the two #265 cases whose geometry is this one's (R12, the Stage-1 seat
+      # shape; R14, the judge `_scratch` shape) and R15, which carries the
+      # SHIPPED SHAPE — a single-slug `only` on a real CI model id, i.e. the
+      # example above — because the first two carry the probe's own `order`
+      # preference and left `only` handling unverified (council #266 r3, A1/D4).
+      # The canary uses its own fixed documents and is unaffected by whatever
+      # this value holds. If it goes red, a pin set here is measuring nothing.
+      #
+      # THE INVARIANT ("PR code is never executed"). A file here lands inside the
+      # surface the launch-time agent tripwire polices (verifyAgentRendering /
+      # verifyAgentFields, rulings P2-R33/R44/R53): a tree's opencode.json CAN
+      # move a council agent's permission rules. Four things hold it. (1) The
+      # document carries ONLY the routing key — asserted by the step below at
+      # every level, top-level, provider and model entry, each failing the job
+      # loudly. (2) scripts/probe-council-agents.js's PROBE_TREE_ROUTING_JSON
+      # case MEASURED on this engine that a document of exactly this shape moves
+      # no rule, no rule order and none of the fields verifyAgentFields reads.
+      # (3) The tripwire still reads every rendered agent back at launch, so a
+      # rendering that did move is refused there. (4) ⚠️ AND NO PR-AUTHORED FILE
+      # CAN REACH THAT DIRECTORY AT ALL (council #266 r2, A1): this workflow
+      # performs NO CHECKOUT — no checkout action appears anywhere in this file,
+      # deliberately, and three pins in the workflow test assert that absence by
+      # name — `council-run/` is created on the runner by the step
+      # below, and `_scratch` is created inside it by amicus at Stage 2. The step
+      # below asserts that emptiness with `find` anyway, on blank runs too,
+      # because "did not happen" is the only half of it a run can evidence.
+      COUNCIL_PROVIDER_ROUTING: ''
       # A runner has no user config, so every alias would otherwise resolve from
       # amicus's SHIPPED table (src/utils/curated-models.js :: toDefaultAliases).
       # Pointing the config dir at the workspace lets the provisioning step below
@@ -764,6 +879,385 @@ jobs:
             fi
           } > briefing.md
 
+      - name: Write the provider-routing experiment into the run directory
+        # #202 Lever 2. See the COUNCIL_PROVIDER_ROUTING block in this job's
+        # `env:` for what the experiment is, what it rides on, and how to use
+        # it. This step only places the document where the engine will read it:
+        # $RUN_DIR is the per-call directory PR #265 case R12 measured as live.
+        #
+        # It must run BEFORE the paid step below — a file written afterwards
+        # reaches nothing — and it writes into $RUN_DIR, which the "Upload
+        # evidence artifact" step ships wholesale as `council-run`. That is how
+        # a reader of an archived run knows what routing was in force for it:
+        # the document travels with the run, not with this file's history.
+        #
+        # ⚠️ IT RUNS ON A BLANK VALUE TOO (council #266 r2, A1). The value ships
+        # blank, so on an ordinary run this step writes nothing — but it still
+        # creates the run directory at 0700 and still asserts that no
+        # `opencode.json` exists anywhere beneath it. That assertion is the
+        # belt-and-braces half of A1's answer, and it is worth strictly more when
+        # no pin is in force, because then ANY such file is a surprise.
+        #
+        # Gated on the secret like every other step in this job: a soft-skipped
+        # fork PR must not announce an experiment that no council ran.
+        if: steps.gate.outputs.available == 'true'
+        run: |
+          # `umask 077` for the create, `chmod 700` for the case where it did
+          # not create anything (council #266 r1 F4, then r2 A7). `mkdir -p` is
+          # a no-op on an existing directory and never chmods, and neither does
+          # src/council/run-state.js's own recursive mkdir with mode 0o700 — so
+          # if `council-run/` somehow already exists, the umask guard alone
+          # leaves whatever mode it had. `chmod` is idempotent, costs nothing,
+          # and makes the 0700 intent true in both cases; the umask stays
+          # because it is what makes the CREATE path right with no 0755 window.
+          (umask 077; mkdir -p "$RUN_DIR")
+          chmod 700 "$RUN_DIR"
+          # ⚠️ NO OTHER opencode.json MAY EXIST UNDER $RUN_DIR (council #266 r2,
+          # A1). The finding imagined a PR-authored `opencode.json` at
+          # `$RUN_DIR/_scratch` — nearer to a judge leg's session directory than
+          # the pin, and able to repoint requests through
+          # `provider.<name>.options.baseURL`. It cannot happen HERE: this
+          # workflow performs NO CHECKOUT (no checkout action appears in this
+          # file, by design — PR code is never executed), `council-run/` is
+          # created on the runner by this step, and `_scratch` is created inside
+          # it by amicus itself at Stage 2. There is no path by which PR bytes
+          # reach that directory. This check is the belt: it costs nothing and it
+          # turns "cannot happen" into "did not happen", which is the only one of
+          # the two a run can evidence.
+          STRAY=$(find "$RUN_DIR" -name opencode.json 2>/dev/null || true)
+          if [ -n "$STRAY" ]; then
+            echo "::error::an opencode.json already exists under ${RUN_DIR} before this step wrote anything — this job checks out no PR code and creates that directory itself, so this is unexplained and the run is refused rather than launched over a config nobody vouched for:"
+            printf '%s\n' "$STRAY"
+            exit 1
+          fi
+          if [ -z "$COUNCIL_PROVIDER_ROUTING" ]; then
+            echo "::notice::#202 Lever 2 — COUNCIL_PROVIDER_ROUTING is blank, so NO provider pin is in force: nothing was written to ${RUN_DIR} and this council runs with OpenRouter's ordinary routing. This is the shipped default; see the env block for how to run a pin."
+            exit 0
+          fi
+          # VALIDATE BEFORE WRITING. A malformed document is written, ignored by
+          # the engine, and then read back later as "the experiment ran and
+          # changed nothing" — a silent degrade that would poison every death
+          # count taken while it was in force. Loud and dead instead.
+          #
+          # `type == "object"`, not a bare parse check (council #266 r1, A5). `0`,
+          # `null` and `false` are all VALID JSON and all useless here; a bare
+          # `-e` exits 1 on each of them, and the step then reported that as a
+          # parse failure — telling a maintainer that the literal text `0` "is
+          # not valid JSON", which is false and sends them looking for a typo
+          # that is not there. A parse error still lands here (jq exits 2), and
+          # one honest message covers both: it is not a JSON object.
+          if ! jq -e 'type == "object"' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::COUNCIL_PROVIDER_ROUTING must be a JSON object — it is either unparseable or a scalar/array (0, null, false and \"…\" all land here); nothing was written and no seat was dispatched. Fix the value, or blank it to disable the experiment"
+            exit 1
+          fi
+          # The THREE shape assertions the invariant argument rests on — one per
+          # level of the document, because a gate that skips a level asserts
+          # nothing about it. The measured claim (PROBE_TREE_ROUTING_JSON) is
+          # about a document that carries the routing key and NOTHING else; a
+          # document carrying an `agent` block, a prompt or a permission block
+          # would sit inside the agent-rendering surface with nothing measured
+          # about it at all.
+          if ! jq -e 'keys == ["provider"]' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::COUNCIL_PROVIDER_ROUTING carries a top-level key other than 'provider' — refused: the #202 Lever 2 invariant is measured only for a routing-ONLY document"
+            exit 1
+          fi
+          # ⚠️ THE PROVIDER LEVEL, added after round-1 review finding F1. Without
+          # it a document could carry `provider.openrouter.options.baseURL`
+          # alongside `models` and pass every other assertion here. That is not a
+          # hypothetical key: `provider.<name>.options` is the engine's own
+          # baseURL/apiKey channel, and it is the exact channel PR #265's rig
+          # used to point the engine at its local capture server (digest case
+          # R3). A models-only gate never reads the level it sits on.
+          if ! jq -e '[.provider[] | keys == ["models"]] | (length > 0) and all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::every COUNCIL_PROVIDER_ROUTING provider entry must carry 'models' and nothing else (no provider-level options/baseURL/apiKey), and there must be at least one — refused"
+            exit 1
+          fi
+          if ! jq -e '[.provider[].models[] | (keys == ["options"]) and (.options | keys == ["provider"])] | (length > 0) and all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::every COUNCIL_PROVIDER_ROUTING model entry must carry options.provider and nothing else, and there must be at least one — refused"
+            exit 1
+          fi
+          # ⚠️ THE CONTENTS OF options.provider, added after council #266 r1
+          # (B1 major + A2 minor). Every gate above is STRUCTURAL: it asks where
+          # the keys sit, never what they say. So `{"options":{"provider":{}}}`
+          # — an empty, completely inert routing block — passed every one of
+          # them, and the step then announced an "active, attributable pin". So
+          # did `{"onlyy":["reka"]}` (a typo OpenRouter ignores) and
+          # `{"only":[]}` (a list that permits nothing). Each would leave the
+          # seat routed exactly as if there were no experiment, while every
+          # later reading of its death counts assumed there was one.
+          #
+          # ⚠️ `only` IS NOT REQUIRED (council #266 r2, C1 — contested, and this
+          # is the ruling). An `order`-only or `ignore`-only document is a valid
+          # experiment; it is simply not a SELF-ATTRIBUTING one, because more than
+          # one upstream can still serve the leg and nothing records which did.
+          # That distinction belongs in what the run SAYS, not in what it refuses,
+          # so the notice below states it per run and these gates stay out of the
+          # business of deciding which experiments are worth running.
+          #
+          # The allowlist is the field table from OpenRouter's own provider
+          # routing documentation ("The provider object can contain the
+          # following fields"):
+          #   https://openrouter.ai/docs/features/provider-routing
+          # ⚠️ IT IS A DATED MANUAL TRANSCRIPTION (2026-09-17) WITH NO
+          # MACHINE-CHECKABLE SOURCE IN THIS REPO (re-review N3). The saved page
+          # it was read from lives in the owner's evidence store, not in the
+          # tree (.superpowers/sdd/2026-09-17-wave2-probes/probe-3/
+          # openrouter-provider-routing.html), so the only thing automation can
+          # prove is that this list and the workflow test's
+          # DOCUMENTED_PROVIDER_KEYS agree — which it does, and which catches
+          # gate/test drift but NOT drift from OpenRouter. Re-read the URL above
+          # when the docs move; the list is DATA here precisely so that re-check
+          # is a one-line edit in two agreeing places.
+          if ! jq -e --argjson ok '["allow_fallbacks","data_collection","enforce_distillable_text","ignore","max_price","only","order","preferred_max_latency","preferred_min_throughput","quantizations","require_parameters","sort","zdr"]' '[.provider[].models[].options.provider | (keys | length > 0) and ((keys - $ok) | length == 0)] | (length > 0) and all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::every COUNCIL_PROVIDER_ROUTING options.provider must be a non-empty object whose keys are all documented OpenRouter provider-routing fields (order, only, ignore, allow_fallbacks, sort, require_parameters, data_collection, zdr, quantizations, max_price, preferred_min_throughput, preferred_max_latency, enforce_distillable_text) — an empty or misspelled block is an inert pin reported as an active one; refused"
+            exit 1
+          fi
+          # ⚠️ AND THE TYPES OF EVERY OTHER DOCUMENTED KEY (council #266 r3, D7).
+          # The allowlist above proves a key is documented; it says nothing about
+          # its value, so `sort: {}` or `max_price: [1]` passed the gate and the
+          # notice while OpenRouter would reject or ignore them. Types taken from
+          # the same saved field table as the allowlist:
+          #   allow_fallbacks / require_parameters / zdr / enforce_distillable_text: boolean
+          #   data_collection: "allow" | "deny"
+          #   sort: string | object (the documented strings are price, throughput,
+          #     latency; an object form carries `by`/`partition`)
+          #   max_price: object; quantizations: non-empty array of non-empty strings
+          #   preferred_min_throughput / preferred_max_latency: number | object
+          if ! jq -e '[.provider[].models[].options.provider | to_entries[] | if (.key == "allow_fallbacks" or .key == "require_parameters" or .key == "zdr" or .key == "enforce_distillable_text") then (.value | type == "boolean") elif .key == "data_collection" then (.value == "allow" or .value == "deny") elif .key == "sort" then ((.value | type == "object") or (.value | IN("price", "throughput", "latency"))) elif .key == "max_price" then (.value | type == "object") elif .key == "quantizations" then ((.value | type == "array") and (.value | length > 0) and (.value | map(type == "string" and length > 0) | all)) elif (.key == "preferred_min_throughput" or .key == "preferred_max_latency") then (.value | (type == "number") or (type == "object")) else true end] | all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::a COUNCIL_PROVIDER_ROUTING options.provider value has the wrong type for its documented field — booleans for allow_fallbacks/require_parameters/zdr/enforce_distillable_text, \"allow\"/\"deny\" for data_collection, a documented string (price/throughput/latency) or an object for sort, an object for max_price, a non-empty string array for quantizations, a number or object for the preferred_* fields. Refused"
+            exit 1
+          fi
+          # The three list-valued fields, when present: a non-empty array of
+          # non-empty strings. `only: []` permits nothing and `only: [""]` names
+          # nothing, and OpenRouter accepts both silently.
+          if ! jq -e '[.provider[].models[].options.provider | to_entries[] | select(.key == "only" or .key == "order" or .key == "ignore") | (.value | type == "array") and (.value | length > 0) and (.value | map(type == "string" and length > 0) | all)] | all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::COUNCIL_PROVIDER_ROUTING's only/order/ignore must each be a non-empty array of non-empty provider slugs — refused"
+            exit 1
+          fi
+          # THE PINNED IDS MUST BE IDS THIS RUN ACTUALLY SEATS. A pin on a model
+          # no alias resolves to is an experiment nobody is running: no leg ever
+          # reads it, and every later death count is attributed to a pin that
+          # governed nothing. Checked against the map the job PROVISIONED from
+          # the base ref a few steps up ($AMICUS_CONFIG_DIR/config.json), not
+          # against the repo copy — that file is what the bench resolves from.
+          # Gateway form (issue #214): the document's keys are engine model ids,
+          # so the gateway prefix is ADDED to them rather than stripped off the
+          # map's fully-qualified ids.
+          # ⚠️ SET DIFFERENCE, NOT index() (re-review N1, a BLOCKER this gate
+          # shipped with for one round). jq evaluates an index() argument against
+          # INDEX'S OWN INPUT, and piping the alias array into it had just made
+          # that input the array — so the model-id expression became
+          # string-plus-array, jq raised and exited 5, and the `if !` branch
+          # failed EVERY gated run here, at $0 but before the council, blaming a
+          # value that was perfectly valid. Below, the concatenation sits in
+          # ordinary pipe position where `.` really is the model id, the ids are
+          # collected into $pins, and membership is one array difference.
+          # ⚠️ FOUR OUTCOMES, FOUR MESSAGES (council #266 r2, A4). One combined
+          # condition reported every one of them as "pins a model id that no
+          # alias resolves to", so a corrupt or truncated map — a real
+          # possibility, since that file is fetched and base64-decoded a few
+          # steps up — sent its reader off to edit a value that was correct.
+          MAP="$AMICUS_CONFIG_DIR/config.json"
+          PINS=$(jq -r '[.provider | to_entries[] | .key as $prov | (.value.models | keys[]) | $prov + "/" + .] | join(", ")' <<< "$COUNCIL_PROVIDER_ROUTING")
+          if [ ! -f "$MAP" ]; then
+            echo "::warning::#202 Lever 2 — no provisioned alias map at ${MAP} (the documented 404 fallback: the base ref carries no .github/amicus-ci-aliases.json, so the bench resolves from amicus's shipped table). The pinned ids (${PINS}) could not be checked against this run's bench; the experiment may be governing no leg at all"
+          elif ! jq -e 'type == "object"' >/dev/null "$MAP" 2>/dev/null; then
+            echo "::error::the provisioned alias map at ${MAP} is not parseable JSON, so the pinned ids (${PINS}) cannot be checked against this run's bench. This is a fault in the MAP, not in COUNCIL_PROVIDER_ROUTING — that file is fetched and base64-decoded by the 'Provision the alias map' step above; read its log before editing the routing value. Refused"
+            exit 1
+          elif ! jq -e '(.aliases // {}) | (type == "object") and (length > 0)' >/dev/null "$MAP"; then
+            echo "::error::the provisioned alias map at ${MAP} parses but declares no non-empty 'aliases' object, so the pinned ids (${PINS}) cannot be checked against this run's bench. Again a fault in the MAP, not in the routing value. Refused"
+            exit 1
+          elif ! jq -e --slurpfile map "$MAP" '($map[0].aliases // {} | [.[]]) as $ids | ([.provider | to_entries[] | .key as $prov | (.value.models | keys[]) | $prov + "/" + .]) as $pins | ($pins | length > 0) and (($pins - $ids) | length == 0)' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            KNOWN=$(jq -r '[.aliases // {} | .[]] | join(", ")' "$MAP")
+            echo "::error::COUNCIL_PROVIDER_ROUTING pins a model id that no alias in this run's provisioned map resolves to — the pin would govern no leg while its results were read as if it did. Pinned: ${PINS}. The map seats: ${KNOWN}. Fix the id or blank the value. Refused"
+            exit 1
+          fi
+          # ⚠️ AND AGAINST THE SEATS THIS RUN ACTUALLY DISPATCHES (council #266 r3,
+          # D5). The gate above proves a pinned id is SEATABLE — that some alias in
+          # the map resolves to it — not that this run seats it. A pin on qwen with
+          # `models: glm` passes every gate, writes the file, and announces a pin
+          # that governs no leg. Resolved through the same provisioned map, so the
+          # two checks cannot disagree about what an alias means. A WARNING, not a
+          # refusal: a caller may legitimately pin a model for a later run, and the
+          # experiment must not fail a job over its own irrelevance.
+          if [ -f "$MAP" ]; then
+            DISPATCHED=$(jq -r --arg models "$MODELS" --arg chair "$CHAIR" '(.aliases // {}) as $a | ([($models | split(","))[], $chair] | map(select(length > 0)) | map($a[.] // empty)) | join(", ")' "$MAP")
+            UNGOVERNED=$(jq -r --arg models "$MODELS" --arg chair "$CHAIR" --slurpfile map "$MAP" '($map[0].aliases // {}) as $a | ([($models | split(","))[], $chair] | map(select(length > 0)) | map($a[.] // empty)) as $seated | [.provider | to_entries[] | .key as $prov | (.value.models | keys[]) | $prov + "/" + .] | map(select(. as $p | ($seated | index($p)) == null)) | join(", ")' <<< "$COUNCIL_PROVIDER_ROUTING")
+            if [ -n "$UNGOVERNED" ]; then
+              echo "::warning::#202 Lever 2 — the pin on ${UNGOVERNED} governs no seat this run: this council dispatches ${DISPATCHED}. The document is still written, but nothing reads it, so do not read this run as evidence about that pin"
+            fi
+          fi
+          # ⚠️ THE KEYLESS PRE-RUN UPSTREAM CHECK (council #266 r2, A5 minor and
+          # C2 major). A single-slug `only` removes every fallback, so a pinned
+          # upstream that is down turns a MERGE-GATING round into a lost-seat
+          # verdict, and until now the only signal arrived AFTER that round's
+          # decision. This asks OpenRouter, before writing anything and with NO
+          # Authorization header (the endpoints route is public metadata, and
+          # this must never spend or authenticate), whether each slug named in
+          # only/order is listed for that model and serving.
+          #
+          # FAIL-CLOSED, NEVER FAIL THE JOB: if a slug is missing, not serving,
+          # or the check itself cannot run, the pin is SKIPPED for this run and
+          # the council proceeds unpinned. An unverifiable upstream on a
+          # merge-gating seat is the hazard; a skipped experiment is not.
+          RT=$(mktemp -d)
+          cat > "$RT/routing-preflight.cjs" <<'PREFLIGHT'
+          const fs = require('fs');
+          const OUT = process.env.ROUTING_PREFLIGHT_OUT;
+          const warn = (m) => console.log('::warning::#202 Lever 2 — ' + m);
+          // ⚠️ UNKNOWN IS NOT SERVING (council #266 r3, B3). `status` was read as
+          // "serving unless it says otherwise", which is fail-OPEN in a check whose whole
+          // posture is fail-closed. All 112 endpoints in the 2026-09-17 capture of six CI
+          // models carry a `status` (0 x104, -2 x7, -5 x1), so an absent or non-numeric
+          // one means the shape moved, and that is precisely when to stop. `uptime_last_30m`
+          // is the asymmetric one and deliberately so: 14 of those 112 carry null on
+          // endpoints that are otherwise healthy, so null there is genuinely unknown
+          // rather than evidence of being down, and only a measured zero is.
+          const serving = (e) => e && e.status === 0
+            && (e.uptime_last_30m === undefined || e.uptime_last_30m === null || e.uptime_last_30m > 0);
+          // A routing slug is the BASE of an endpoint tag: reka/fp8 is served by reka,
+          // deepinfra/bf16 by deepinfra.
+          const base = (t) => String(t || '').split('/')[0];
+          const main = async () => {
+            const doc = JSON.parse(process.env.COUNCIL_PROVIDER_ROUTING);
+            let ok = true;
+            for (const [gateway, block] of Object.entries((doc && doc.provider) || {})) {
+              for (const [id, entry] of Object.entries((block && block.models) || {})) {
+                const routing = (entry && entry.options && entry.options.provider) || {};
+                const allow = [].concat(routing.only || [], routing.order || []);
+                const deny = [].concat(routing.ignore || []);
+                // ⚠️ `ignore` NAMES UPSTREAMS TOO (council #266 r3, D3). An ignore-only
+                // document was treated as naming nothing, so a typo in it was silently
+                // unverifiable and the notice said "no upstream is named".
+                if (allow.length === 0 && deny.length === 0) { continue; }
+                const url = (process.env.ROUTING_ENDPOINTS_BASE || 'https://openrouter.ai/api/v1/models')
+                  + '/' + id + '/endpoints';
+                let listed = null;
+                try {
+                  // NO Authorization header, deliberately: public metadata, and a key here
+                  // would make a $0 check look like a spending one.
+                  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+                  if (!res.ok) { throw new Error('HTTP ' + res.status); }
+                  const body = await res.json();
+                  listed = (body && body.data && body.data.endpoints) || [];
+                } catch (err) {
+                  warn('could not read ' + url + ' (' + ((err && err.message) || err) + '), so the pin on '
+                    + gateway + '/' + id + ' is UNVERIFIABLE and the experiment is skipped this run');
+                  ok = false;
+                  continue;
+                }
+                for (const slug of allow) {
+                  const hits = listed.filter((e) => base(e.tag) === slug);
+                  if (hits.length === 0) {
+                    warn(JSON.stringify(slug) + ' is not among the ' + listed.length
+                      + ' upstreams OpenRouter lists for ' + gateway + '/' + id + ', so the experiment is skipped this run');
+                    ok = false;
+                  } else if (!hits.some(serving)) {
+                    const why = hits.map((e) => 'status=' + e.status + ' uptime30m=' + e.uptime_last_30m).join(' | ');
+                    warn(JSON.stringify(slug) + ' is listed for ' + gateway + '/' + id + ' but not serving (' + why
+                      + '), so the experiment is skipped this run');
+                    ok = false;
+                  }
+                }
+                // An ignored slug that OpenRouter does not list for this model excludes
+                // nothing — almost always a typo, and worth saying, but it cannot make the
+                // model unservable, so it warns without skipping.
+                for (const slug of deny) {
+                  if (!listed.some((e) => base(e.tag) === slug)) {
+                    warn(JSON.stringify(slug) + ' is ignored by this document but is not an upstream OpenRouter '
+                      + 'lists for ' + gateway + '/' + id + ' — it excludes nothing; check the slug for a typo');
+                  }
+                }
+                // ⚠️ THE POOL THAT SURVIVES (council #266 r3, A2). Every slug named in
+                // `only`/`order` could be listed and serving while `ignore` removes the
+                // last endpoint that would actually have served the leg — the check would
+                // have approved a document that makes the model unservable, and the seat
+                // would die exactly like the stall this experiment studies.
+                if (deny.length > 0) {
+                  let pool = listed.filter(serving);
+                  if (routing.only) { pool = pool.filter((e) => routing.only.includes(base(e.tag))); }
+                  pool = pool.filter((e) => !deny.includes(base(e.tag)));
+                  if (pool.length === 0) {
+                    warn('after applying ignore ' + JSON.stringify(deny)
+                      + (routing.only ? ' within only ' + JSON.stringify(routing.only) : '')
+                      + ', NO serving upstream remains for ' + gateway + '/' + id
+                      + ' — the pinned model would be unservable, so the experiment is skipped this run');
+                    ok = false;
+                  }
+                }
+              }
+            }
+            return ok;
+          };
+          main().then((ok) => {
+            fs.writeFileSync(OUT, ok ? 'ok' : 'skip');
+          }).catch((err) => {
+            warn('the upstream pre-run check failed (' + ((err && err.message) || err)
+              + '), so the experiment is skipped this run');
+            try { fs.writeFileSync(OUT, 'skip'); } catch { /* the shell reads a missing file as skip */ }
+          });
+          PREFLIGHT
+          ROUTING_PREFLIGHT_OUT="$RT/verdict.txt" node "$RT/routing-preflight.cjs" \
+            || echo "::warning::#202 Lever 2 — the upstream pre-run check could not run (node exited $?), so the experiment is skipped this run"
+          if [ "$(cat "$RT/verdict.txt" 2>/dev/null || echo skip)" != "ok" ]; then
+            echo "::warning::#202 Lever 2 — experiment SKIPPED this run: the pinned upstream(s) could not be verified as listed and serving. NOTHING was written to ${RUN_DIR}; this council runs with OpenRouter's ordinary routing and the round is otherwise unaffected"
+            exit 0
+          fi
+          printf '%s' "$COUNCIL_PROVIDER_ROUTING" > "$RUN_DIR/opencode.json"
+          # ⚠️ THE MARKER THE HEALTH STEP KEYS ON (council #266 r3, B1). That step
+          # used to key off the ENV VALUE, so on a run where the pre-run check
+          # SKIPPED the pin — value set, nothing written, council unpinned — a lost
+          # seat was still attributed to a pin that never existed, which is a false
+          # datum pointed straight at the maintainer's decision to keep or blank the
+          # experiment. The marker is written HERE and only here: after every gate,
+          # after the pre-run check, after the document is on disk. It carries the
+          # document's sha256 so an archived run can be tied to the exact bytes that
+          # were in force, and it rides the evidence artifact with the rest of
+          # $RUN_DIR.
+          sha256sum "$RUN_DIR/opencode.json" | cut -d' ' -f1 > "$RUN_DIR/.routing-pin-written"
+          # The other half of the A1 belt: after writing, the ONLY opencode.json
+          # under the run directory must be the one just written.
+          WROTE=$(find "$RUN_DIR" -name opencode.json 2>/dev/null || true)
+          if [ "$WROTE" != "$RUN_DIR/opencode.json" ]; then
+            echo "::error::after writing the experiment, the opencode.json files under ${RUN_DIR} are not exactly the one this step wrote — refusing to launch over a config nobody vouched for:"
+            printf '%s\n' "$WROTE"
+            exit 1
+          fi
+          # ⚠️ KEYED BY GATEWAY/MODEL, NOT BARE MODEL ID (council #266 r3, B2). The
+          # bare form dropped the gateway from the notice entirely, and two gateways
+          # pinning the same model id collided last-wins in ROUTING below — one
+          # model's routing printed against both. Every surface in this step, and
+          # the alias gate above, now uses the same qualified key.
+          PINNED=$(jq -r '[.provider | to_entries[] | .key as $prov | (.value.models | keys[]) | $prov + "/" + .] | join(", ")' <<< "$COUNCIL_PROVIDER_ROUTING")
+          # Keyed BY MODEL ID, not a merge (round-1 review F5, second half):
+          # adding the per-model routing objects together MERGES them, so with
+          # two pins the notice would print one model's only-list against both.
+          ROUTING=$(jq -c '[.provider | to_entries[] | .key as $prov | (.value.models | to_entries[]) | {($prov + "/" + .key): .value.options.provider}] | add' <<< "$COUNCIL_PROVIDER_ROUTING")
+          # ⚠️ ATTRIBUTION IS A PROPERTY OF THE DOCUMENT, SO THE NOTICE STATES IT
+          # (council #266 r2, C1). A leg outcome is attributable to one upstream
+          # only when exactly one upstream could have served it — an `only` with
+          # exactly one slug, on every pinned model. An order-only or multi-slug
+          # document is a legitimate experiment and is allowed through, but
+          # calling it self-attributing would be false.
+          ATTRIB=$(jq -r 'if ([.provider[].models[].options.provider] | length > 0) and ([.provider[].models[].options.provider | ((.only // []) | length) == 1] | all) then "self-attributing (exactly one upstream may serve each pinned model, so a leg outcome belongs to that upstream)" else "NOT self-attributing (more than one upstream may serve a pinned model, and nothing records which one did — read this run as evidence about the pin, not about a provider)" end' <<< "$COUNCIL_PROVIDER_ROUTING")
+          # ⚠️ AND THE VERIFICATION SENTENCE IS COMPUTED, NOT ASSERTED (council
+          # #266 r2 re-review, N9; corrected for `ignore` by r3 D3). A sort-only
+          # document names no upstream, so the pre-run check correctly consults
+          # nothing — and "every named upstream was verified" is then true but
+          # empty. An IGNORE-only document does name upstreams, and now says so.
+          VERIFIED=$(jq -r 'if ([.provider[].models[].options.provider | ((.only // []) + (.order // []))[]] | length) > 0 then "Every upstream this document allows was verified listed and serving, and any ignored slug was checked for a typo, before this was written." elif ([.provider[].models[].options.provider | (.ignore // [])[]] | length) > 0 then "This document allows every upstream and only excludes some; the excluded slugs were checked against the listing, and a serving pool was confirmed to remain." else "No upstream is named by this document (no only/order/ignore), so there was nothing to verify." end' <<< "$COUNCIL_PROVIDER_ROUTING")
+          # ⚠️ WORDED AS A REQUEST, NOT AN OBSERVATION (council #266 r1, A1).
+          # This step writes a file; it cannot see a request body, and neither
+          # can the run — no amicus artifact records the routing block or the
+          # serving upstream. That the file REACHES the model's calls is a
+          # property of the engine, pinned by
+          # tests/probe-provider-routing-canary.integration.test.js (probe rows
+          # R12/R14 for the geometry and R15 for the shipped single-slug `only`
+          # shape, keyless, on every push), not observed here. Saying otherwise
+          # would let an engine bump that stopped honouring the file read exactly
+          # like a working experiment.
+          echo "::notice::#202 Lever 2 — OpenRouter provider routing REQUESTED for ${PINNED}: ${ROUTING}. This document is ${ATTRIB}. ${VERIFIED} Written to ${RUN_DIR}/opencode.json and shipped in the council-run evidence artifact. That this file reaches the model's request body is pinned by tests/probe-provider-routing-canary.integration.test.js (probe rows R12/R14 for the geometry, R15 for this document’s single-slug only shape), not observed in this run — nothing here records the routing block or the serving upstream. Read this run's leg errors for an OpenRouter 4xx before reading its stalls."
+
       - name: Run the adjudicated council (amicus council run, headless)
         if: steps.gate.outputs.available == 'true'
         env:
@@ -999,6 +1493,138 @@ jobs:
           name: council-run
           path: council-run/
           if-no-files-found: warn
+
+      - name: Warn when a pinned model's leg died (the #202 Lever 2 experiment may be why)
+        # Council #266 r1, A4. `only: ["<one-slug>"]` deliberately removes every
+        # fallback, so a pinned upstream that is down, rate-limiting, or has
+        # dropped the model takes that seat out of a MERGE-GATING round — and it
+        # does so wearing the exact signature the experiment exists to study (a
+        # silent leg that dies at the no-output backstop). Nothing distinguished
+        # the two, and nobody was told. This step reads the run's own record and
+        # says so.
+        #
+        # ⚠️ WARNING ONLY, NEVER A FAILURE. A dead pinned leg is a DATUM about
+        # the experiment, not a reason to fail the PR's gate — that would hand
+        # an experiment the power to block merges. `|| true` is the belt; the
+        # program's own try/catch is the braces.
+        #
+        # PLACED AFTER THE EVIDENCE UPLOAD, not straight after the council step:
+        # it runs `always()`, so on a cancelled run it competes for the same
+        # post-cancellation grace window the #229 ruling gave the ledger upload
+        # and the receipt. It is a single local file read, but it still queues
+        # behind the two artifacts that ruling put first.
+        if: ${{ always() && steps.gate.outputs.available == 'true' && env.COUNCIL_PROVIDER_ROUTING }}
+        run: |
+          # ⚠️ OUT OF THE WORKSPACE, AND .cjs (council #266 r2, A3). This wrote
+          # a CommonJS program INTO the checkout and ran `node routing-health.js`
+          # — so a package.json with "type": "module" anywhere above it makes
+          # the file unparseable, and the old `|| true` swallowed that whole.
+          # A temp dir cannot inherit a nearer package.json, and `.cjs` settles
+          # the module system by extension regardless of what does.
+          HT=$(mktemp -d)
+          cat > "$HT/routing-health.cjs" <<'HEALTH'
+          const fs = require('fs');
+          const path = require('path');
+          const read = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
+          // ⚠️ INSIDE THE GUARD (council #266 r2, A3). This parse used to sit
+          // bare in the program body, so a malformed value threw before any
+          // try/catch and the step went silent — the one input this program
+          // cannot vouch for was the one it did not guard.
+          const readEnvDoc = () => {
+            try { return JSON.parse(process.env.COUNCIL_PROVIDER_ROUTING); } catch (err) {
+              console.log('::warning::routing health check could not run: COUNCIL_PROVIDER_ROUTING is not parseable JSON ('
+                + ((err && err.message) || err) + '); no pinned-leg health was reported');
+              return null;
+            }
+          };
+          // ⚠️ THE MARKER, NOT THE ENV VALUE (council #266 r3, B1). A non-blank
+          // COUNCIL_PROVIDER_ROUTING means a pin was ASKED for; it does not mean one
+          // was in force. The pre-run upstream check skips the write whenever a named
+          // upstream is missing, down or unverifiable, and on those runs the council
+          // is completely unpinned — yet this step still blamed the pin for any seat
+          // that died, which is a false datum aimed straight at the decision to keep
+          // or blank the experiment. The routing step writes this marker only after
+          // the document is actually on disk.
+          const marker = path.join(process.env.RUN_DIR, '.routing-pin-written');
+          if (!fs.existsSync(marker)) {
+            console.log('::notice::#202 Lever 2 — no pin was in force this run (the routing document was not '
+              + 'written; the pre-run upstream check skips it when an upstream is missing, down or '
+              + 'unverifiable), so no leg outcome is attributed to it');
+            process.exit(0);
+          }
+          const run = read(path.join(process.env.RUN_DIR, 'run.json'));
+          if (!run) {
+            // A cancelled or refused run never wrote one. Not a problem to report.
+            console.log('::notice::#202 Lever 2 — no run.json, so there is no pinned-leg health to report');
+            process.exit(0);
+          }
+          const map = read(path.join(process.env.AMICUS_CONFIG_DIR || '', 'config.json'));
+          const aliases = (map && map.aliases) || {};
+          const routing = readEnvDoc();
+          const degrades = Array.isArray(run.degrades) ? run.degrades : [];
+          // ⚠️ CHANNEL-DRIVEN, not status-sniffing (re-review N2). The first
+          // version asked whether a record carried `status: 'error'`, which
+          // missed every shape that does not: `seat-unbound`
+          // (run-stage2.js/run-retry-notes.js write `data: { waveId, seat }`
+          // with no status at all) and `dead-wave` (run-retry-notes.js ::
+          // skippedWaveNote writes `data.models`, a LIST of aliases, and no
+          // `seat` key). The three loss channels are the ones
+          // src/council/verdict-seat-loss.js counts as a seat loss; `stage2-judge`
+          // is added because this pin governs a model's judge leg too, and
+          // `stage1-retry` because that channel exists only when a leg died.
+          const LOST = ['dead-leg', 'dead-wave', 'seat-unbound', 'stage2-judge'];
+          const WATCHED = LOST.concat(['stage1-retry']);
+          // Every alias a record can name: `seat`, `seatId`, the retry note's
+          // `firstFailure.seat`, and a dead wave's `models` list.
+          const named = (d) => {
+            const data = (d && d.data) || {};
+            const models = Array.isArray(data.models) ? data.models : [];
+            return [data.seat, data.seatId, data.firstFailure && data.firstFailure.seat]
+              .concat(models).filter(Boolean);
+          };
+          const hurt = (seat) => degrades.filter(
+            (d) => WATCHED.includes(d && d.channel) && named(d).includes(seat));
+          // A Stage-2 judge leg has NO retry — saying "needed its retry" about
+          // one is simply false — and a dead wave or an unbound seat is a loss,
+          // not a rescue. One phrase per channel.
+          const phraseFor = (channel) => (channel === 'stage2-judge' ? 'could not adjudicate in'
+            : (channel === 'stage1-retry' ? 'needed its retry in' : 'was LOST from'));
+          for (const [gateway, block] of Object.entries((routing && routing.provider) || {})) {
+            for (const [id, entry] of Object.entries((block && block.models) || {})) {
+              const full = `${gateway}/${id}`;
+              const seats = Object.keys(aliases).filter((a) => aliases[a] === full);
+              if (seats.length === 0) {
+                console.log(`::warning::#202 Lever 2 — the pin on ${full} matched no alias in this run's map, so its effect on this round cannot be reported; the experiment may be governing no leg`);
+                continue;
+              }
+              for (const seat of seats) {
+                const hits = hurt(seat);
+                if (hits.length === 0) { continue; }
+                // A loss outranks a rescue when a seat produced both records.
+                const worst = hits.find((d) => LOST.includes(d.channel)) || hits[0];
+                const why = hits.map((d) => `${d.channel}: ${d.what}`).join('; ');
+                const routing = (entry && entry.options && entry.options.provider) || {};
+                const pin = JSON.stringify(routing);
+                // ⚠️ ONLY A ONE-SLUG `only` IS A SINGLE POINT OF FAILURE (council
+                // #266 r3, A3). An order-only or multi-slug document deliberately
+                // keeps several upstreams, so calling it "a single upstream with no
+                // fallback" overstated the pin's role in a loss and pointed the
+                // maintainer at the wrong lever.
+                const soleUpstream = Array.isArray(routing.only) && routing.only.length === 1;
+                const shape = soleUpstream
+                  ? 'a single upstream with no fallback, so the pin is a candidate cause and not merely a bystander'
+                  : 'routing restricted by the pinned document (more than one upstream remains permitted), so the pin is one candidate among others';
+                console.log(`::warning::#202 Lever 2 — seat '${seat}' (${full}) ${phraseFor(worst.channel)} this round, and its OpenRouter upstream was pinned to ${pin} — ${shape}. ${why}. Check this run's leg errors for an OpenRouter 4xx (a dead or wrong slug looks exactly like the stall this experiment studies), and consider blanking COUNCIL_PROVIDER_ROUTING if it recurs.`);
+              }
+            }
+          }
+          HEALTH
+          # ⚠️ A FAILURE IS ANNOUNCED, NOT SWALLOWED (council #266 r2, A3).
+          # `|| true` alone made an unparseable or crashing program look exactly
+          # like a healthy round — silence. Still never a job failure: a dead
+          # pinned leg is a datum about the experiment, not a reason to fail a
+          # merge gate, and neither is a broken check.
+          node "$HT/routing-health.cjs" || echo "::warning::routing health check could not run: node exited $? (see the log above); a pinned model's leg loss would not have been reported this run"
 
       - name: Publish the Council Review check run
         if: steps.gate.outputs.available == 'true'
