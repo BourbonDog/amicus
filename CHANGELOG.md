@@ -3,7 +3,7 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
-## [Unreleased]
+## [4.12.0] - 2026-09-17
 
 ### Added
 
@@ -87,15 +87,22 @@ All notable changes to Amicus are documented here. Format follows
   dir), throwing `TEST_ENV_WRITE_REFUSED` before any write instead of silently overwriting a
   user's credential. `AMICUS_ENV_DIR` is the opt-out. (#212)
 - **A `NO_OUTPUT_BACKSTOP` death report now says why the session probe answered nothing.** The
-  probe returned `null` when it was skipped, when the read threw or timed out, and when the
-  engine answered with nothing — and all four rendered as no clause at all, so ten of ten kills
-  on PR #254 said nothing about the engine and the only witness was a debug log CI never emits.
-  Each case now carries its own clause: `(session: unknown — probe skipped|failed|no-status:
-  <detail>)`. The type is always `unknown`, never `idle`/`busy` — a probe that timed out on a
-  loaded engine is not an observation about the session (#219) — so an artifact now separates
-  "the engine reported X" from "nobody asked". A session-keyed status answer is unwrapped like
-  the poll-loop probe, on a stricter bar: the top-level `type` must be a renderable string, so an
-  empty one can no longer hide a real keyed answer. The `no-status` detail names which of the
+  engine's `session.status` is a MAP KEYED BY SESSION ID — the SDK's declared contract at the
+  pinned `@opencode-ai/sdk`, and what amicus's own poll loop has unwrapped since v4.9.7 — but the
+  death-report formatter required a top-level string `type`, so it dropped every real answer the
+  engine gave and rendered an EMPTY clause instead. No released build ever printed one: across 27
+  CI artifact sets, 240 of 240 backstop reasons carry no session clause at all, which is why ten
+  of ten kills on PR #254 said nothing about the engine and the only witness was a debug log CI
+  never emits. The probe's own three failures — it was skipped, the read threw or timed out, the
+  engine answered with nothing — rendered as the same silence. A reader now sees one of FOUR
+  clauses: `(session: idle)`, `(session: busy)` or `(session: retry attempt N — <message>)` when
+  the engine had an answer, and `(session: unknown — probe skipped|failed|no-status: <detail>)`
+  when it did not. `unknown` is the PROBE-outcome type, not a reading of the session — a probe
+  that timed out on a loaded engine is not an observation about the session (#219) — and a real
+  engine status renders as itself, so an artifact now separates "the engine reported X" from
+  "nobody asked". A session-keyed status answer is unwrapped like the poll-loop probe, on a
+  stricter bar: the top-level `type` must be a renderable string, so an empty one can no longer
+  hide a real keyed answer. The `no-status` detail names which of the
   three shapes came back (empty status / unrenderable status type / a map with no entry for this
   session). The clause's provenance marker is a private Symbol, so an engine status that happens
   to carry a `probe` field renders as the engine status it is. (#251 item 3, #202)
