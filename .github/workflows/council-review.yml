@@ -178,8 +178,17 @@ jobs:
       # this run's provisioned alias map does not seat, and the post-run health
       # step warns when a pinned model's leg died.
       #
-      # TO TURN IT OFF: blank this value. The step below is skipped, no
-      # opencode.json is written, and the council runs exactly as before.
+      # TO TURN IT OFF: set this value to '' — and KEEP THE KEY. The step below
+      # is then skipped, no opencode.json is written, and the council runs
+      # exactly as before. Deleting the line or writing a bare
+      # `COUNCIL_PROVIDER_ROUTING:` also skips the step at runtime, but the key's
+      # presence is what documents the switch, so the workflow test requires it.
+      # ⚠️ A WHITESPACE-ONLY VALUE IS NOT BLANK (re-review N5). GitHub
+      # expressions have no trim, so `' '` is a non-empty string and the step
+      # RUNS; the first gate below then refuses it loudly as "not a JSON object".
+      # That is deliberate and the alternative is worse: silently treating a
+      # typo as the off-switch is the exact "ran as no experiment" degrade every
+      # gate here exists to prevent.
       #
       # THE INVARIANT ("PR code is never executed"). This file lands inside the
       # surface the launch-time agent tripwire polices (verifyAgentRendering /
@@ -921,10 +930,18 @@ jobs:
           #
           # The allowlist is the field table from OpenRouter's own provider
           # routing documentation ("The provider object can contain the
-          # following fields"), transcribed from the copy saved beside the #265
-          # probe on 2026-09-17. It is DATA here rather than a hand-written
-          # filter so the workflow test can compare it against that same list
-          # and catch drift. RE-CHECK IT WHEN OPENROUTER'S DOCS MOVE.
+          # following fields"):
+          #   https://openrouter.ai/docs/features/provider-routing
+          # ⚠️ IT IS A DATED MANUAL TRANSCRIPTION (2026-09-17) WITH NO
+          # MACHINE-CHECKABLE SOURCE IN THIS REPO (re-review N3). The saved page
+          # it was read from lives in the owner's evidence store, not in the
+          # tree (.superpowers/sdd/2026-09-17-wave2-probes/probe-3/
+          # openrouter-provider-routing.html), so the only thing automation can
+          # prove is that this list and the workflow test's
+          # DOCUMENTED_PROVIDER_KEYS agree — which it does, and which catches
+          # gate/test drift but NOT drift from OpenRouter. Re-read the URL above
+          # when the docs move; the list is DATA here precisely so that re-check
+          # is a one-line edit in two agreeing places.
           if ! jq -e --argjson ok '["allow_fallbacks","data_collection","enforce_distillable_text","ignore","max_price","only","order","preferred_max_latency","preferred_min_throughput","quantizations","require_parameters","sort","zdr"]' '[.provider[].models[].options.provider | (keys | length > 0) and ((keys - $ok) | length == 0)] | (length > 0) and all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
             echo "::error::every COUNCIL_PROVIDER_ROUTING options.provider must be a non-empty object whose keys are all documented OpenRouter provider-routing fields (order, only, ignore, allow_fallbacks, sort, require_parameters, data_collection, zdr, quantizations, max_price, preferred_min_throughput, preferred_max_latency, enforce_distillable_text) — an empty or misspelled block is an inert pin reported as an active one; refused"
             exit 1
@@ -945,8 +962,19 @@ jobs:
           # Gateway form (issue #214): the document's keys are engine model ids,
           # so the gateway prefix is ADDED to them rather than stripped off the
           # map's fully-qualified ids.
+          # ⚠️ SET DIFFERENCE, NOT `index(…)` (re-review N1, a BLOCKER this gate
+          # shipped with for one round). jq's `def index($i): indices($i)|.[0];`
+          # evaluates its argument against INDEX'S OWN INPUT, and `$ids |
+          # index(…)` has just made that input the alias ARRAY — so inside the
+          # argument `.` was `$ids`, `$prov + "/" + .` was string-plus-array, jq
+          # raised and exited 5, and `if ! jq -e …` took the failure branch. The
+          # step failed EVERY gated run here, at $0 but before the council, with
+          # an error blaming a value that was perfectly valid. Below, `$prov +
+          # "/" + .` sits in ordinary pipe position where `.` really is the model
+          # id, the ids are collected into `$pins`, and membership is one array
+          # difference with no nested `.` anywhere.
           if [ -f "$AMICUS_CONFIG_DIR/config.json" ]; then
-            if ! jq -e --slurpfile map "$AMICUS_CONFIG_DIR/config.json" '($map[0].aliases // {} | [.[]]) as $ids | [.provider | to_entries[] | .key as $prov | (.value.models | keys[]) | ($ids | index($prov + "/" + .)) != null] | (length > 0) and all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            if ! jq -e --slurpfile map "$AMICUS_CONFIG_DIR/config.json" '($map[0].aliases // {} | [.[]]) as $ids | ([.provider | to_entries[] | .key as $prov | (.value.models | keys[]) | $prov + "/" + .]) as $pins | ($pins | length > 0) and (($pins - $ids) | length == 0)' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
               echo "::error::COUNCIL_PROVIDER_ROUTING pins a model id that no alias in this run's provisioned map resolves to — the pin would govern no leg while its results were read as if it did; fix the id or blank the value. Refused"
               exit 1
             fi
@@ -1244,18 +1272,33 @@ jobs:
           const aliases = (map && map.aliases) || {};
           const routing = JSON.parse(process.env.COUNCIL_PROVIDER_ROUTING);
           const degrades = Array.isArray(run.degrades) ? run.degrades : [];
-          // A seat is "hurt" when a leg of it ended `error` — whether it was
-          // LOST (channel dead-leg) or merely rescued by its once-only retry
-          // (channel stage1-retry, whose data.firstFailure records the death).
-          // Both are evidence about the pin; only the first costs the round a
-          // seat, so the message says which.
-          const hurt = (seat) => degrades.filter((d) => {
+          // ⚠️ CHANNEL-DRIVEN, not status-sniffing (re-review N2). The first
+          // version asked whether a record carried `status: 'error'`, which
+          // missed every shape that does not: `seat-unbound`
+          // (run-stage2.js/run-retry-notes.js write `data: { waveId, seat }`
+          // with no status at all) and `dead-wave` (run-retry-notes.js ::
+          // skippedWaveNote writes `data.models`, a LIST of aliases, and no
+          // `seat` key). The three loss channels are the ones
+          // src/council/verdict-seat-loss.js counts as a seat loss; `stage2-judge`
+          // is added because this pin governs a model's judge leg too, and
+          // `stage1-retry` because that channel exists only when a leg died.
+          const LOST = ['dead-leg', 'dead-wave', 'seat-unbound', 'stage2-judge'];
+          const WATCHED = LOST.concat(['stage1-retry']);
+          // Every alias a record can name: `seat`, `seatId`, the retry note's
+          // `firstFailure.seat`, and a dead wave's `models` list.
+          const named = (d) => {
             const data = (d && d.data) || {};
-            const who = data.seat || (data.firstFailure && data.firstFailure.seat);
-            if (who !== seat) { return false; }
-            return d.channel === 'dead-leg' || data.status === 'error'
-              || Boolean(data.firstFailure && data.firstFailure.status === 'error');
-          });
+            const models = Array.isArray(data.models) ? data.models : [];
+            return [data.seat, data.seatId, data.firstFailure && data.firstFailure.seat]
+              .concat(models).filter(Boolean);
+          };
+          const hurt = (seat) => degrades.filter(
+            (d) => WATCHED.includes(d && d.channel) && named(d).includes(seat));
+          // A Stage-2 judge leg has NO retry — saying "needed its retry" about
+          // one is simply false — and a dead wave or an unbound seat is a loss,
+          // not a rescue. One phrase per channel.
+          const phraseFor = (channel) => (channel === 'stage2-judge' ? 'could not adjudicate in'
+            : (channel === 'stage1-retry' ? 'needed its retry in' : 'was LOST from'));
           for (const [gateway, block] of Object.entries(routing.provider || {})) {
             for (const [id, entry] of Object.entries((block && block.models) || {})) {
               const full = `${gateway}/${id}`;
@@ -1267,10 +1310,11 @@ jobs:
               for (const seat of seats) {
                 const hits = hurt(seat);
                 if (hits.length === 0) { continue; }
-                const lost = hits.some((d) => d.channel === 'dead-leg');
+                // A loss outranks a rescue when a seat produced both records.
+                const worst = hits.find((d) => LOST.includes(d.channel)) || hits[0];
                 const why = hits.map((d) => `${d.channel}: ${d.what}`).join('; ');
                 const pin = JSON.stringify(entry && entry.options && entry.options.provider);
-                console.log(`::warning::#202 Lever 2 — seat '${seat}' (${full}) ${lost ? 'was LOST from' : 'needed its retry in'} this round, and its OpenRouter upstream was pinned to ${pin} — a single upstream with no fallback, so the pin is a candidate cause and not merely a bystander. ${why}. Check this run's leg errors for an OpenRouter 4xx (a dead or wrong slug looks exactly like the stall this experiment studies), and consider blanking COUNCIL_PROVIDER_ROUTING if it recurs.`);
+                console.log(`::warning::#202 Lever 2 — seat '${seat}' (${full}) ${phraseFor(worst.channel)} this round, and its OpenRouter upstream was pinned to ${pin} — a single upstream with no fallback, so the pin is a candidate cause and not merely a bystander. ${why}. Check this run's leg errors for an OpenRouter 4xx (a dead or wrong slug looks exactly like the stall this experiment studies), and consider blanking COUNCIL_PROVIDER_ROUTING if it recurs.`);
               }
             }
           }

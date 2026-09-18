@@ -841,11 +841,21 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       const y = yml();
       return y.slice(y.indexOf(`- name: ${ROUTING_STEP}`), y.indexOf('- name: Run the adjudicated council'));
     };
+    /**
+     * The raw `COUNCIL_PROVIDER_ROUTING` scalar, with every spelling of "blank"
+     * normalised to `''` (re-review N5). `''` and a bare
+     * `COUNCIL_PROVIDER_ROUTING:` (YAML null) both reach the runner as an empty
+     * string and both correctly SKIP the step, so the suite must be green for
+     * both — A3 was fixed for only the first. The key itself is still required:
+     * its presence is what documents the off-switch and what the step's `if:`
+     * reads, so deleting the line fails here on purpose, with a message that
+     * says so rather than a `SyntaxError` from somewhere downstream.
+     */
     const routingValue = () => {
       const y = yml();
-      const m = /^\s*COUNCIL_PROVIDER_ROUTING:\s*'(.*)'\s*$/m.exec(y);
+      const m = /^\s*COUNCIL_PROVIDER_ROUTING:[ \t]*(?:'(.*)')?[ \t]*$/m.exec(y);
       expect(`COUNCIL_PROVIDER_ROUTING declared: ${m !== null}`).toBe('COUNCIL_PROVIDER_ROUTING declared: true');
-      return m[1];
+      return m[1] === undefined ? '' : m[1];
     };
     // The routing step lives BEFORE the paid step; the health warning below
     // lives after the evidence upload. Two slices, each bounded by the step that
@@ -857,12 +867,16 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     };
 
     /**
-     * The documented OpenRouter provider-routing fields, transcribed from the
-     * saved copy of https://openrouter.ai/docs/features/provider-routing
-     * ("The provider object can contain the following fields") captured
-     * 2026-09-17 beside the #265 probe. RE-TRANSCRIBE ON A DOCS CHANGE — this
-     * list and the workflow's `--argjson ok` allowlist are asserted equal, so
-     * the gate can never drift from the documentation it claims to enforce.
+     * The documented OpenRouter provider-routing fields ("The provider object
+     * can contain the following fields") from
+     * https://openrouter.ai/docs/features/provider-routing.
+     *
+     * ⚠️ A DATED MANUAL TRANSCRIPTION (2026-09-17) WITH NO MACHINE-CHECKABLE
+     * SOURCE IN THIS REPO (re-review N3). The saved page it was read from is in
+     * the owner's evidence store, not the tree, so the equality asserted below
+     * proves gate == test and catches gate/test drift — it cannot catch drift
+     * from OpenRouter. Re-read the URL when the docs move; the list is data in
+     * both places precisely so that re-check is a one-line edit.
      */
     const DOCUMENTED_PROVIDER_KEYS = [
       'allow_fallbacks', 'data_collection', 'enforce_distillable_text', 'ignore', 'max_price',
@@ -1106,6 +1120,59 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain('::warning::');
     });
 
+    test('N1 — the pinned-id gate compares by set difference, never inside index()', () => {
+      const step = routingStep();
+      // ⚠️ THE DEFECT THIS PIN EXISTS FOR, which shipped for one round and would
+      // have failed every gated run at this step (at $0, but before the council
+      // ever started). jq's `def index($i): indices($i)|.[0];` evaluates its
+      // ARGUMENT against index's own input, and `$ids | index(…)` has just made
+      // that input the alias ARRAY — so `.` inside the argument was `$ids`,
+      // `$prov + "/" + .` was string-plus-array, jq raised and exited 5, and the
+      // `if !` branch printed "pins a model id that no alias resolves to" and
+      // exited 1 on a perfectly valid document.
+      expect(step).not.toContain('index($prov + "/" + .)');
+      // And no other spelling that puts the model-id expression inside index().
+      expect(step).not.toMatch(/index\(\s*\$prov/);
+      // The shipped form: collect the ids, then one array difference. `.` sits
+      // in ordinary pipe position, where it really is the model id.
+      expect(step).toContain('as $pins');
+      expect(step).toContain('($pins - $ids) | length == 0');
+      expect(step).toContain('($pins | length > 0)');
+      // ⚠️ jq is not installed on this project's development machines, so NO
+      // test here executes this filter — this pin is a guard against the exact
+      // shape that broke, not a proof that the new one runs. The first CI run
+      // on a labelled PR is what exercises it.
+    });
+
+    test('N5 — every spelling of blank that SKIPS the step is green, and the key is still required', () => {
+      // `''` and a bare `COUNCIL_PROVIDER_ROUTING:` (YAML null) both reach the
+      // runner as an empty string, and GitHub's `&& env.X` is falsy for both, so
+      // both skip the step and neither may redden this suite.
+      const y = yml();
+      for (const spelling of ["COUNCIL_PROVIDER_ROUTING: ''", 'COUNCIL_PROVIDER_ROUTING:']) {
+        const m = /^\s*COUNCIL_PROVIDER_ROUTING:[ \t]*(?:'(.*)')?[ \t]*$/m.exec(`      ${spelling}`);
+        expect(`${spelling} parses as blank: ${m !== null && (m[1] === undefined || m[1] === '')}`)
+          .toBe(`${spelling} parses as blank: true`);
+      }
+      // Deleting the key skips the step too, but the key's presence is what
+      // documents the switch — so it stays required, and the env comment says so.
+      expect(y).toContain('KEEP THE KEY');
+      // Whitespace-only is NOT blank and must not be treated as such: GitHub has
+      // no trim, so `' '` is truthy, the step runs, and the first gate refuses
+      // it loudly. Silently accepting a typo as the off-switch is the degrade
+      // every gate in that step exists to prevent.
+      expect(y).toContain('A WHITESPACE-ONLY VALUE IS NOT BLANK');
+      expect(routingStep()).toContain("jq -e 'type == \"object\"'");
+    });
+
+    test('N3 — the allowlist cites a public URL and admits it is a manual transcription', () => {
+      const step = routingStep();
+      // The saved page lives in the owner's evidence store, not in this repo, so
+      // the gate/test agreement is all automation can prove. Say both.
+      expect(step).toContain('https://openrouter.ai/docs/features/provider-routing');
+      expect(step).toContain('NO\n          # MACHINE-CHECKABLE SOURCE IN THIS REPO');
+    });
+
     test('C5 — the notice keys the routing BY MODEL ID, so two pins cannot be merged into one', () => {
       const step = routingStep();
       expect(step).toContain('to_entries[] | {(.key): .value.options.provider}');
@@ -1186,6 +1253,15 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // by its once-only retry (which records the death under firstFailure).
       const DEAD = { channel: 'dead-leg', kind: 'degrade', what: 'seat qwen did not review', data: { seat: 'qwen', status: 'error' } };
       const RETRIED = { channel: 'stage1-retry', kind: 'heal', what: 'seat qwen reviewed on retry', data: { seat: 'qwen', firstFailure: { seat: 'qwen', status: 'error' } } };
+      // Re-review N2. Three more shapes the source really writes, each of which
+      // the first version of the predicate missed or mislabelled — copied from
+      // their emitters, not invented:
+      //   run-stage2.js :: the seat-unbound note — `{ waveId, seat }`, NO status
+      const UNBOUND = { channel: 'seat-unbound', kind: 'degrade', what: 'leg for seat qwen in wave w-s2 never returned', data: { waveId: 'w-s2', seat: 'qwen' } };
+      //   run-retry-notes.js :: skippedWaveNote — `data.models`, a LIST, no `seat`
+      const DEADWAVE = { channel: 'dead-wave', kind: 'degrade', what: 'Stage-1 wave w-s1 (qwen, glm) produced NO legs', data: { waveId: 'w-s1', models: ['qwen', 'glm'] } };
+      //   run-stage2.js :: the judge-died note — a judge leg has no retry at all
+      const JUDGE = { channel: 'stage2-judge', kind: 'degrade', what: 'judge J2 did not adjudicate', data: { judge: 'J2', seat: 'qwen', waveId: 'w-s2', status: 'error' } };
 
       const run = (o = {}) => {
         const out = { logs: [], exits: [] };
@@ -1221,6 +1297,38 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         expect(logs).toHaveLength(1);
         expect(logs[0]).toContain('needed its retry');
         expect(logs[0]).not.toContain('was LOST');
+      });
+
+      test('N2 — a seat-unbound loss is caught although it carries no status field', () => {
+        const { logs } = run({ run: { degrades: [UNBOUND] } });
+        expect(logs).toHaveLength(1);
+        expect(logs[0]).toContain('was LOST from');
+        expect(logs[0]).toContain('seat-unbound');
+      });
+
+      test('N2 — a dead WAVE is caught although it names its seats in data.models, not data.seat', () => {
+        const { logs } = run({ run: { degrades: [DEADWAVE] } });
+        expect(logs).toHaveLength(1);
+        expect(logs[0]).toContain('was LOST from');
+        // …and it is still the pinned seat's business only.
+        expect(run({ run: { degrades: [{ channel: 'dead-wave', data: { models: ['glm'] } }] } }).logs).toEqual([]);
+      });
+
+      test('N2 — a Stage-2 judge death is not called a retry, because judges have none', () => {
+        const { logs } = run({ run: { degrades: [JUDGE] } });
+        expect(logs).toHaveLength(1);
+        expect(logs[0]).toContain('could not adjudicate in');
+        expect(logs[0]).not.toContain('needed its retry');
+        expect(logs[0]).not.toContain('was LOST from');
+      });
+
+      test('N2 — a loss outranks a rescue when one seat produced both records', () => {
+        const { logs } = run({ run: { degrades: [RETRIED, DEAD] } });
+        expect(logs).toHaveLength(1);
+        expect(logs[0]).toContain('was LOST from');
+        // Both records still travel in the reason, so nothing is hidden.
+        expect(logs[0]).toContain('stage1-retry:');
+        expect(logs[0]).toContain('dead-leg:');
       });
 
       test('a healthy round says nothing at all', () => {
