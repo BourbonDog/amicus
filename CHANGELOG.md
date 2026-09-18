@@ -13,7 +13,12 @@ All notable changes to Amicus are documented here. Format follows
   the paid step, so one bench model is served by one upstream and its outcomes are attributable by
   construction (nothing in a run records the serving upstream). Blank `COUNCIL_PROVIDER_ROUTING`
   to turn it off; the file ships inside the `council-run` evidence artifact, so an archived run
-  says what routing was in force for it. (#202)
+  says what routing was in force for it. Because a run can confirm none of this itself, the
+  document is validated before it is written — structure, documented OpenRouter routing keys, and
+  that every pinned model id is one this run's provisioned alias map actually seats, each failing
+  the job loudly — the engine's forwarding of it is pinned by a keyless canary
+  (`tests/probe-provider-routing-canary.integration.test.js`), and a post-run step warns, never
+  fails, when a pinned model's leg died. (#202)
 
 ## [4.12.0] - 2026-09-17
 

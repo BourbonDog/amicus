@@ -148,8 +148,11 @@ upstream is indistinguishable from a slow model. Before the paid step, the workf
 attributable by construction. To read a run, open its `council-run` evidence artifact: the
 `opencode.json` inside it is the routing that was in force, and a wrong provider slug shows up as an
 OpenRouter 4xx on that model's legs rather than as a stall — check for one before reading a run's
-timings. To turn it off, blank the workflow's `COUNCIL_PROVIDER_ROUTING` value; the step is then
-skipped and nothing is written.
+timings. A run cannot confirm its own routing (nothing records the upstream), so the pin is guarded
+instead: the document is validated before it is written, a keyless canary pins that the engine still
+carries it to the request body, and a post-run step warns when a pinned model's leg died. To turn it
+off, blank the workflow's `COUNCIL_PROVIDER_ROUTING` value; the step is then skipped and nothing is
+written.
 
 <p align="center"><img src="./docs/cards/ship-gate.svg" alt="A council gating a release pipeline: exit 0 ships it, exit 1 sends it back"></p>
 

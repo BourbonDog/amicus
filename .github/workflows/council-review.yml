@@ -162,6 +162,22 @@ jobs:
       # from OpenRouter before any later run's death counts mean anything — a
       # typo here looks exactly like the stall it is meant to measure.
       #
+      # ⚠️ AND SO REACHABILITY IS PINNED, NOT OBSERVED (council #266 r1, A1).
+      # Because a run records neither the routing block nor the upstream, a
+      # SILENT NO-OP — an engine bump that stops walking up from the session
+      # directory, or stops forwarding `options.provider` — would be
+      # indistinguishable from a working experiment: the pinned seat would keep
+      # dying of the same backstop, and every reading would still assume a pin
+      # was in force. The standing check is
+      # tests/probe-provider-routing-canary.integration.test.js, which runs the
+      # two #265 cases whose geometry is this one's (R12, the Stage-1 seat shape;
+      # R14, the judge `_scratch` shape) against a local capture server, keyless
+      # and $0, on every push. If that canary goes red, this experiment is
+      # measuring nothing and the value should be blanked until it is fixed.
+      # Two more guards ride with it: the step below refuses a pin naming a model
+      # this run's provisioned alias map does not seat, and the post-run health
+      # step warns when a pinned model's leg died.
+      #
       # TO TURN IT OFF: blank this value. The step below is skipped, no
       # opencode.json is written, and the council runs exactly as before.
       #
@@ -855,8 +871,16 @@ jobs:
           # the engine, and then read back later as "the experiment ran and
           # changed nothing" — a silent degrade that would poison every death
           # count taken while it was in force. Loud and dead instead.
-          if ! jq -e . >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
-            echo "::error::COUNCIL_PROVIDER_ROUTING is not valid JSON — nothing was written and no seat was dispatched; fix the value or blank it to disable the experiment"
+          #
+          # `type == "object"`, not a bare `jq -e .` (council #266 r1, A5). `0`,
+          # `null` and `false` are all VALID JSON and all useless here; a bare
+          # `-e` exits 1 on each of them, and the step then reported that as a
+          # parse failure — telling a maintainer that the literal text `0` "is
+          # not valid JSON", which is false and sends them looking for a typo
+          # that is not there. A parse error still lands here (jq exits 2), and
+          # one honest message covers both: it is not a JSON object.
+          if ! jq -e 'type == "object"' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::COUNCIL_PROVIDER_ROUTING must be a JSON object — it is either unparseable or a scalar/array (0, null, false and \"…\" all land here); nothing was written and no seat was dispatched. Fix the value, or blank it to disable the experiment"
             exit 1
           fi
           # The THREE shape assertions the invariant argument rests on — one per
@@ -885,13 +909,69 @@ jobs:
             echo "::error::every COUNCIL_PROVIDER_ROUTING model entry must carry options.provider and nothing else, and there must be at least one — refused"
             exit 1
           fi
+          # ⚠️ THE CONTENTS OF options.provider, added after council #266 r1
+          # (B1 major + A2 minor). Every gate above is STRUCTURAL: it asks where
+          # the keys sit, never what they say. So `{"options":{"provider":{}}}`
+          # — an empty, completely inert routing block — passed every one of
+          # them, and the step then announced an "active, attributable pin". So
+          # did `{"onlyy":["reka"]}` (a typo OpenRouter ignores) and
+          # `{"only":[]}` (a list that permits nothing). Each would leave the
+          # seat routed exactly as if there were no experiment, while every
+          # later reading of its death counts assumed there was one.
+          #
+          # The allowlist is the field table from OpenRouter's own provider
+          # routing documentation ("The provider object can contain the
+          # following fields"), transcribed from the copy saved beside the #265
+          # probe on 2026-09-17. It is DATA here rather than a hand-written
+          # filter so the workflow test can compare it against that same list
+          # and catch drift. RE-CHECK IT WHEN OPENROUTER'S DOCS MOVE.
+          if ! jq -e --argjson ok '["allow_fallbacks","data_collection","enforce_distillable_text","ignore","max_price","only","order","preferred_max_latency","preferred_min_throughput","quantizations","require_parameters","sort","zdr"]' '[.provider[].models[].options.provider | (keys | length > 0) and ((keys - $ok) | length == 0)] | (length > 0) and all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::every COUNCIL_PROVIDER_ROUTING options.provider must be a non-empty object whose keys are all documented OpenRouter provider-routing fields (order, only, ignore, allow_fallbacks, sort, require_parameters, data_collection, zdr, quantizations, max_price, preferred_min_throughput, preferred_max_latency, enforce_distillable_text) — an empty or misspelled block is an inert pin reported as an active one; refused"
+            exit 1
+          fi
+          # The three list-valued fields, when present: a non-empty array of
+          # non-empty strings. `only: []` permits nothing and `only: [""]` names
+          # nothing, and OpenRouter accepts both silently.
+          if ! jq -e '[.provider[].models[].options.provider | to_entries[] | select(.key == "only" or .key == "order" or .key == "ignore") | (.value | type == "array") and (.value | length > 0) and (.value | map(type == "string" and length > 0) | all)] | all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::COUNCIL_PROVIDER_ROUTING's only/order/ignore must each be a non-empty array of non-empty provider slugs — refused"
+            exit 1
+          fi
+          # THE PINNED IDS MUST BE IDS THIS RUN ACTUALLY SEATS. A pin on a model
+          # no alias resolves to is an experiment nobody is running: no leg ever
+          # reads it, and every later death count is attributed to a pin that
+          # governed nothing. Checked against the map the job PROVISIONED from
+          # the base ref a few steps up ($AMICUS_CONFIG_DIR/config.json), not
+          # against the repo copy — that file is what the bench resolves from.
+          # Gateway form (issue #214): the document's keys are engine model ids,
+          # so the gateway prefix is ADDED to them rather than stripped off the
+          # map's fully-qualified ids.
+          if [ -f "$AMICUS_CONFIG_DIR/config.json" ]; then
+            if ! jq -e --slurpfile map "$AMICUS_CONFIG_DIR/config.json" '($map[0].aliases // {} | [.[]]) as $ids | [.provider | to_entries[] | .key as $prov | (.value.models | keys[]) | ($ids | index($prov + "/" + .)) != null] | (length > 0) and all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+              echo "::error::COUNCIL_PROVIDER_ROUTING pins a model id that no alias in this run's provisioned map resolves to — the pin would govern no leg while its results were read as if it did; fix the id or blank the value. Refused"
+              exit 1
+            fi
+          else
+            # The documented 404 fallback (no map on the base ref → amicus's
+            # shipped table). Warn rather than fail: the experiment must not be
+            # the thing that fails a job for a reason that is not about it.
+            echo "::warning::#202 Lever 2 — no provisioned alias map, so the pinned model ids could not be checked against this run's bench; the experiment may be governing no leg at all"
+          fi
           printf '%s' "$COUNCIL_PROVIDER_ROUTING" > "$RUN_DIR/opencode.json"
           PINNED=$(jq -r '[.provider[].models | keys[]] | join(", ")' <<< "$COUNCIL_PROVIDER_ROUTING")
           # Keyed BY MODEL ID, not `[…] | add` (round-1 review F5, second half):
           # `add` MERGES the per-model routing objects, so with two pins the
           # notice would print one model's `only` list against both ids.
           ROUTING=$(jq -c '[.provider[].models | to_entries[] | {(.key): .value.options.provider}] | add' <<< "$COUNCIL_PROVIDER_ROUTING")
-          echo "::notice::#202 Lever 2 — OpenRouter provider routing in force for ${PINNED}: ${ROUTING}. Written to ${RUN_DIR}/opencode.json and shipped in the council-run evidence artifact. Nothing records the serving upstream, so read this run's leg errors for an OpenRouter 4xx before reading its stalls."
+          # ⚠️ WORDED AS A REQUEST, NOT AN OBSERVATION (council #266 r1, A1).
+          # This step writes a file; it cannot see a request body, and neither
+          # can the run — no amicus artifact records the routing block or the
+          # serving upstream. That the file REACHES qwen's calls is a property
+          # of the engine, and it is pinned by
+          # tests/probe-provider-routing-canary.integration.test.js (probe rows
+          # R12/R14, keyless, on every push), not observed here. Saying
+          # otherwise would let an engine bump that stopped honouring the file
+          # read exactly like a working experiment.
+          echo "::notice::#202 Lever 2 — OpenRouter provider routing REQUESTED for ${PINNED}: ${ROUTING}. Written to ${RUN_DIR}/opencode.json and shipped in the council-run evidence artifact. That this file reaches the model's request body is pinned by tests/probe-provider-routing-canary.integration.test.js (probe rows R12/R14), not observed in this run — nothing here records the routing block or the serving upstream. Read this run's leg errors for an OpenRouter 4xx before reading its stalls."
 
       - name: Run the adjudicated council (amicus council run, headless)
         if: steps.gate.outputs.available == 'true'
@@ -1128,6 +1208,74 @@ jobs:
           name: council-run
           path: council-run/
           if-no-files-found: warn
+
+      - name: Warn when a pinned model's leg died (the #202 Lever 2 experiment may be why)
+        # Council #266 r1, A4. `only: ["<one-slug>"]` deliberately removes every
+        # fallback, so a pinned upstream that is down, rate-limiting, or has
+        # dropped the model takes that seat out of a MERGE-GATING round — and it
+        # does so wearing the exact signature the experiment exists to study (a
+        # silent leg that dies at the no-output backstop). Nothing distinguished
+        # the two, and nobody was told. This step reads the run's own record and
+        # says so.
+        #
+        # ⚠️ WARNING ONLY, NEVER A FAILURE. A dead pinned leg is a DATUM about
+        # the experiment, not a reason to fail the PR's gate — that would hand
+        # an experiment the power to block merges. `|| true` is the belt; the
+        # program's own try/catch is the braces.
+        #
+        # PLACED AFTER THE EVIDENCE UPLOAD, not straight after the council step:
+        # it runs `always()`, so on a cancelled run it competes for the same
+        # post-cancellation grace window the #229 ruling gave the ledger upload
+        # and the receipt. It is a single local file read, but it still queues
+        # behind the two artifacts that ruling put first.
+        if: ${{ always() && steps.gate.outputs.available == 'true' && env.COUNCIL_PROVIDER_ROUTING }}
+        run: |
+          cat > routing-health.js <<'HEALTH'
+          const fs = require('fs');
+          const path = require('path');
+          const read = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
+          const run = read(path.join(process.env.RUN_DIR, 'run.json'));
+          if (!run) {
+            // A cancelled or refused run never wrote one. Not a problem to report.
+            console.log('::notice::#202 Lever 2 — no run.json, so there is no pinned-leg health to report');
+            process.exit(0);
+          }
+          const map = read(path.join(process.env.AMICUS_CONFIG_DIR || '', 'config.json'));
+          const aliases = (map && map.aliases) || {};
+          const routing = JSON.parse(process.env.COUNCIL_PROVIDER_ROUTING);
+          const degrades = Array.isArray(run.degrades) ? run.degrades : [];
+          // A seat is "hurt" when a leg of it ended `error` — whether it was
+          // LOST (channel dead-leg) or merely rescued by its once-only retry
+          // (channel stage1-retry, whose data.firstFailure records the death).
+          // Both are evidence about the pin; only the first costs the round a
+          // seat, so the message says which.
+          const hurt = (seat) => degrades.filter((d) => {
+            const data = (d && d.data) || {};
+            const who = data.seat || (data.firstFailure && data.firstFailure.seat);
+            if (who !== seat) { return false; }
+            return d.channel === 'dead-leg' || data.status === 'error'
+              || Boolean(data.firstFailure && data.firstFailure.status === 'error');
+          });
+          for (const [gateway, block] of Object.entries(routing.provider || {})) {
+            for (const [id, entry] of Object.entries((block && block.models) || {})) {
+              const full = `${gateway}/${id}`;
+              const seats = Object.keys(aliases).filter((a) => aliases[a] === full);
+              if (seats.length === 0) {
+                console.log(`::warning::#202 Lever 2 — the pin on ${full} matched no alias in this run's map, so its effect on this round cannot be reported; the experiment may be governing no leg`);
+                continue;
+              }
+              for (const seat of seats) {
+                const hits = hurt(seat);
+                if (hits.length === 0) { continue; }
+                const lost = hits.some((d) => d.channel === 'dead-leg');
+                const why = hits.map((d) => `${d.channel}: ${d.what}`).join('; ');
+                const pin = JSON.stringify(entry && entry.options && entry.options.provider);
+                console.log(`::warning::#202 Lever 2 — seat '${seat}' (${full}) ${lost ? 'was LOST from' : 'needed its retry in'} this round, and its OpenRouter upstream was pinned to ${pin} — a single upstream with no fallback, so the pin is a candidate cause and not merely a bystander. ${why}. Check this run's leg errors for an OpenRouter 4xx (a dead or wrong slug looks exactly like the stall this experiment studies), and consider blanking COUNCIL_PROVIDER_ROUTING if it recurs.`);
+              }
+            }
+          }
+          HEALTH
+          node routing-health.js || true
 
       - name: Publish the Council Review check run
         if: steps.gate.outputs.available == 'true'

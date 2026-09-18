@@ -843,7 +843,87 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     };
     const routingValue = () => {
       const y = yml();
-      return /^\s*COUNCIL_PROVIDER_ROUTING:\s*'(.*)'\s*$/m.exec(y)[1];
+      const m = /^\s*COUNCIL_PROVIDER_ROUTING:\s*'(.*)'\s*$/m.exec(y);
+      expect(`COUNCIL_PROVIDER_ROUTING declared: ${m !== null}`).toBe('COUNCIL_PROVIDER_ROUTING declared: true');
+      return m[1];
+    };
+    // The routing step lives BEFORE the paid step; the health warning below
+    // lives after the evidence upload. Two slices, each bounded by the step that
+    // actually follows it, so neither can silently swallow a third step.
+    const HEALTH_STEP = "Warn when a pinned model's leg died";
+    const healthStep = () => {
+      const y = yml();
+      return y.slice(y.indexOf(`- name: ${HEALTH_STEP}`), y.indexOf('- name: Publish the Council Review check run'));
+    };
+
+    /**
+     * The documented OpenRouter provider-routing fields, transcribed from the
+     * saved copy of https://openrouter.ai/docs/features/provider-routing
+     * ("The provider object can contain the following fields") captured
+     * 2026-09-17 beside the #265 probe. RE-TRANSCRIBE ON A DOCS CHANGE — this
+     * list and the workflow's `--argjson ok` allowlist are asserted equal, so
+     * the gate can never drift from the documentation it claims to enforce.
+     */
+    const DOCUMENTED_PROVIDER_KEYS = [
+      'allow_fallbacks', 'data_collection', 'enforce_distillable_text', 'ignore', 'max_price',
+      'only', 'order', 'preferred_max_latency', 'preferred_min_throughput', 'quantizations',
+      'require_parameters', 'sort', 'zdr',
+    ];
+
+    /**
+     * The document pins, as a function of the VALUE — council #266 r1 / A3.
+     *
+     * These used to run `JSON.parse(routingValue())` unconditionally, so
+     * blanking `COUNCIL_PROVIDER_ROUTING` — the off-switch the env comment, the
+     * CHANGELOG and the README all document — turned this suite RED with
+     * `SyntaxError: Unexpected end of JSON input`. A maintainer following the
+     * documented procedure would have had to edit the tests too, which is the
+     * off-switch not working. A blank value is a valid shipped state: there is
+     * no document, so there is no shape to check — only that the step can still
+     * be skipped.
+     * @param {string} value the raw COUNCIL_PROVIDER_ROUTING scalar
+     */
+    const assertRoutingDocument = (value) => {
+      if (value === '') {
+        expect(routingStep()).toContain('env.COUNCIL_PROVIDER_ROUTING }}');
+        return;
+      }
+      const doc = JSON.parse(value);
+      expect(Object.keys(doc)).toEqual(['provider']);
+      // Round-1 review F1: nothing may sit between `provider.<name>` and
+      // `models` either — `options` there is the engine's baseURL/apiKey channel.
+      for (const provider of Object.values(doc.provider)) {
+        expect(Object.keys(provider)).toEqual(['models']);
+      }
+      const models = doc.provider.openrouter.models;
+      expect(Object.keys(models).length).toBeGreaterThan(0);
+      for (const entry of Object.values(models)) {
+        // ONLY options.provider. Anything else (a prompt, a model override, a
+        // permission block) would be exactly the P2-R33/R44/R53 attack shape.
+        expect(Object.keys(entry)).toEqual(['options']);
+        expect(Object.keys(entry.options)).toEqual(['provider']);
+        // Council #266 r1 / B1 + A2: the CONTENTS, not just the key. An empty
+        // object, an undocumented key, or an empty `only` list would all be
+        // accepted by a shape-only gate and then reported as an active,
+        // attributable pin.
+        const routing = entry.options.provider;
+        expect(Object.keys(routing).length).toBeGreaterThan(0);
+        for (const key of Object.keys(routing)) { expect(DOCUMENTED_PROVIDER_KEYS).toContain(key); }
+        for (const key of ['only', 'order', 'ignore']) {
+          if (!Object.prototype.hasOwnProperty.call(routing, key)) { continue; }
+          expect(Array.isArray(routing[key])).toBe(true);
+          expect(routing[key].length).toBeGreaterThan(0);
+          for (const slug of routing[key]) {
+            expect(typeof slug).toBe('string');
+            expect(slug.length).toBeGreaterThan(0);
+          }
+        }
+      }
+      // The experiment's own invariant: exactly one permitted upstream is what
+      // makes a leg's outcome attributable at all.
+      for (const entry of Object.values(models)) {
+        expect(entry.options.provider.only).toHaveLength(1);
+      }
     };
 
     test('the step exists and runs BEFORE the paid council step', () => {
@@ -927,23 +1007,14 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     });
 
     test('the shipped default is a routing-ONLY document — the shape the probe measured', () => {
-      const doc = JSON.parse(routingValue());
-      expect(Object.keys(doc)).toEqual(['provider']);
-      // Round-1 review F1: nothing may sit between `provider.<name>` and
-      // `models` either — `options` there is the engine's baseURL/apiKey channel.
-      for (const provider of Object.values(doc.provider)) {
-        expect(Object.keys(provider)).toEqual(['models']);
-      }
-      const models = doc.provider.openrouter.models;
-      expect(Object.keys(models).length).toBeGreaterThan(0);
-      for (const entry of Object.values(models)) {
-        // ONLY options.provider. Anything else (a prompt, a model override, a
-        // permission block) would be exactly the P2-R33/R44/R53 attack shape.
-        expect(Object.keys(entry)).toEqual(['options']);
-        expect(Object.keys(entry.options)).toEqual(['provider']);
-        expect(Array.isArray(entry.options.provider.only)).toBe(true);
-        expect(entry.options.provider.only).toHaveLength(1);
-      }
+      assertRoutingDocument(routingValue());
+    });
+
+    test('the documented off-switch is a valid shipped state, not a red suite', () => {
+      // Council #266 r1 / A3. Measured RED before this landed: blanking the
+      // value in the workflow failed two tests with `SyntaxError: Unexpected
+      // end of JSON input`.
+      expect(() => assertRoutingDocument('')).not.toThrow();
     });
 
     test('every pinned model id is one the CI alias map actually seats', () => {
@@ -956,11 +1027,239 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // this branch lints tests/scripts/, so nothing would have caught it. The
       // routing document's keys are engine model ids, so the prefix is added to
       // THEM instead of removed from the map.
+      const value = routingValue();
+      if (value === '') { return; } // A3: no document, no ids to check.
       const map = JSON.parse(fs.readFileSync(
         path.join(__dirname, '..', '..', '.github', 'amicus-ci-aliases.json'), 'utf-8'));
       const aliasIds = new Set(Object.values(map.aliases).map(String));
-      const models = JSON.parse(routingValue()).provider.openrouter.models;
+      const models = JSON.parse(value).provider.openrouter.models;
       for (const id of Object.keys(models)) { expect(aliasIds).toContain(`openrouter/${id}`); }
+    });
+
+    // ---- council #266 round 1 ------------------------------------------------
+
+    test('A5 — a valid-but-falsy value is refused as "not an object", not mislabelled "not valid JSON"', () => {
+      const step = routingStep();
+      // `0`, `null` and `false` are all VALID JSON and all useless as a routing
+      // document. `jq -e .` exits 1 on them, which the step then reported as a
+      // parse failure — a maintainer reading "is not valid JSON" about the
+      // literal text `0` has been told something false about their own value.
+      expect(step).toContain("jq -e 'type == \"object\"'");
+      expect(step).toContain('must be a JSON object');
+      expect(step).not.toContain('is not valid JSON');
+    });
+
+    test('B1/A2 — the gate validates options.provider CONTENTS against the documented key set', () => {
+      const step = routingStep();
+      // The allowlist is DATA in the step (`--argjson ok`), so this test can
+      // compare it with the documented set instead of restating a filter.
+      const m = /--argjson ok '(\[[^']*\])'/.exec(step);
+      expect(`the routing gate declares an --argjson allowlist: ${m !== null}`)
+        .toBe('the routing gate declares an --argjson allowlist: true');
+      expect(JSON.parse(m[1]).slice().sort()).toEqual(DOCUMENTED_PROVIDER_KEYS.slice().sort());
+      // And it must REJECT, not merely list: every key known, and at least one.
+      expect(step).toContain('(keys | length > 0) and ((keys - $ok) | length == 0)');
+    });
+
+    test('B1/A2 — the documents a contents gate has to refuse, recorded', () => {
+      // The shapes that passed every gate before this round. Each is valid JSON,
+      // routing-only at every structural level, and inert or wrong as an
+      // experiment — and the step reported all of them as an active,
+      // attributable pin.
+      const inert = { options: { provider: {} } };
+      const unknownKey = { options: { provider: { onlyy: ['reka'] } } };
+      const emptyList = { options: { provider: { only: [] } } };
+      const blankSlug = { options: { provider: { only: [''] } } };
+      const nonString = { options: { provider: { only: [1] } } };
+      for (const bad of [inert, unknownKey, emptyList, blankSlug, nonString]) {
+        // structurally identical to the shipped default …
+        expect(Object.keys(bad)).toEqual(['options']);
+        expect(Object.keys(bad.options)).toEqual(['provider']);
+        // … and refused by the contents rules the gate now enforces.
+        const routing = bad.options.provider;
+        const known = Object.keys(routing).every((k) => DOCUMENTED_PROVIDER_KEYS.includes(k));
+        const lists = ['only', 'order', 'ignore']
+          .filter((k) => Object.prototype.hasOwnProperty.call(routing, k))
+          .every((k) => Array.isArray(routing[k]) && routing[k].length > 0
+            && routing[k].every((s) => typeof s === 'string' && s.length > 0));
+        expect(Object.keys(routing).length > 0 && known && lists).toBe(false);
+      }
+      const step = routingStep();
+      // The list-shape rule, and the alias-map rule, each present as a gate.
+      expect(step).toContain('type == "array"');
+      expect(step).toContain('map(type == "string" and length > 0)');
+      expect(step).toContain('--slurpfile map');
+    });
+
+    test('B1 — a pinned model id is checked against the map the job actually provisioned', () => {
+      const step = routingStep();
+      // Not the repo copy: the job reads the map from the BASE ref into
+      // $AMICUS_CONFIG_DIR/config.json, and THAT is what the bench resolves
+      // from. Checking a different file would pass while the run pins an id no
+      // seat carries.
+      expect(step).toContain('"$AMICUS_CONFIG_DIR/config.json"');
+      // Gateway form — the document's keys are engine ids, so the gateway
+      // prefix is ADDED to them (issue #214 bans stripping it off the map).
+      expect(step).toContain('$prov + "/" + .');
+      // The map-absent branch is the documented 404 fallback, so it warns
+      // rather than failing a job for a reason unrelated to the experiment.
+      expect(step).toContain('::warning::');
+    });
+
+    test('C5 — the notice keys the routing BY MODEL ID, so two pins cannot be merged into one', () => {
+      const step = routingStep();
+      expect(step).toContain('to_entries[] | {(.key): .value.options.provider}');
+      // The "obvious" form, banned: `add` over bare provider objects merges
+      // them, so the notice would print one model's `only` list against both
+      // ids. Recorded as data, not only as a why-comment.
+      const two = {
+        'qwen/qwen3.8-27b': { options: { provider: { only: ['reka'] } } },
+        'z-ai/glm-5.3': { options: { provider: { only: ['novita'] } } },
+      };
+      const merged = Object.assign({}, ...Object.values(two).map((e) => e.options.provider));
+      expect(merged).toEqual({ only: ['novita'] }); // one model's pin, silently lost
+      const keyed = Object.assign({}, ...Object.entries(two)
+        .map(([id, e]) => ({ [id]: e.options.provider })));
+      expect(Object.keys(keyed)).toEqual(['qwen/qwen3.8-27b', 'z-ai/glm-5.3']);
+      expect(step).not.toContain('[.provider[].models[].options.provider] | add');
+    });
+
+    test('A1 — reachability is pinned by a canary, and the step says so instead of claiming per-run proof', () => {
+      const y = yml();
+      // Nothing in a run's artifacts names the serving upstream, so neither the
+      // notice nor the env comment may imply a run observed its own routing.
+      expect(y).toContain('probe-provider-routing-canary');
+      expect(routingStep()).toContain('pinned by');
+      // The canary itself must exist and name the two geometry cases.
+      const canary = fs.readFileSync(path.join(__dirname, '..', 'probe-provider-routing-canary.integration.test.js'), 'utf-8');
+      expect(canary).toContain("'R12,R14'");
+      expect(canary).toContain('probe-provider-routing.js');
+    });
+
+    test('A4 — a dead pinned leg is warned about, after the run, without ever failing the job', () => {
+      const y = yml();
+      const idx = y.indexOf(`- name: ${HEALTH_STEP}`);
+      expect(`the health step exists: ${idx > -1}`).toBe('the health step exists: true');
+      // AFTER the council step (it reads the run it produced) and after the
+      // evidence upload, so it cannot take the cancellation grace window the
+      // #229 ruling gave the ledger and the artifact.
+      expect(y.indexOf('- name: Run the adjudicated council')).toBeLessThan(idx);
+      expect(y.indexOf('- name: Upload evidence artifact')).toBeLessThan(idx);
+      const step = healthStep();
+      // always(), so a degraded or failed run — the case it exists for — still
+      // reports; gated like its neighbours; and only when a pin is in force.
+      expect(step).toContain('always()');
+      expect(step).toContain("steps.gate.outputs.available == 'true'");
+      expect(step).toContain('env.COUNCIL_PROVIDER_ROUTING');
+      // Warning-only, never a failure: a dead upstream is a datum about the
+      // experiment, not a reason to fail a merge gate.
+      expect(step).toContain('::warning::');
+      expect(step).not.toContain('::error::');
+      expect(step).not.toContain('exit 1');
+      // It must read the run's own record — through the env var, like every
+      // other value in this job, not a spliced path — and name the lever.
+      expect(step).toContain("path.join(process.env.RUN_DIR, 'run.json')");
+      expect(step).toContain('degrades');
+      expect(step).toContain('consider blanking COUNCIL_PROVIDER_ROUTING');
+    });
+
+    /**
+     * A4's detector, HARVESTED AND EXECUTED — the same discipline the
+     * review-diff and credit-preflight suites use. String pins can show that a
+     * step exists and is warning-only; only running the program can show that
+     * it recognises a lost seat, tells "lost" from "rescued by the retry", and
+     * stays silent about a healthy one. `fs` and `process` are stubbed, so
+     * nothing is read from disk and nothing exits.
+     */
+    describe('A4 — the harvested health program, executed', () => {
+      const EXITED = {};
+      const program = () => {
+        const y = yml();
+        const open = y.indexOf("cat > routing-health.js <<'HEALTH'");
+        return y.slice(y.indexOf('\n', open) + 1, y.indexOf('\n          HEALTH\n', open))
+          .split('\n').map((l) => l.replace(/^ {10}/, '')).join('\n');
+      };
+      const ALIASES = { aliases: { qwen: 'openrouter/qwen/qwen3.8-27b', gpt: 'openrouter/openai/gpt-5.6-terra' } };
+      const PIN = '{"provider":{"openrouter":{"models":{"qwen/qwen3.8-27b":{"options":{"provider":{"only":["reka"]}}}}}}}';
+      // The two shapes src/council/run-state.js actually writes, taken from the
+      // council #266 round-1 run that lost qwen: a dead leg, and a leg rescued
+      // by its once-only retry (which records the death under firstFailure).
+      const DEAD = { channel: 'dead-leg', kind: 'degrade', what: 'seat qwen did not review', data: { seat: 'qwen', status: 'error' } };
+      const RETRIED = { channel: 'stage1-retry', kind: 'heal', what: 'seat qwen reviewed on retry', data: { seat: 'qwen', firstFailure: { seat: 'qwen', status: 'error' } } };
+
+      const run = (o = {}) => {
+        const out = { logs: [], exits: [] };
+        const files = {};
+        if (o.run !== null) { files[path.join('RD', 'run.json')] = JSON.stringify(o.run || { degrades: [] }); }
+        if (o.map !== null) { files[path.join('CFG', 'config.json')] = JSON.stringify(o.map || ALIASES); }
+        const ctx = vm.createContext({
+          require: (id) => ({ fs: { readFileSync: (p) => {
+            if (!Object.prototype.hasOwnProperty.call(files, p)) { throw new Error(`ENOENT ${p}`); }
+            return files[p];
+          } }, path }[id]),
+          console: { log: (m) => out.logs.push(m) },
+          process: {
+            env: { RUN_DIR: 'RD', AMICUS_CONFIG_DIR: 'CFG', COUNCIL_PROVIDER_ROUTING: o.pin || PIN },
+            exit: (code) => { out.exits.push(code); throw EXITED; },
+          },
+        });
+        try { new vm.Script(program()).runInContext(ctx); } catch (err) { if (err !== EXITED) { throw err; } }
+        return out;
+      };
+
+      test('a LOST pinned seat is named, with the pin, and the lever to pull', () => {
+        const { logs } = run({ run: { degrades: [DEAD] } });
+        expect(logs).toHaveLength(1);
+        expect(logs[0]).toMatch(/^::warning::/);
+        expect(logs[0]).toContain("seat 'qwen' (openrouter/qwen/qwen3.8-27b) was LOST");
+        expect(logs[0]).toContain('{"only":["reka"]}');
+        expect(logs[0]).toContain('consider blanking COUNCIL_PROVIDER_ROUTING');
+      });
+
+      test('a seat its RETRY rescued is reported differently — it did not cost the round a seat', () => {
+        const { logs } = run({ run: { degrades: [RETRIED] } });
+        expect(logs).toHaveLength(1);
+        expect(logs[0]).toContain('needed its retry');
+        expect(logs[0]).not.toContain('was LOST');
+      });
+
+      test('a healthy round says nothing at all', () => {
+        expect(run({ run: { degrades: [] } }).logs).toEqual([]);
+        // Another seat's death is not this pin's business.
+        expect(run({ run: { degrades: [{ channel: 'dead-leg', data: { seat: 'glm', status: 'error' } }] } }).logs).toEqual([]);
+      });
+
+      test('a cancelled run (no run.json) is a notice, not a warning, and stops there', () => {
+        const { logs, exits } = run({ run: null });
+        expect(exits).toEqual([0]);
+        expect(logs).toEqual(['::notice::#202 Lever 2 — no run.json, so there is no pinned-leg health to report']);
+      });
+
+      test('no provisioned map — the pin cannot be tied to a seat, and that is itself reported', () => {
+        const { logs } = run({ run: { degrades: [DEAD] }, map: null });
+        expect(logs).toHaveLength(1);
+        expect(logs[0]).toContain('matched no alias');
+      });
+    });
+
+    test('A6 — the probe measures byte-for-byte the document the workflow writes', () => {
+      // The probe's header claims exactly this; nothing enforced it, so the two
+      // could drift and the measurement would silently stop covering the
+      // shipped document (council #266 r1 / A6).
+      const src = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'probe-council-agents.js'), 'utf-8');
+      const matches = src.match(/^\s*const ROUTING_TREE = (\{.*\});\s*$/m);
+      expect(`probe-council-agents.js declares one ROUTING_TREE literal: ${matches !== null}`)
+        .toBe('probe-council-agents.js declares one ROUTING_TREE literal: true');
+      expect(src.match(/const ROUTING_TREE =/g)).toHaveLength(1);
+      // Evaluated, not parsed: it is a JS object literal with bare keys. The
+      // same vm the credit-preflight heredoc is compiled with.
+      const tree = new vm.Script(`(${matches[1]})`).runInNewContext();
+      const canonical = (v) => (v === null || typeof v !== 'object' || Array.isArray(v)
+        ? JSON.stringify(v)
+        : `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}`);
+      const value = routingValue();
+      if (value === '') { return; } // A3: the off-switch has no document to match.
+      expect(canonical(tree)).toBe(canonical(JSON.parse(value)));
     });
   });
 
