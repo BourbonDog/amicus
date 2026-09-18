@@ -85,6 +85,28 @@ describe('published result-family schemas validate real builder output (v4.0 §7
     expect(compile('run')({ ...doc, variantUnverified: 'yes' })).toBe(false);
   });
 
+  // #251 item 1 (whole-branch review F4): `backstop` is additive and emit-when-VALID,
+  // like `finish`/`variant`/`ttftMs` beside it, and this file is where an added field is
+  // recorded ("Fields are only ADDED within a schemaVersion"). buildRunResult's own
+  // `isBackstopRecord` gate refuses a malformed record at the emit site, so the schema is
+  // the only check that can catch one in a document read back off disk or built by hand.
+  test('run.schema.json accepts a recorded backstop, rejects a malformed and an over-full one', () => {
+    const validate = compile('run');
+    const record = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+    const doc = buildRunResult({
+      taskId: 'sch-run-2d',
+      metadata: { model: 'openrouter/deepseek/deepseek-v4', status: 'error', backstop: record },
+    });
+    expect(doc.backstop).toEqual(record);                          // the builder really carried it
+    expectValid(validate, doc);
+    expect(validate({ ...doc, backstop: { windowMs: 'x' } })).toBe(false);      // wrong type + missing required
+    expect(validate({ ...doc, backstop: { ...record, extra: 1 } })).toBe(false); // additionalProperties: false
+    // …and a leg the backstop never fired for carries no key at all, which stays valid.
+    const clean = buildRunResult({ taskId: 'sch-run-2e', metadata: { model: 'm', status: 'complete' } });
+    expect('backstop' in clean).toBe(false);
+    expectValid(validate, clean);
+  });
+
   test('wave.schema.json accepts buildWaveResult output', () => {
     const doc = buildWaveResult({
       waveId: 'sch-wave-1', legs: [runDoc],

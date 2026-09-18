@@ -194,6 +194,88 @@ describe('runLegWithFallback (spec 6.2)', () => {
     expect(doc.attempts.length).toBe(2);   // primary + 1 substitution (capped)
   });
 
+  // #251 item 1 (whole-branch review F3). A substitution re-runs in the SAME leg dir
+  // under the SAME legId, and `writeLegPatch`'s read-merge-write drops only keys that
+  // are `undefined` — so the dead attempt's per-attempt fields used to survive onto a
+  // substitute that COMPLETED, and the wave doc then read as a leg the extension SAVED
+  // (`status: 'complete'` + `backstop.extended: true`), which spec §5.2/R4 calls "the
+  // direct count of legs the extension saved". The fixture is the REACHABLE shape of
+  // that carry: a `NO_OUTPUT_BACKSTOP:` reason classifies as `other`
+  // (`src/utils/error-classify.js :: isRetryable`) and never substitutes at all, so the
+  // dead attempt here is a leg the extension SAVED (record on disk, `finish` stamped)
+  // that then died on a capacity signal — the one path that both carries a `backstop`
+  // record and reaches a substitution.
+  //
+  // Named mutant "STALEATTEMPTFIELDS" (src/sidecar/fanout-leg-fallback.js): delete the
+  // `if (attempt > 0) { clearAttemptFields(legDir); }` line in runLegWithFallback's loop.
+  test('a substituted attempt starts clean — the dead attempt\'s backstop/finish never ride it', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    const legDir = getSessionDir(project, 'w13-1');
+    fs.mkdirSync(legDir, { recursive: true });
+    const deadAttempt = {
+      taskId: 'w13-1', model: 'anthropic/claude-opus-5', status: 'error',
+      reason: 'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 912s — the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)',
+      backstop: { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 },
+      finish: 'length',
+    };
+    fs.writeFileSync(path.join(legDir, 'metadata.json'), JSON.stringify(deadAttempt, null, 2));
+
+    let call = 0;
+    const fakeRunOnce = async ({ model }) => {
+      call += 1;
+      if (call === 1) { return { legId: 'w13-1', status: 'error', model, reason: 'HTTP 429 Too Many Requests' }; }
+      return { legId: 'w13-1', status: 'complete', model, summary: 'ok' };
+    };
+    const doc = await runLegWithFallback({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus' }, legId: 'w13-1', waveId: 'w13', project,
+      fallback: { enabled: true, maxSubstitutions: 2, chains: { 'anthropic/claude-opus-5': ['anthropic/claude-haiku-5'] } },
+      catalog: [{ id: 'anthropic/claude-opus-5' }, { id: 'anthropic/claude-haiku-5' }],
+    }, {
+      runOnce: fakeRunOnce,
+      resolveRoute: async (x) => ({ kind: 'resolved', executableId: x.model, gateway: 'direct' }),
+      spendDir: project,
+    });
+
+    expect(call).toBe(2);                 // the substitute really ran
+    expect(doc.status).toBe('complete');
+    const meta = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8'));
+    expect('backstop' in meta).toBe(false);
+    expect('finish' in meta).toBe(false);
+    expect(meta.taskId).toBe('w13-1');    // only the per-attempt family goes
+  });
+
+  // Control for the pin above: the clear runs only for `attempt > 0`. With an EMPTY
+  // chain no substitution happens, the leg keeps the one attempt it had, and its
+  // record must survive untouched — a leg the backstop fired for still says so.
+  test('no substitution, no clear — a single-attempt leg keeps its backstop record', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    const legDir = getSessionDir(project, 'w14-1');
+    fs.mkdirSync(legDir, { recursive: true });
+    const record = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+    fs.writeFileSync(path.join(legDir, 'metadata.json'),
+      JSON.stringify({ taskId: 'w14-1', status: 'error', backstop: record, finish: 'length' }, null, 2));
+
+    let call = 0;
+    const fakeRunOnce = async ({ model }) => { call += 1; return { legId: 'w14-1', status: 'error', model, reason: 'HTTP 429 Too Many Requests' }; };
+    const doc = await runLegWithFallback({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus' }, legId: 'w14-1', waveId: 'w14', project,
+      fallback: { enabled: true, maxSubstitutions: 2, chains: { 'anthropic/claude-opus-5': [] } },
+      catalog: [{ id: 'anthropic/claude-opus-5' }],
+    }, {
+      runOnce: fakeRunOnce,
+      resolveRoute: async (x) => ({ kind: 'resolved', executableId: x.model, gateway: 'direct' }),
+      spendDir: project,
+    });
+
+    expect(call).toBe(1);                 // no substitute ever ran
+    expect(doc.fallback).toBeUndefined();
+    const meta = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8'));
+    expect(meta.backstop).toEqual(record);
+    expect(meta.finish).toBe('length');
+  });
+
   // This is the ONLY test in this describe that does NOT inject `runOnce`.
   // Every test above passes its own `runOnce: fakeRunOnce`, and this file's
   // own header (:5) says outright that doing so makes the runHeadless mock

@@ -4,8 +4,8 @@
 /**
  * @module fanout-leg
  * Per-leg helpers extracted from fanout.js to keep both files ≤300 lines.
- * Exports: legStatusFromResult, writeLegPatch, runLeg, runSingleAttempt,
- * buildRoutingFailureLeg (+ runLegWithFallback/recordAttemptSpend/
+ * Exports: legStatusFromResult, writeLegPatch, clearAttemptFields, runLeg,
+ * runSingleAttempt, buildRoutingFailureLeg (+ runLegWithFallback/recordAttemptSpend/
  * sumAttemptUsage, re-exported from ./fanout-leg-fallback — split out to keep
  * THIS file under the size gate; see that module for the substitution loop).
  */
@@ -39,6 +39,21 @@ function writeLegPatch(legDir, patch) {
   const merged = { ...meta, ...defined };
   writeFileAtomic(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
   return merged;
+}
+
+/**
+ * #251 item 1 (whole-branch review F3): before a SUBSTITUTED attempt re-runs in this leg dir, drop the dead
+ * attempt's per-attempt fields, so a substitute that COMPLETES is not credited with the primary's `backstop`
+ * record (a "saved leg" it was not), nor with its `finish`/`ttftMs`/`variant`/`variantUnverified`. Mirrors
+ * `src/sidecar/resume.js :: updateSessionStatus`'s reopen deletes; writeLegPatch above drops only `undefined`
+ * keys, so nothing else clears them here. Best-effort: an unreadable metadata.json is left alone.
+ * @param {string} legDir
+ */
+function clearAttemptFields(legDir) {
+  const metaPath = path.join(legDir, 'metadata.json'); let meta;
+  try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { return; }
+  for (const k of ['backstop', 'finish', 'ttftMs', 'variant', 'variantUnverified']) { delete meta[k]; }
+  writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
 }
 
 /**
@@ -270,6 +285,6 @@ async function runLeg(args) {
 }
 
 module.exports = {
-  legStatusFromResult, writeLegPatch, runLeg, buildRoutingFailureLeg, runSingleAttempt,
+  legStatusFromResult, writeLegPatch, clearAttemptFields, runLeg, buildRoutingFailureLeg, runSingleAttempt,
   ...require('./fanout-leg-fallback'),
 };

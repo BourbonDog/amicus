@@ -50,7 +50,7 @@ function durationBetween(createdAt, completedAt) {
  *   metadata.pack was recorded (solo session launched via --pack), sourced straight off
  *   `metadata` like `usage`/`opencodeSessionId` already are (no new function parameter needed).
  *   `tag` (v4.7 F8/D13) is additive the same way — present only when metadata.tag was recorded.
- *   `finish` (#218 PR 3) likewise — the engine's finish reason for the leg's last assistant message. `variant` / `variantUnverified` (#218 PR 4) likewise — the effort level SENT, and whether the engine's catalogue knew the model when it was sent. `backstop` (#251 item 1, spec R5 amended) likewise — the no-output backstop's decision record, emit-when-VALID via isBackstopRecord (this literal is the projection that writes the wave doc's leg entries, so a field not spelled here never reaches run.json).
+ *   `finish` (#218 PR 3) likewise — the engine's finish reason for the leg's last assistant message. `variant` / `variantUnverified` (#218 PR 4) likewise — the effort level SENT, and whether the engine's catalogue knew the model when it was sent. `backstop` (#251 item 1, spec R5 amended) likewise — the no-output backstop's decision record, emit-when-VALID via isBackstopRecord (this literal is the projection that writes the wave document's leg entries, so a field not spelled here never reaches the wave document; a council run's `run.json` has no leg entries at all).
  */
 function buildRunResult({ taskId, metadata = {}, result = null, summary = null, modelInput = null, sessionDir = null, waveId = null, usage = null }) {
   const status = result ? statusFromResult(result) : (metadata.status || 'unknown');

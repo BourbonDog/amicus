@@ -198,6 +198,11 @@ the runHeadless returns. One rule everywhere: **set when `isBackstopRecord(resul
 delete the key** (a stale record from a previous attempt must never ride a new one — the same
 delete-when-absent rule `finish` and `variant` follow, council #232 r1 B1).
 
+**Attempt-accurate (added at the whole-branch review):** a fallback substitution re-runs in the same leg
+dir; `fanout-leg.js :: clearAttemptFields` drops the dead attempt's `backstop` (and
+`finish`/`ttftMs`/`variant`/`variantUnverified`) before the substitute runs, so a substitute that
+completes is never credited with the primary's extension.
+
 | document | writer (the `finish` line's sibling) | change |
 |---|---|---|
 | runHeadless result | `src/headless.js` — the `failedWithNoUsableOutput` return, the success return, the outer `catch` return | `...(isBackstopRecord(backstopRecord) ? { backstop: backstopRecord } : {})` beside `ttftMs` |
@@ -214,12 +219,13 @@ implementation, not a second patch at a second site).
 
 **The tenth writer — found at execution, R5 AMENDED (2026-09-18, Task 3 implementer's NEEDS_CONTEXT):**
 `src/utils/result-schema.js :: buildRunResult` is the projection that turns a leg's `metadata.json`
-into the leg entry of the council wave doc / `run.json` (`fanout-leg.js` calls it after
+into the leg entry of the council wave document, `wave.json` (`fanout-leg.js` calls it after
 `writeLegPatch`; `buildWaveResult` passes those entries through verbatim) AND into `amicus read`'s run
-result. It is an enumerated object literal — a field that is not spelled there does not reach `run.json`.
-`finish` reaches the wave doc only through its spread on that literal. So the record MUST be carried
-there too, or the corpus (which Wave 2 built from `run.json`) would read zero extended legs: the exact
-"emit-site verification is not document-shape verification" error (failure mode #6). Rule: the same
+result. It is an enumerated object literal — a field that is not spelled there does not reach the wave
+document. `finish` reaches the wave doc only through its spread on that literal. So the record MUST be
+carried there too, or the corpus (which Wave 2 built from the council run directory's documents) would
+read zero extended legs: the exact "emit-site verification is not document-shape verification" error
+(failure mode #6). Rule: the same
 emit-when-valid spread, `...(isBackstopRecord(metadata.backstop) ? { backstop: metadata.backstop } : {})`,
 beside the `finish` spread — at ZERO net lines (the file is 300/300: the spread joins the existing
 spread line, or one comment line is folded to make room; the implementer reports `wc -l` ≤ 300), with a
@@ -228,9 +234,9 @@ absent → absent; named mutant "BACKSTOPCOERCED": `backstop: metadata.backstop 
 
 **Deliberately NOT reached** (ruling R6): the runStats projection (`run-stats-entry.js`, `tally.js`,
 `verdict.json`) and the spend ledger (`appendSpend` callers in `start.js`, `fanout-leg-fallback.js`,
-`reopen-spend.js`). The corpus that sizes the extension is built from the leg entries of `run.json`
-(now carrying `backstop`), the leg documents, and `run.json` degrade notes (`data.reason` carries the
-whole reason string).
+`reopen-spend.js`). The corpus that sizes the extension is built from the leg entries of the wave
+documents, `wave.json` (now carrying `backstop`), the leg documents, and `run.json` degrade notes
+(`data.reason` carries the whole reason string).
 
 ## 6. What does not change — the fences
 
@@ -265,11 +271,12 @@ whole reason string).
   `prompt_async`, upstream of any provider stream; `busy` there says nothing about a stream that may not
   exist. *Cost if wrong:* one class of leg keeps today's behaviour exactly.
 - **R4 — Survivors record the extension too.** Without it the only evidence of a saved leg is a TTFT
-  above a window the reader has to know. *Cost if wrong:* one small object on a handful of legs.
+  above a window the reader has to know. *Cost if wrong:* one small object on a handful of legs. …and it
+  is attempt-accurate: a substituted attempt starts clean (F3 of the whole-branch review).
 - **R5 — AMENDED at execution (2026-09-18): `result-schema.js :: buildRunResult` DOES carry the field,
   at zero net lines.** The original ruling ("the file is 300/300 and the solo `read` surface shows the
   reason string") mis-described the file: it is also the writer of the council wave doc's leg entries,
-  i.e. of `run.json` — the document the corpus reads. Excluding it would have made every extended leg
+  i.e. of `wave.json` — the document the corpus reads. Excluding it would have made every extended leg
   invisible to the census this record exists for. Caught by the Task 3 implementer, who stopped instead of
   dropping the assertion. *Cost of the amendment:* one spread joined to an existing line (or one folded
   comment) in a file at the size gate; a new pin. *Cost had it stood:* a silent zero in the next corpus —

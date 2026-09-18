@@ -182,6 +182,12 @@ async function runLegWithFallback(args, deps = {}) {
 
   for (;;) {
     const startedAt = new Date().toISOString();
+    // #251 item 1 (final review F3): a substitute must not inherit the dead attempt's
+    // per-attempt fields — see `src/sidecar/fanout-leg.js :: clearAttemptFields`. Taken
+    // through the SAME lazy require as runSingleAttempt (a module-scope one would close
+    // the cycle fanout-leg.js already opens on this module). Named mutant
+    // "STALEATTEMPTFIELDS" (tests/sidecar/runleg-fallback.test.js): drop this call.
+    if (attempt > 0) { require('./fanout-leg').clearAttemptFields(getSessionDir(project, legId)); }
     // `model` is threaded BOTH at the top level (test/injected runOnce fakes
     // destructure it directly, e.g. `async ({ model }) => ...`) and nested
     // under `leg.model` (the real runSingleAttempt only reads the latter).

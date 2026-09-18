@@ -9062,7 +9062,7 @@ Deferred — one line each, none blocks anything:
   healed at TTFT 380 s; deepseek (unpinned) died busy at 480,487 ms and 913,904 ms → seat lost;
   glm's seat spoke at 438 s; judges glm 309 s and qwen 209 s completed. First `(session: busy)`
   and the first `OpenRouter credit ok` notice ($15.14 remaining).
-- r3 (4.12.0, blank default, $0.62): glm, qwen and deepseek first attempts ALL died busy at 481 s
+- r3 (4.12.0, blank default, $0.62): glm, deepseek and qwen first attempts ALL died busy at 481 s
   and ALL healed (TTFT 28 s / 133 s / 503 s); judges 4 of 4 (glm 259 s, qwen 179 s, deepseek 83 s,
   gpt 32 s); chair 24 s; seatsReviewed 4 of 4 (one unverified).
 - Ritual: label OFF the moment a round completes (unchanged). Monitor a labelled round by runs
@@ -9085,9 +9085,10 @@ Deferred — one line each, none blocks anything:
   rewrite of that describe would buy the time back. (#251 item 1)
 - [ ] `check-citations.js` proves a `file.js:NNN` citation is only IN RANGE, never that it still
   names what it points at, and it does not scan `skills/**` or `docs/**` at all. Task 4's sweep
-  re-anchored all eight line citations at five comment sites in `src/headless.js`, and the four in
-  the `NO_OUTPUT_BACKSTOP` bullet of `skills/second-opinion/MODEL-NOTES.md`, to `file :: symbol` form;
-  the one line citation left in `src/headless.js` is `run.schema.json:23`, verified correct at HEAD.
+  re-anchored all eight line citations at five comment sites in `src/headless.js`, and four of the five
+  in the `NO_OUTPUT_BACKSTOP` bullet of `skills/second-opinion/MODEL-NOTES.md`, to `file :: symbol` form.
+  Two line citations remain, both verified in range and correct at HEAD: `run.schema.json:23` in
+  `src/headless.js`, and `src/council/run-retry.js:97` left in place in that MODEL-NOTES bullet.
   Nothing enforces the symbol convention, so the rot returns with the next file that moves.
   (#251 item 1, Task 4)
 - [ ] `src/utils/result-schema.js` is at 300/300 with THREE emit-when-set spreads packed onto one

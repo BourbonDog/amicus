@@ -1581,11 +1581,16 @@ describe('#251 item 1: the backstop consults the session before the kill', () =>
     mockGetMessages.mockResolvedValue([]);
     mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
     const started = Date.now();
-    const result = await run('atcap1', { noOutputBackstopMs: 950 }, 1000);
-    expect(Date.now() - started).toBeLessThan(1900);
-    expect(result.timedOut).toBeFalsy(); // the backstop, not the 1 s leg cap, ended it — the named diagnosis survives
+    // Geometry (whole-branch review F14): `extendWindowMs(2850, 3000) = min(5700, 2850) = 2850`,
+    // so the window is still AT the clamp and still cannot be extended — the same row of spec §3,
+    // with 150 ms between the backstop and the leg cap instead of the 50 ms this pin used to run
+    // on (window 950 under a 1000 ms cap, measured at 966 ms). `timedOut` falsy is the assertion
+    // a stalled runner could flip, so the wall-clock bound is deliberately no tighter than it.
+    const result = await run('atcap1', { noOutputBackstopMs: 2850 }, 3000);
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(result.timedOut).toBeFalsy(); // the backstop, not the 3 s leg cap, ended it — the named diagnosis survives
     expect(String(result.error)).toMatch(/ \(session: busy\) — not extended: the window is already at the leg cap$/);
-    expect(result.backstop).toEqual({ windowMs: 950, firedAtMs: expect.any(Number), status: 'busy', extended: false, why: 'at-cap' });
+    expect(result.backstop).toEqual({ windowMs: 2850, firedAtMs: expect.any(Number), status: 'busy', extended: false, why: 'at-cap' });
   }, 20000);
 
   test('W8 the pre-send site never extends: a prompt send that never resolves dies at the window with the byte-identical string, record why pre-send', async () => {

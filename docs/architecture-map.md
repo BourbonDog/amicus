@@ -649,7 +649,7 @@ evals/
 | `sidecar/fallback-chains.js` |  | `resolveFallbackConfig()`, `deriveChain()`, `vendorOf()`, `DEFAULT_MAX_SUBSTITUTIONS()` |
 | `sidecar/fanout-budget.js` |  | `preflightBudget()` |
 | `sidecar/fanout-leg-fallback.js` |  | `runLegWithFallback()`, `recordAttemptSpend()`, `sumAttemptUsage()` |
-| `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()`, `buildRoutingFailureLeg()`, `runSingleAttempt()` |
+| `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `clearAttemptFields()`, `runLeg()`, `buildRoutingFailureLeg()` |
 | `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |
 | `sidecar/fanout-retry.js` |  | `ELIGIBLE_RETRY()`, `parseInitialContext()`, `buildRetryPlan()`, `retryFailedWave()` |
 | `sidecar/fanout-signals.js` |  | `installWaveAbort()`, `WAVE_FORCE_EXIT_MS()` |
