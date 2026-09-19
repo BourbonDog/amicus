@@ -13,6 +13,9 @@ const fs = require('fs');
 const path = require('path');
 const dbrief = require('./briefings-debate');
 const { parseDebateDefense } = require('./parse-stage2');
+// #257 R-X23: the parse gate for a leg that answered only in its reasoning channel.
+// ./promoted is a LEAF (require-free by its own docblock and pin), so this adds no cycle risk.
+const { isPromotedLeg } = require('./promoted');
 const { applyDebate, debateRunStatsRows, PAST_TENSE,
   allNoResponse, nothingToDebate, disputingJudges, debateTargets, bundleFor } = require('./debate');
 const { materializeDebate } = require('./run-launch');
@@ -62,9 +65,10 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
   // A dead leg gets the SAME spec §5.7 fallback the parser applies to a block-level
   // failure — every expected id 'no-response', never an empty map, so the
   // originals-stand outcome still reaches debate.json and the record decoration.
-  let parsed = leg ? parseDebateDefense(leg.summary, expectedIds)
-    : { ok: false, byId: allNoResponse(expectedIds), errors: [{ code: 'DEAD_LEG', detail: 'no summary' }] };
-  let conformance = leg ? 'clean' : 'unstructured';
+  const usable = leg && !isPromotedLeg(leg); // #257 R-X23: a promoted defence is UNPARSEABLE — the leg document is kept for its row (named mutant "DEFENSEPROMOTEDUSED", tests/council/run-debate.test.js)
+  let parsed = usable ? parseDebateDefense(leg.summary, expectedIds)
+    : { ok: false, byId: allNoResponse(expectedIds), errors: [{ code: leg ? 'REASONING_ONLY' : 'DEAD_LEG', detail: leg ? 'answered only in its reasoning channel' : 'no summary' }] };
+  let conformance = usable ? 'clean' : 'unstructured';
   // v4.7 D2/E4: the repair's loser leg — the ORIGINAL when the repair produced a
   // usable (complete) leg (today's leg-swap below is unchanged), or the failed
   // repair attempt itself when it did not — retained so runDebate can turn it
@@ -82,7 +86,7 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
     ctx.addWave(res2.wave);
     if (isAbortExit(res2.exitCode)) { return { raiser: raiserKey, aborted: res2.exitCode }; }
     const leg2 = res2.leg && res2.leg.status === 'complete' ? res2.leg : null;
-    parsed = leg2 ? parseDebateDefense(leg2.summary, expectedIds) : parsed;
+    parsed = leg2 && !isPromotedLeg(leg2) ? parseDebateDefense(leg2.summary, expectedIds) : parsed; // #257 R-X23 (named mutant "DEFENSEREPAIRPROMOTEDUSED")
     conformance = parsed.ok ? 'repaired' : 'unstructured';
     if (leg2) { supersededLeg = legRow(raiserAlias, leg, 'unstructured'); leg = leg2; }
     else { repairLeg = legRow(raiserAlias, res2.leg, 'unstructured'); }
