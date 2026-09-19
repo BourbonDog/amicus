@@ -24,6 +24,7 @@ const { buildRunStatsEntry } = require('./run-assemble');
 // v4.9 W4: pickFallbackChair + classifyChairAttempt moved to chair-fallback.js
 // (size-gate split); re-exported below so no caller changes.
 const { pickFallbackChair, classifyChairAttempt } = require('./chair-fallback');
+const { isPromotedLeg } = require('./promoted');
 
 /**
  * Chair chain (attempt → retry → ledger-promoted fallback → give up) plus the
@@ -58,7 +59,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       tag: o.tag, // v4.7 F8 D16: rides the same forward as councilRunId/councilName.
     });
     addWave(solo.wave);
-    const ok = solo.leg && solo.leg.status === 'complete'
+    const ok = solo.leg && solo.leg.status === 'complete' && !isPromotedLeg(solo.leg) // #257 R-X22: a promoted chair is no synthesis; the walk continues (named mutant "CHAIRPROMOTEDUSED", tests/council/run-chair.test.js)
       && solo.leg.summary && solo.leg.summary.trim();
     // rawLeg is the UN-nulled leg — the classifier needs to see a failed leg
     // document, not just the ok/null collapse the rest of the walk consumes.
