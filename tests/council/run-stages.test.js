@@ -271,6 +271,104 @@ describe('runStage1', () => {
     expect(solos[1].prompt).toContain(badReview);
   });
 
+  /**
+   * #257 R-X21 (spec §10 addendum, owner decision C). The findings-repair solo
+   * tested NO status — only the truthiness of `solo.leg.summary` — so a repair
+   * leg that answered ONLY in its reasoning channel handed its deliberation
+   * back as `repairing`: the NEXT repair prompt told the model its own thinking
+   * was "the review you must correct", and `validateFindings` ran over
+   * reasoning prose. That is the disease this PR exists to cure, on another
+   * surface.
+   *
+   * The rule: a promoted `-p<N>` solo is a FAILED repair attempt inside the
+   * existing bound (`attempts < 2`) — byte-identical to a dead repair. It is
+   * SILENT at run time by design (R-X21): a failed repair has never announced
+   * itself, and its record is the `role: 'repair'` row (which carries
+   * `promoted: true` straight off the leg) plus the seat's `unstructured`
+   * conformance.
+   *
+   * NAMED MUTANT — REPAIRPROMOTEDUSED: drop `!isPromotedLeg(solo.leg) &&` from
+   * run-stages.js's `const repaired = …` line. Reds the first test below — the
+   * promoted reasoning becomes `repairing` and rides into the second repair's
+   * briefing.
+   */
+  describe('#257 R-X21: a promoted Stage-1 repair solo', () => {
+    // The seat's OWN leg is not promoted here: a promoted seat leg never
+    // materializes as a review at all (run-launch.js :: materializeReviews
+    // skips it, pinned in the "#257: a promoted Stage-1 leg is no deliverable"
+    // block below), so the repair loop is reachable only through an ordinary
+    // unstructured review whose REPAIR came back promoted.
+    const REPAIR_REASONING = 'Let me carefully analyze the material before I answer.';
+    const promotedRepairLeg = (waveId) => ({
+      ...mkLeg('gpt', REPAIR_REASONING, 'complete', waveId, 1),
+      promoted: true, finish: 'stop',
+      usage: { tokens: { reasoning: 40332, output: 1 }, cost: { amount: 0.02, source: 'reported' } },
+    });
+    const badReview = 'Prose about the material, but no fenced block at all.';
+    const scenarioCtx = (secondRepairLeg) => {
+      const solos = [];
+      const ctx = makeCtx({
+        models: ['gemini', 'gpt'],
+        onWave: (opts) => okWave(opts.models.map((m, i) =>
+          mkLeg(m, m === 'gpt' ? badReview : review(m), 'complete', opts.waveId, i + 1))),
+        onSolo: (opts) => {
+          solos.push(opts);
+          return okWave([solos.length === 1 ? promotedRepairLeg(opts.waveId) : secondRepairLeg(opts.waveId)]);
+        },
+      });
+      return { ctx, solos };
+    };
+
+    test('a promoted -p1 repair is a failed repair attempt: its reasoning is never validated as findings, the seat ends unstructured, and the repair row says promoted: true (#257 R-X21)', async () => {
+      const { ctx, solos } = scenarioCtx((waveId) => deadLeg('gpt', 'error', 'boom', waveId, 1));
+      const { reviews, extraRows } = await runStage1(ctx);
+
+      // THE OBSERVABLE (named mutant REPAIRPROMOTEDUSED). `repairing` is only
+      // readable through the text the NEXT repair prompt carries — the same way
+      // the LC-6 trio above observes it. A promoted repair contributes no
+      // artifact, so attempt 2 still names the last text we actually have.
+      expect(ctx.launchers.launchSolo).toHaveBeenCalledTimes(2);   // the bound, unchanged
+      expect(solos.map((s) => s.waveId)).toEqual(['abc123-p1', 'abc123-p2']);
+      expect(solos[1].prompt).toContain(badReview);
+      expect(solos[1].prompt).not.toContain(REPAIR_REASONING);
+
+      // The seat lands exactly where a dead repair leaves it: KEPT, unstructured,
+      // no findings — the reasoning was never validated into any.
+      const gpt = reviews.find((r) => r.modelInput === 'gpt');
+      expect(gpt.conformance).toBe('unstructured');
+      expect(gpt.findings).toEqual([]);
+      expect(gpt.text).toBe(badReview);          // LC-11: always the seat's own prose
+      expect(reviews).toHaveLength(2);           // never dropped for a formatting miss
+
+      // Both -p<N> launches get their row; the promoted one SAYS so, minted by
+      // buildRunStatsEntry off the leg document — never added by hand — and
+      // emit-when-true keeps it off the other.
+      const repairRows = extraRows.filter((x) => x.role === 'repair');
+      expect(repairRows).toHaveLength(2);
+      expect(repairRows.map((x) => x.waveId)).toEqual(['abc123-p1', 'abc123-p2']);
+      expect(repairRows[0]).toMatchObject({ model: 'gpt', status: 'complete',
+        conformance: 'unstructured', promoted: true });
+      expect('promoted' in repairRows[1]).toBe(false);
+      // R-X21: silent. No new channel, no note — the row and the seat's
+      // conformance are the record.
+      expect(ctx._notes).toEqual([]);
+    });
+
+    test('the bound still rescues: a promoted -p1 leaves -p2 free to repair the seat', async () => {
+      const { ctx, solos } = scenarioCtx((waveId) => mkLeg('gpt', review('gpt'), 'complete', waveId, 1));
+      const { reviews, extraRows } = await runStage1(ctx);
+
+      expect(solos).toHaveLength(2);             // a failed attempt, not an exhausted budget
+      const gpt = reviews.find((r) => r.modelInput === 'gpt');
+      expect(gpt.conformance).toBe('repaired');
+      expect(gpt.findings).toHaveLength(1);
+      const repairRows = extraRows.filter((x) => x.role === 'repair');
+      expect(repairRows.map((x) => x.conformance)).toEqual(['unstructured', 'clean']);
+      expect(repairRows[0].promoted).toBe(true);
+      expect(ctx._notes).toEqual([]);
+    });
+  });
+
   test('still malformed after 2 repairs → unstructured, findings [], review KEPT', async () => {
     let soloCount = 0;
     const ctx = makeCtx({
@@ -2422,6 +2520,84 @@ SECOND LINE
     await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     expect(solos).toHaveLength(2);
     expect(solos[1].prompt).toContain(badJudge);
+  });
+
+  /**
+   * #257 R-X21 (spec §10 addendum, owner decision C). The `-q<N>` judge-repair
+   * solo tested NO status either — only the truthiness of `solo.leg.summary` —
+   * so a repair that answered ONLY in its reasoning channel had its
+   * deliberation parsed, and if that reasoning happened to carry a fenced
+   * block, the adjudication was USED and counted. Silently: the
+   * `judge-reasoning-only` note keys on the ORIGINAL wave leg (#83's
+   * convention), so a NON-promoted judge rescued by a promoted repair raised
+   * nothing at all — the measured gap this gate closes by construction.
+   *
+   * With the gate, the note's repair arm can only ever describe one shape: a
+   * promoted ORIGINAL rescued by a NON-promoted repair, which is exactly what
+   * its `why` says. That arm is already pinned by '#257 (b2)' above — not
+   * duplicated here.
+   *
+   * NAMED MUTANT — JUDGEREPAIRPROMOTEDUSED: drop `!isPromotedLeg(solo.leg) &&`
+   * from run-stage2.js's `const out = …` line. Reds the test below: `ok` flips
+   * to true and the reasoning's block becomes the adjudication.
+   */
+  test('a promoted -q1 repair supplies nothing: its block is never parsed (#257 R-X21)', async () => {
+    const solos = [];
+    const badJudge = 'Judged at length in prose, but the trailing JSON never appeared.';
+    const REPAIR_REASONING = 'Let me weigh the two reviews against each other first.';
+    // THE ADVERSARIAL SHAPE: the promoted repair's reasoning CONTAINS a valid
+    // fenced judge block. It must STILL be unusable — what disqualifies it is
+    // the channel it came back on, not whether it happens to parse.
+    const promotedRepairLeg = (waveId) => ({
+      ...mkLeg('gemini', `${REPAIR_REASONING}\n\n${
+        judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }])}`, 'complete', waveId, 1),
+      promoted: true, finish: 'stop',
+      usage: { tokens: { reasoning: 40332, output: 1 }, cost: { amount: 0.02, source: 'reported' } },
+    });
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        // The ORIGINAL judge is NOT promoted — it answered in its output
+        // channel, just without a block.
+        mkLeg('gemini', badJudge, 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        return okWave([solos.length === 1
+          ? promotedRepairLeg(opts.waveId)
+          : deadLeg('gemini', 'error', 'boom', opts.waveId, 1)]);
+      },
+    });
+    const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    const g = judgeResults.find((j) => j.judge === 'gemini');
+    expect(g.ok).toBe(false);                  // the promoted repair's block is NOT an adjudication
+    expect(g.adjudications).toBeNull();
+    expect(g.order).toBeNull();
+    expect(g.conformance).toBe('unstructured');
+    expect(g.died).toBe(false);                // it answered; the REPAIRS were unusable
+    // The ORIGINAL was not promoted, so this judge did not answer in its
+    // reasoning channel — a different fact with a different fix (spec R4), and
+    // the note that names that fact must stay silent here.
+    expect(g.fromReasoning).toBe(false);
+    expect(ctx._notes.find((n) => n.channel === 'judge-reasoning-only')).toBeUndefined();
+    expect(ctx._notes.find((n) => n.channel === 'stage2-judge')).toBeUndefined();
+
+    // The bound is unchanged, and `judging` never became the promoted
+    // reasoning — LC-12's observable, read the same way.
+    expect(solos.map((s) => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    expect(solos[1].prompt).toContain(badJudge);
+    expect(solos[1].prompt).not.toContain(REPAIR_REASONING);
+
+    // Both -q<N> launches get their row; the promoted one SAYS so (minted by
+    // buildRunStatsEntry off the leg), and emit-when-true keeps it off the other.
+    const repairRows = extraRows.filter((r) => r.role === 'repair');
+    expect(repairRows).toHaveLength(2);
+    expect(repairRows.map((r) => r.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    expect(repairRows[0]).toMatchObject({ model: 'gemini', status: 'complete',
+      conformance: 'unstructured', promoted: true });
+    expect('promoted' in repairRows[1]).toBe(false);
   });
 
   test('judge still bad after 2 repairs → ok false, conformance unstructured', async () => {

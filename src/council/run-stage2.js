@@ -222,7 +222,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         // is returned only for shape consistency, never read past this point.
         return { aborted: solo.exitCode, judgeResults, extraRows };
       }
-      const out = (solo.leg && solo.leg.summary) || '';
+      const out = (solo.leg && !isPromotedLeg(solo.leg) && solo.leg.summary) || ''; // #257 R-X21: a promoted repair supplies no block (named mutant "JUDGEREPAIRPROMOTEDUSED")
       if (out.trim()) { judging = out; }
       parsed = parseJudgeOutput(out, parseCtx);
       // Every -q<N> launch gets a row — INCLUDING a failed repair (null/'error' leg ⇒ never-invent
@@ -274,8 +274,10 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     // #257 (spec R4/R11): a parseable adjudication COUNTS — a judge has no retry,
     // and rejecting a paid-for verdict would thin the cross-review for a reason
     // that is not about what the judge decided. Kind 'info'; the exit code holds.
-    // `attempts` rides along: TWO paths reach here (R-X13), and the note must not
-    // claim the leg's own block parsed when the repair loop above supplied it.
+    // `attempts` rides along: TWO paths reach here (R-X13), and the note must not claim the
+    // leg's own block parsed when the repair loop above supplied it. Since R-X21 gated that
+    // read, the repair arm describes ONE shape — a promoted ORIGINAL rescued by a NON-promoted
+    // repair — because a promoted repair can never supply the block.
     if (isPromotedLeg(leg)) { ctx.degrade.note(promotedJudgeNote(judge, seat, leg, attempts)); }
     // v4.8 T3.2: labels.seatMap (anonymize.js :: assignLabels) threads through
     // so orderSeats can disambiguate a twin bench's `order`, which stays

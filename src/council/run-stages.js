@@ -28,6 +28,7 @@ const { buildRunStatsEntry } = require('./run-assemble');
 const { pushDeadSeatRows } = require('./run-stage1-rows');
 const { bindStage1Waves, orphanLegNote, missingSeatDeadWave } = require('./stage1-bind');
 const { skippedWaveNote, truncatedReviewNote, reasoningOnlyClause, promotedFacts } = require('./run-retry-notes');
+const { isPromotedLeg } = require('./promoted'); // direct from the leaf: run-retry-notes re-exports only the two clause builders above.
 // slug lives in ./seats (v4.8 PR1) so that module can stay require-free;
 // re-exported below — run-stages.test.js imports it from here.
 const { slug } = require('./seats');
@@ -211,7 +212,7 @@ async function runStage1(ctx) {
         return { aborted: solo.exitCode, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves,
           degraded: false, extraRows };
       }
-      const repaired = (solo.leg && solo.leg.summary) || '';
+      const repaired = (solo.leg && !isPromotedLeg(solo.leg) && solo.leg.summary) || ''; // #257 R-X21: a promoted repair is a failed attempt — its reasoning is not findings (named mutant "REPAIRPROMOTEDUSED", tests/council/run-stages.test.js)
       if (repaired.trim()) { repairing = repaired; }
       res = validateFindings(repaired);
       // Every -p<N> launch gets a row — INCLUDING a failed repair (null/'error' leg ⇒ never-invent
