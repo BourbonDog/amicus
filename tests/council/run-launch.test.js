@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { createLaunchers, materializeReviews } = require('../../src/council/run-launch');
+const { createLaunchers, materializeReviews, materializeDebate } = require('../../src/council/run-launch');
 const { buildSeats } = require('../../src/council/seats');
 
 let tmp;
@@ -276,6 +276,72 @@ describe('materializeReviews', () => {
       { ...mkLeg('qwen', 'qwen review text'), promoted: 1 },
     ];
     expect(materializeReviews(tmp, legs).map(m => m.model)).toEqual(['gemini', 'gpt', 'qwen']);
+  });
+});
+
+/**
+ * #257 R-X30 — the debate half of the same decision.
+ *
+ * Round 1 gated the debate PARSE and deliberately KEPT the real leg document, so a
+ * promoted defence/re-vote still owns its runStats row and that row carries the cause
+ * (`promoted: true`). The consequence the council named in round 2: materializeDebate
+ * writes `leg.summary` for every kept leg, so the promoted seat's deliberation landed in
+ * `rebuttal-<seat>.md` / `revote-<seat>.md` — a rebuttal deliverable made of reasoning.
+ * The reasoning is not lost by skipping: it stays in the leg's own session summary.md
+ * and in wave.json.
+ *
+ * Named mutant DEBATEPROMOTEDMATERIALIZED: delete
+ * `if (leg.promoted === true) { continue; }` from
+ * src/council/run-launch.js :: materializeDebate. Red set: the first test below, plus the
+ * two end-to-end assertions in tests/council/run-debate.test.js (the promoted-defence and
+ * promoted-re-vote describes).
+ */
+describe('materializeDebate', () => {
+  const entry = (model, summary, extra) => ({ model, summary, seat: null, ...extra });
+
+  test('a promoted entry writes NO file and is absent from the return — its text is not a rebuttal (#257)', () => {
+    const out = materializeDebate(tmp, [
+      entry('gemini', 'gemini rebuttal text'),
+      entry('gpt', 'Let me think about whether to defend A1 before I answer.', { promoted: true }),
+    ], 'rebuttal');
+    expect(out.map(m => m.model)).toEqual(['gemini']);
+    expect(out.some(m => m.file.includes('gpt'))).toBe(false);
+    expect(fs.existsSync(path.join(tmp, 'rebuttal-gpt.md'))).toBe(false);
+    // The non-promoted control is BYTE-IDENTICAL to what it was before the skip existed.
+    expect(fs.readFileSync(path.join(tmp, 'rebuttal-gemini.md'), 'utf-8')).toBe('gemini rebuttal text');
+  });
+
+  test('the same skip applies to the revote prefix — both debate waves share one materializer (#257)', () => {
+    const out = materializeDebate(tmp, [
+      entry('gpt', 'reasoning that happens to contain a re-vote', { promoted: true }),
+      entry('qwen', 'qwen revote text'),
+    ], 'revote');
+    expect(out.map(m => m.model)).toEqual(['qwen']);
+    expect(fs.existsSync(path.join(tmp, 'revote-gpt.md'))).toBe(false);
+    expect(fs.readFileSync(path.join(tmp, 'revote-qwen.md'), 'utf-8')).toBe('qwen revote text');
+  });
+
+  test('an entry with promoted: false, "true" or 1 is still materialized (the literal-true discipline, #257)', () => {
+    const out = materializeDebate(tmp, [
+      entry('gemini', 'a', { promoted: false }),
+      entry('gpt', 'b', { promoted: 'true' }),
+      entry('qwen', 'c', { promoted: 1 }),
+    ], 'rebuttal');
+    expect(out.map(m => m.model)).toEqual(['gemini', 'gpt', 'qwen']);
+    expect(out.map(m => path.basename(m.file)))
+      .toEqual(['rebuttal-gemini.md', 'rebuttal-gpt.md', 'rebuttal-qwen.md']);
+  });
+
+  test('a bench with no promoted entry is byte-identical — the skip adds nothing to today (spec R6)', () => {
+    const seats = buildSeats(['deepseek', 'deepseek'], null, null);
+    const out = materializeDebate(tmp, [
+      { model: 'deepseek', summary: 'first', seat: seats[0] },
+      { model: 'deepseek', summary: 'second', seat: seats[1] },
+    ], 'rebuttal');
+    expect(out.map(m => path.basename(m.file)))
+      .toEqual(['rebuttal-deepseek-1.md', 'rebuttal-deepseek-2.md']);
+    expect(fs.readFileSync(out[0].file, 'utf8')).toBe('first');
+    expect(fs.readFileSync(out[1].file, 'utf8')).toBe('second');
   });
 });
 

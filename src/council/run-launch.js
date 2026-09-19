@@ -268,8 +268,12 @@ function materializeReviews(runDir, legs, seatOf) {
  * byte-identical to `<prefix>-<sanitizeName(model)>.md` for every bench without
  * a repeated alias, and what stops two twins from clobbering one file. Without
  * it the alias name is kept — today's exact behaviour.
+ *
+ * A promoted entry (#257) is skipped for the same reason materializeReviews skips one:
+ * the text is the seat's deliberation, so writing it would publish a rebuttal or a
+ * re-vote deliverable made of reasoning nobody chose to say.
  * @param {string} runDir
- * @param {Array<{model: string, summary: string, seat?: ?object}>} legs
+ * @param {Array<{model: string, summary: string, seat?: ?object, promoted?: boolean}>} legs
  * @param {string} prefix 'rebuttal' | 'revote'
  * @returns {Array<{model: string, file: string}>}
  */
@@ -277,6 +281,10 @@ function materializeDebate(runDir, legs, prefix) {
   const out = [];
   for (const leg of legs) {
     if (!leg || !leg.summary || !leg.summary.trim()) { continue; }
+    // #257 R-X30: a promoted defence or re-vote is its raiser's reasoning, not a rebuttal — no
+    // artifact (the reasoning stays in the leg's session summary.md and wave.json); named mutant
+    // "DEBATEPROMOTEDMATERIALIZED" (tests/council/run-launch.test.js).
+    if (isPromotedLeg(leg)) { continue; }
     const name = leg.seat ? artifactName(leg.seat, prefix) : `${prefix}-${sanitizeName(leg.model)}.md`;
     const file = path.join(runDir, name);
     fs.writeFileSync(file, leg.summary, { mode: 0o600 });

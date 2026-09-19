@@ -135,7 +135,9 @@ async function runDefenseWave(ctx, { byRaiser, aliasOf, seatById }) {
   // projection is `aliasOf(d.raiser)`. `model` must stay ALIAS-valued (R3-1);
   // `seat` is what gives two twins two files instead of one clobbered one (R3-3).
   materializeDebate(ctx.o.runDir, defenseResults.map(d => ({ model: aliasOf(d.raiser),
-    summary: d.leg.summary, seat: seatById.get(d.raiser) || null })), 'rebuttal');
+    summary: d.leg.summary, seat: seatById.get(d.raiser) || null,
+    // #257 R-X30: the CAUSE rides this literal too (`d.leg` carries it emit-when-true since R-X26), so materializeDebate stands a promoted defence down — named mutant "DEBATELITERALPROMOTEDDROPPED".
+    ...(d.leg.promoted === true ? { promoted: true } : {}) })), 'rebuttal');
 
   const defenseByRaiser = {};
   for (const dr of defenseResults) { defenseByRaiser[dr.raiser] = { ...dr.byId }; }

@@ -672,6 +672,11 @@ describe('runDebate — a promoted defense is unparseable (#257 R-X23)', () => {
     const rebuttal = result.debatedInput.runStats.find(r => r.model === 'gemini' && r.role === 'rebuttal');
     expect(rebuttal).toMatchObject({ waveId: 'r-d1', status: 'complete', conformance: 'unstructured',
       durationMs: 4200, usage: { tokens: { output: 0, reasoning: 1900 } }, promoted: true });
+    // #257 R-X30: the ROW is kept, the ARTIFACT is not. Keeping the leg (R-X23/R-X26) is what
+    // records the stand-down; writing its summary would have published the seat's deliberation as
+    // rebuttal-gemini.md. The reasoning stays in the leg's own session summary.md and in wave.json.
+    // Named mutant DEBATEPROMOTEDMATERIALIZED (src/council/run-launch.js :: materializeDebate).
+    expect(fs.existsSync(path.join(tmp, 'rebuttal-gemini.md'))).toBe(false);
     // No adjudication moved.
     expect(tally(result.debatedInput).findings.find(f => f.id === 'A1').tier).toBe('Disputed');
     expect(result.verdictChanges).toBe(0);
@@ -745,7 +750,53 @@ describe('runDebate — a promoted defense is unparseable (#257 R-X23)', () => {
     const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
     expect(rows.find(r => r.role === 'rebuttal')).toMatchObject({ waveId: 'r-d1r', conformance: 'unstructured' });
     expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-d1', conformance: 'unstructured' });
+    // #257 R-X30: the promoted REPAIR is the leg that was kept, so it is the one standing down —
+    // no rebuttal artifact, even though the superseded original was never promoted.
+    expect(fs.existsSync(path.join(tmp, 'rebuttal-gemini.md'))).toBe(false);
     expect(tally(result.debatedInput).findings.find(f => f.id === 'A1').tier).toBe('Disputed');
+  });
+
+  // The CLEAN-RAISER CONTROL for R-X30. With only one raiser on the bench, a missing
+  // rebuttal-*.md is indistinguishable from a materializer that stopped writing anything
+  // at all — so this drives TWO raisers through one round, one promoted and one not.
+  test('the promoted raiser gets NO rebuttal-<seat>.md while the clean raiser on the same bench gets one (#257 R-X30)', async () => {
+    const tmp = mkTmp('run-debate-promoted-defense-artifact-');
+    // BOTH findings are disputed, so both gemini and gpt are raisers and both defend.
+    const input = { ...provisionalInput(),
+      findings: [
+        { id: 'A1', raiser: 'gemini', severity: 'major', claim: 'infinite retry' },
+        { id: 'B1', raiser: 'gpt', severity: 'major', claim: 'unbounded queue' },
+      ],
+      adjudications: [
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute' },
+        { findingId: 'A1', judge: 'qwen', verdict: 'dispute' },
+        { findingId: 'B1', judge: 'gemini', verdict: 'dispute' },
+        { findingId: 'B1', judge: 'qwen', verdict: 'dispute' },
+      ] };
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const cleanDefence = defenseOut([{ id: 'B1', action: 'defend', argument: 'bounded at 64' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      // Keyed on the MODEL, not the waveId: byRaiser's key order is what names -d1 vs -d2.
+      launchSolo: async (opts) => {
+        // gemini's one bounded repair is DEAD, so this round measures the promoted leg alone.
+        if (/r$/.test(opts.waveId)) { return { wave: wave([]), leg: null, exitCode: 0 }; }
+        const l = opts.model === 'gemini'
+          ? promotedLeg('gemini', inReasoning, opts.waveId)
+          : leg('gpt', cleanDefence, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async (opts) => ({ exitCode: 0, wave: wave(opts.models.map(
+        (m, i) => leg(m, revoteOut([{ id: 'B1', verdict: 'agree' }]), 'r-rv', i + 1))) }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    // gemini's promoted defence stood down (no-response); gpt's clean defence landed.
+    expect(result.debateSummary).toMatchObject({ defended: 1, noResponse: 1 });
+    // The kept leg still carries the cause on its row (R-X26) — what R-X30 changes is the ARTIFACT.
+    expect(result.debatedInput.runStats.find(r => r.model === 'gemini' && r.role === 'rebuttal'))
+      .toMatchObject({ status: 'complete', conformance: 'unstructured', promoted: true });
+    expect(fs.existsSync(path.join(tmp, 'rebuttal-gemini.md'))).toBe(false);
+    // The control: the same materializer, the same round, byte-identical for the clean raiser.
+    expect(fs.readFileSync(path.join(tmp, 'rebuttal-gpt.md'), 'utf-8')).toBe(cleanDefence);
   });
 
   test("the repair prompt names the reasoning-channel cause, and carries the promoted seat's own text", async () => {
@@ -949,6 +1000,13 @@ describe('runDebate — a promoted re-vote is unparseable (#257 R-X23)', () => {
     expect(revoteRows.find(r => r.model === 'gpt')).toMatchObject(
       { waveId: 'r-rv-gptr', conformance: 'unstructured', promoted: true });
     expect('promoted' in revoteRows.find(r => r.model === 'qwen')).toBe(false);
+    // #257 R-X30: no revote-gpt.md — a promoted re-vote is the judge's deliberation, not a
+    // re-vote deliverable. qwen re-voted cleanly on the same wave, so its artifact is the
+    // control proving the writer still runs. Named mutant DEBATEPROMOTEDMATERIALIZED
+    // (src/council/run-launch.js :: materializeDebate).
+    expect(fs.existsSync(path.join(tmp, 'revote-gpt.md'))).toBe(false);
+    expect(fs.readFileSync(path.join(tmp, 'revote-qwen.md'), 'utf-8'))
+      .toBe(revoteOut([{ id: 'A1', verdict: 'agree' }]));
   });
 
   test("a promoted re-vote whose repair answers cleanly is applied, and the repair's body is what is materialized", async () => {
