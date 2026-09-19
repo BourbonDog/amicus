@@ -399,14 +399,15 @@ that the `finish` bound exists so a provider-controlled finish "cannot carry Mar
 PR comment" (§11, R-X31). **That premise was never measured and is false.** Measured on this head:
 the workflow's `Post sticky PR comment` step
 (`.github/workflows/council-review.yml:1755`, its comment body composed at `:1836-1878`) builds the
-comment from the sticky marker, the heading, the chair verdict line, the tier table, the five
-per-tier findings sections — each run through the step's own `neutralize()` sed filter (`:1771`) —
-the street-cred table, and a `---` status/cost footer carrying `MODELS`, the seat census
-(`SEATS_LINE`, `:1835`), the chair, `fail_on` and the evidence link. It interpolates **neither
-`seatLoss` nor `degrades`, anywhere**. The guarantee is therefore STRUCTURAL, not a consequence of
-CI never asking for a critic: `critic` is a `workflow_dispatch` input of that workflow, so "the
-default PR path requests none" would have been a configuration-dependent reason for a claim that
-holds regardless. No degrade prose and no seat-loss reason ever reaches that comment. An item filed long before this round already said so from the other direction (`BACKLOG.md:7115-7118`: “`verdict.json :: seatsReviewed` reaches the check-run title and the sticky comment; `run.json :: degrades[].data.reason` lives only inside the artifact”) — the record contradicted itself for two rounds and nobody read both halves.
+comment from the sticky marker, the heading, the chair verdict line, the tier table, the four
+tier sections and the withdrawn-in-debate list — each run through the step's own `neutralize()`
+sed filter (`:1771`) — the street-cred table, and a `---` status/cost footer carrying `MODELS`,
+the seat census (`SEATS_LINE`, `:1835`), the chair, `fail_on` and the evidence link. It
+interpolates **neither `seatLoss` nor `degrades`, anywhere**. The guarantee is therefore
+STRUCTURAL, not a consequence of CI never asking for a critic: `critic` is a `workflow_call`
+input (`:27-28`), and the workflow has no `workflow_dispatch` trigger at all (`on:` at `:14` is
+`pull_request` and `workflow_call`), so "the default PR path requests none" would have been a
+configuration-dependent reason for a claim that holds regardless. No degrade prose and no seat-loss reason ever reaches that comment. An item filed long before this round already said so from the other direction (`BACKLOG.md:7115-7118`: “`verdict.json :: seatsReviewed` reaches the check-run title and the sticky comment; `run.json :: degrades[].data.reason` lives only inside the artifact”) — the record contradicted itself for two rounds and nobody read both halves.
 
 **The surfaces that DO render this prose**, all measured on this head:
 

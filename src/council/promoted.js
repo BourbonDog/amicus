@@ -76,14 +76,15 @@ const FINISH_LONE_UNDERSCORE = /(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])/g;
  *
  * NOT the sticky PR comment, which council r1 and r2 both named and r3
  * measured: .github/workflows/council-review.yml composes that comment from the
- * verdict line, the tier table, the five findings sections (each one run
- * through the workflow's own byte-identical `neutralize()` sed filter), the
- * street-cred table, and a status/cost footer carrying the seat census.
+ * verdict line, the tier table, the four tier sections and the
+ * withdrawn-in-debate list (each one run through the workflow's own
+ * byte-identical `neutralize()` sed filter), the street-cred table, and a
+ * status/cost footer carrying the seat census.
  * `seatLoss` and `degrades` are interpolated NOWHERE in that step, which is
  * what makes the guarantee STRUCTURAL rather than a matter of configuration:
  * the default PR path asks for no `--critic`, but the `critic`
- * workflow_dispatch input can ask for one and this prose still would not reach
- * the comment.
+ * `workflow_call` input can ask for one (the workflow has no `workflow_dispatch`
+ * trigger at all) and this prose still would not reach the comment.
  *
  * The MACHINE fields are deliberately NOT bounded and do not need to be:
  * headless.js PRODUCES the provider's raw `finish`, session-finalize.js writes
