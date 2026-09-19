@@ -1135,7 +1135,7 @@ unchecked items ride to the next rev.)*
   wording. Net 0 lines (`run-budget.js` held at 283/300, the plan's originally-estimated "71→67"
   companion line in `fanout-budget.js` corrected in review to 71→70). The separate, structurally
   unreachable CLI-flavoured reservation trailer at `fanout-budget.js:62-65` (`errorDoc` never
-  carries `hint` on this path; `quiet:true` unconditional at `run-launch.js:134`) had its
+  carries `hint` on this path; `quiet:true` unconditional at `run-launch.js:178`) had its
   `Override: --max-cost / --no-cost-gate` sentence deleted rather than reworded, since nothing
   renders it. Note the retained hint at `:62` still says "does not fit the `--max-cost` allowance"
   — correct, because that string's only real reader is a direct CLI `amicus fanout`. Both strings pinned in both directions
@@ -1434,7 +1434,7 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   seat** — [S, needs a product decision] `parseModelsList` (`src/sidecar/fanout-validate.js:22`)
   allows duplicate aliases by design (its own docstring: "duplicates allowed"), and council
   callers pass the parsed list through unchecked. Both `lensIndexOf`
-  (`src/council/run-retry-group.js:16` — this entry said `run-retry.js:24`; the function left that
+  (`src/council/run-retry-group.js:18` — this entry said `run-retry.js:24`; the function left that
   file at PR0, re-measured 2026-08-17 — via `o.models.indexOf(model)`) and `roleFor`
   (`src/council/run-stages.js:35`, via `o.models.indexOf(alias)`) resolve a duplicated alias by
   first occurrence only. A duplicated alias whose second occurrence dies could therefore produce
@@ -4402,7 +4402,7 @@ permanently feed `council stats` — which is the authoritative input to bench s
 ### Seat identity — closes #137, and PR1F-1 properly
 
 - PR1F-1's real defect is not that duplicates exist, it is that `lensIndexOf`
-  (`run-retry-group.js:16`; was cited `run-retry.js:24` — it left that file at PR0) and `roleFor`
+  (`run-retry-group.js:18`; was cited `run-retry.js:24` — it left that file at PR0) and `roleFor`
   (`run-stages.js:35`) resolve a seat via `indexOf(alias)` —
   **first occurrence wins** — so a duplicated alias whose second occurrence dies yields two primary
   rows where the row-per-launch bijection expects one.
@@ -6676,10 +6676,10 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     `:33`, a docblock line, before the 2026-08-17 re-derivation) and
     `unit.firstFailures[].seatId`, so the id is
     reachable there — just not emitted. **Design the producer change against all five arms.**
-  - ⚠️ **`data.seat` must stay the ALIAS.** `run-retry-notes.js:39-45` explains why
+  - ⚠️ **`data.seat` must stay the ALIAS.** `run-retry-notes.js:46-52` explains why
     (`verdict.js:72` compares it against `o.critic`). Add a key; never repurpose that one.
   - ⚠️ Note shapes are pinned by exact `toEqual` in `tests/council/degrade-channels.test.js`;
-    `run-retry-notes.js:39-41` warns that adding a key unconditionally breaks them. Budget for
+    `run-retry-notes.js:46-48` warns that adding a key unconditionally breaks them. Budget for
     fixture updates.
   - ⚠️ `workspace-seats.js:47`'s docblock claimed `retriedSeats` (then `retriedAliases`) mirrors
     `deadSeats`' predicate "EXACTLY, and must keep mirroring it". **PR5b shipped and changed one
@@ -6701,7 +6701,7 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   - **Why it matters:** dead-wave is one of the four alias-only emitter arms the dual lookup
     (`retried[s.seat] || retried[s.model]`, `workspace-seats.js:188` — **was `:117`, long stale;
     this is the SAME expression cited in SI-DUP's Count-2 exclusions, and the two now agree**) exists to serve — it emits
-    `data.models[]` with no `seat` and no `firstFailure` (`run-retry-notes.js:28-47`). On a twin
+    `data.models[]` with no `seat` and no `firstFailure` (`run-retry-notes.js:35-54`). On a twin
     bench it should badge **both** seats sharing the alias, which is the disclosed imprecision in
     the plan's §0.8 and in the CHANGELOG, and nothing currently pins that it does.
   - **Not unexercised, just unpinned at the intersection:** mutant M2 (dropping the `s.model` arm)

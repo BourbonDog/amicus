@@ -242,3 +242,32 @@ describe('#218 PR 3 (council #232 r2 B1) — a cut review is marked in its heade
     expect(packet).toContain('--- Review by deepseek#1 — CUT at its output reservation (the provider stopped for length; the text ends where the reservation ended) ---\nx');
   });
 });
+
+// #257 tripwire (spec §3.6), the chair-packet half. Same rule as the judge
+// bundle's pin in tests/council/briefings-stage2.test.js: the packet builder has
+// no promoted filter and must not grow one — `run-launch.js ::
+// materializeReviews` is the only gate, and the Stage-1 pin that proves it fires
+// is in tests/council/run-stages.test.js.
+describe('#257 — the chair packet carries no promoted-reasoning text, because it never receives any', () => {
+  const REASONING = 'Let me carefully analyze the diff before I answer.';
+
+  test('a healed bench renders its retry text and no reasoning text — and a hand-built promoted review WOULD render verbatim, because materializeReviews is the only gate', () => {
+    const seats = buildSeats(['a', 'b'], null, null);
+    const packet = buildChairPacket({
+      reviews: [
+        { model: 'a', text: 'Prose review a.', seat: seats[0] },
+        { model: 'b', text: 'Prose review b.', seat: seats[1] },
+      ],
+      rankings: [], adjudications: [], tierCounts: TIERS,
+    });
+    expect(packet).toContain('--- Review by a ---\nProse review a.');
+    expect(packet).toContain('--- Review by b ---\nProse review b.');
+    expect(packet).not.toContain(REASONING);
+
+    const leaked = buildChairPacket({
+      reviews: [{ model: 'b', text: REASONING, seat: seats[1] }],
+      rankings: [], adjudications: [], tierCounts: TIERS,
+    });
+    expect(leaked).toContain(REASONING);
+  });
+});

@@ -768,6 +768,137 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
   });
 });
 
+// ---- #257: a leg that answered only in its reasoning channel ----
+//
+// The THIRD sibling of the two classes above, and the one that looked healthy:
+// the engine answer had no text part at all, so conversation-mirror.js promoted
+// the REASONING to output and headless.js stamped `promoted: true`. The leg then
+// arrives `complete`, with text, with no error — and the text is the model's
+// deliberation, not a review. `materializeReviews` is the ONE gate that rejects
+// it (run-launch.js), which is exactly what routes the seat into the once-only
+// retry: run-stages.js's `deadLegs0` is "every leg that function rejected".
+//
+// Placed HERE, in the Stage-1 retry region, on purpose — the Stage-2 half of
+// #257 is built on a parallel branch that inserts in the Stage-2 region.
+describe('#257: a promoted Stage-1 leg is no deliverable — it is retried, and every note names the cause', () => {
+  const CLAUSE = ' — it answered only in its reasoning channel '
+    + "(40332 reasoning / 1 output tokens, finish 'stop'), which is not a review";
+  const REASONING_TEXT = 'Let me carefully analyze the diff before I answer.';
+  // A real promoted leg document: complete, carrying its deliberation as `summary`,
+  // no `error` at all — which is why the pre-#257 prose ("ended 'complete' with no
+  // usable output") was true and useless.
+  const promotedLeg = (model, waveId, slot) => ({
+    ...mkLeg(model, REASONING_TEXT, 'complete', waveId, slot),
+    promoted: true, finish: 'stop',
+    usage: { tokens: { reasoning: 40332, output: 1 }, cost: { amount: 0.02, source: 'reported' } },
+  });
+  // At HEAD the promoted leg materializes and then FAILS findings validation, so
+  // the repair loop runs. A launcher that returns no leg lets these tests fail on
+  // their own assertions rather than on an undefined `onSolo` callback. After the
+  // fix no solo is launched at all (the leg never becomes a review).
+  const noSolo = () => ({ wave: { legs: [] }, exitCode: 0 });
+  // roster (-s1): ['a','b'] -> a=slot1, b=slot2. retry roster (-s1r1): ['b'] alone -> slot1.
+  const scenarioCtx = (retryLegFor) => {
+    const ctx = makeCtx({ models: ['a', 'b'], onSolo: noSolo });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a', 'abc123-s1', 1), promotedLeg('b', 'abc123-s1', 2)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [retryLegFor('b', 'abc123-s1r1', 1)] }, exitCode: 0 });
+    return ctx;
+  };
+
+  test('(a) a promoted first leg is retried once and healed: ONE heal note naming the reasoning channel', async () => {
+    const ctx = scenarioCtx(usableLeg);
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(2);      // the skip is what FIRES the retry
+    expect(ctx.launchers.launchWave.mock.calls[1][0].models).toEqual(['b']);
+    expect(ctx._notes.map((n) => n.channel)).toEqual(['stage1-retry']);
+    expect(ctx._notes[0].kind).toBe('heal');
+    expect(ctx._notes[0].why).toBe(
+      `its first leg ended 'complete' with no usable output${CLAUSE} and was relaunched once`);
+    expect(r.degraded).toBe(false);
+    // The primary review is the RETRY's leg and the RETRY's text.
+    const b = r.reviews.find((v) => v.modelInput === 'b');
+    expect(b.leg.waveId).toBe('abc123-s1r1');
+    expect(b.text).toBe(review('b'));
+    // The first leg stopped being primary: role `superseded`, and the row carries
+    // `promoted: true` straight off the leg (buildRunStatsEntry, never by hand).
+    const superseded = r.extraRows.filter((x) => x.role === 'superseded');
+    expect(superseded).toHaveLength(1);
+    expect(superseded[0]).toMatchObject({ model: 'b', status: 'complete',
+      waveId: 'abc123-s1', promoted: true });
+    expect(r.extraRows.some((x) => x.model === 'b' && x.role === 'seat')).toBe(false);
+  });
+
+  /**
+   * The TRIPWIRE (spec §3.6). Everything downstream of Stage 1 — the judge
+   * bundle, the chair packet, the ledger — reads `reviews`, and NONE of them
+   * filters: `materializeReviews` is the only defence there is. This asserts on
+   * the array run-stages actually hands onward, so it reds under the named
+   * mutant PROMOTEDKEPT (delete the skip in run-launch.js :: materializeReviews)
+   * even though the builders themselves are untouched. The unit halves live in
+   * tests/council/briefings-stage2.test.js and
+   * tests/council/chair-packet-seats.test.js.
+   */
+  test('the reviews handed onward carry no promoted leg and no reasoning text (#257 tripwire)', async () => {
+    const r = await runStage1(scenarioCtx(usableLeg));
+    // Non-vacuous: two reviews DID land — the tripwire is about WHICH.
+    expect(r.reviews.map((v) => v.modelInput).sort()).toEqual(['a', 'b']);
+    expect(r.reviews.filter((v) => v.leg && v.leg.promoted === true)).toEqual([]);
+    expect(r.reviews.filter((v) => v.text.startsWith('Let me carefully analyze'))).toEqual([]);
+    expect(r.reviews.map((v) => v.leg.waveId).sort()).toEqual(['abc123-s1', 'abc123-s1r1']);
+  });
+
+  test('(b) first AND retry promoted: still-dead, the why names the cause TWICE, the row carries promoted', async () => {
+    const ctx = scenarioCtx(promotedLeg);
+    const r = await runStage1(ctx);
+    expect(r.degraded).toBe(true);
+    expect(r.deadLegs.map((l) => l.modelInput)).toEqual(['b']);
+    const dead = ctx._notes.filter((n) => n.channel === 'dead-leg');
+    expect(dead).toHaveLength(1);
+    expect(dead[0].why).toBe(`the leg ended 'complete' with no usable output${CLAUSE}; `
+      + `its once-only retry also ended 'complete'${CLAUSE}`);
+    expect(dead[0].why.split(CLAUSE)).toHaveLength(3);              // once per attempt
+    // R-X14: the MACHINE surface, which is all `verdict-seat-loss.js ::
+    // deriveSeatLoss` reads. `data.status`/`data.reason` describe the retry leg,
+    // so `data.promoted` does too; the first leg's facts ride `data.firstFailure`.
+    expect(dead[0].data.promoted).toEqual({ reasoning: 40332, output: 1, finish: 'stop' });
+    expect(dead[0].data.firstFailure.promoted).toEqual({ reasoning: 40332, output: 1, finish: 'stop' });
+    // The dead-seat row comes off the REAL retry leg through buildRunStatsEntry
+    // (run-stage1-rows.js:212) — `promoted` rides it, it is never added by hand.
+    const primary = r.extraRows.find((x) => x.model === 'b' && x.role === 'seat');
+    expect(primary).toMatchObject({ status: 'complete', waveId: 'abc123-s1r1', promoted: true });
+    expect(r.reviews.map((v) => v.modelInput)).toEqual(['a']);
+  });
+
+  test('(c) the skipped-leg note (overBudget — no retry was attempted) names the reasoning channel too', async () => {
+    const ctx = makeCtx({ overBudget: () => true, models: ['a', 'b'], onSolo: noSolo });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1), promotedLeg('b', 'abc123-s1', 2)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1);      // no second launch
+    expect(ctx._notes.map((n) => n.channel)).toContain('dead-leg');
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    expect(n.why).toBe(`the leg ended 'complete' with no usable output${CLAUSE}`);
+    expect(n.effect).toBe('1 of 2 seats reviewed; the run continues with the bench that did and will exit degraded (2)');
+    // R-X14: the same facts on the machine surface this note's `data` is.
+    expect(n.data.promoted).toEqual({ reasoning: 40332, output: 1, finish: 'stop' });
+    expect(r.degraded).toBe(true);
+  });
+
+  test('a leg that is NOT promoted keeps every announcement byte-identical (the clause is the empty string)', async () => {
+    const ctx = makeCtx({ overBudget: () => true, models: ['a', 'b'] });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1), deadLeg('b', undefined, undefined, 'abc123-s1', 2)] }, exitCode: 0 });
+    await runStage1(ctx);
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    expect(n.why).toBe("the leg ended 'error': boom with no usable output");
+    // R-X14 emit-when-promoted: no key at all, so the record's exact shape is unmoved.
+    expect(n.data).toEqual({ seat: 'b', status: 'error', reason: 'boom' });
+  });
+});
+
 // ---- v4.8 PR2b Task 7 (R-B): a launched seat whose leg never came back ----
 //
 // The class this block owns is invisible before it: the wave DID return legs,

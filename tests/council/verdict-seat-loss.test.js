@@ -160,11 +160,68 @@ describe('one implementation, re-exported (verdict-seat-loss extraction)', () =>
     expect(Object.keys(leaf).sort()).toEqual(['deriveSeatLoss', 'summarizeSeatLoss']);
   });
 
-  test('it stays a LEAF: the module requires nothing at all', () => {
+  test('it stays a LEAF but for ONE pinned-leaf require: ./promoted (#257, R-X15)', () => {
     // A require back into verdict.js would make the split circular; a require of
-    // anything else would give the seat-loss pair a dependency it never had.
+    // anything BUT a proven leaf would give the seat-loss pair a dependency it
+    // never had. `./promoted` is that proven leaf — it is itself require-free
+    // (pinned twice: tests/council/promoted.test.js, and again in the test
+    // directly below so THIS file's cycle guard does not depend on another suite
+    // running), so it can never reach verdict.js and the guard stands. Spec R9
+    // requires the reasoning-only clause to come from ONE builder; hand-spelling
+    // it here would fork a string whose whole point is byte-identity across five
+    // announcement sites. The COUNT is what is pinned: exactly one, and exactly
+    // that one, so a second require is still a red test.
     const src = fs.readFileSync(
       path.join(__dirname, '..', '..', 'src', 'council', 'verdict-seat-loss.js'), 'utf-8');
+    expect(src.match(/require\(/g)).toHaveLength(1);
+    expect(src).toContain("require('./promoted')");
+  });
+
+  test('its one dependency is itself require-free', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'src', 'council', 'promoted.js'), 'utf-8');
     expect(src).not.toContain('require(');
+  });
+});
+
+/**
+ * #257 (R-X14) — a promoted critic says so in verdict.json.
+ *
+ * The unswept twin of the five Stage-1 announcement sites: `deriveSeatLoss`
+ * builds a SIXTH "no usable output" sentence, and it was the only one that did
+ * not learn the clause. It is reachable for a promoted critic that stays dead —
+ * `srcLegStillDeadNote`'s `data.reason` is `leg.error || null` = null and its
+ * `data.status` is 'complete' — so the verdict's own face carried the bare,
+ * true and uninformative sentence while run.json's prose named the cause.
+ *
+ * This function reads ONLY `record.data`, never the prose fields, which is why
+ * the producer had to carry the facts there (R-X14, run-retry-notes.js).
+ *
+ * Named mutant CRITICCLAUSEDROPPED: delete
+ * `${reasoningOnlyClause(criticLeg.data.promoted)}` from verdict-seat-loss.js's
+ * status branch. Red set: the first test below.
+ */
+describe('#257 deriveSeatLoss names the reasoning channel for a promoted critic', () => {
+  const { deriveSeatLoss } = require('../../src/council/verdict');
+  const { makeDegrade } = require('../../src/utils/degrade');
+  const CRITIC_M = 'critic-m';
+  const PROMOTED = { reasoning: 40332, output: 1, finish: 'stop' };
+  const rec = (data) => makeDegrade({ channel: 'dead-leg', what: 'w', why: 'y', effect: 'e', data });
+
+  test('a still-dead PROMOTED critic carries the clause into seatLoss.reason', () => {
+    // The exact shape `srcLegStillDeadNote` emits for a promoted leg whose retry
+    // wave produced no legs: no error, so status 'complete' and reason null.
+    const degrades = [rec({ seat: CRITIC_M, status: 'complete', reason: null, promoted: PROMOTED })];
+    const s = deriveSeatLoss({ runId: 'r1', critic: CRITIC_M, degrades });
+    expect(s.criticSeated).toBe(false);
+    expect(s.reason).toBe("the critic leg ended 'complete' with no usable output"
+      + ' — it answered only in its reasoning channel '
+      + "(40332 reasoning / 1 output tokens, finish 'stop'), which is not a review");
+  });
+
+  test('a record WITHOUT promoted keeps the shipped sentence byte-identical', () => {
+    const degrades = [rec({ seat: CRITIC_M, status: 'error', reason: null })];
+    const s = deriveSeatLoss({ runId: 'r1', critic: CRITIC_M, degrades });
+    expect(s.reason).toBe("the critic leg ended 'error' with no usable output");
   });
 });

@@ -1,5 +1,6 @@
 // src/council/verdict-seat-loss.js
 'use strict';
+const { reasoningOnlyClause } = require('./promoted');
 
 /**
  * @module council/verdict-seat-loss
@@ -15,7 +16,10 @@
  * verdict.js — if the move changed anything, those go red.
  *
  * Pure: no IO, no verdict-document knowledge. Nothing in this file requires
- * verdict.js, so the dependency runs one way only.
+ * verdict.js, so the dependency runs one way only. #257 (R-X15): its ONE require
+ * is `./promoted`, a leaf pinned require-free by tests/council/promoted.test.js,
+ * so the split cannot become circular; the pin below counts exactly that one
+ * require.
  */
 
 /**
@@ -111,9 +115,14 @@ function deriveSeatLoss({ runId, critic, degrades = [] } = {}) {
     // produced no leg for the seat at all — there is no status to name, so
     // the old `ended '${status}'` template rendered the literal string
     // "ended 'null'". A status-carrying record keeps the original text.
+    // #257: a promoted critic carries its reasoning-channel facts in `data.promoted`;
+    // the clause names them (R-X14). It reaches this branch and no other: a promoted leg
+    // has no `error`, so `data.reason` is null and `data.status` is 'complete'. The clause
+    // is the EMPTY STRING for every record without those facts, so this text is otherwise
+    // byte-identical. Named mutant "CRITICCLAUSEDROPPED" (tests/council/verdict-seat-loss.test.js).
     reason: base.reason || (criticLeg
       ? (criticLeg.data.reason || (criticLeg.data.status
-        ? `the critic leg ended '${criticLeg.data.status}' with no usable output`
+        ? `the critic leg ended '${criticLeg.data.status}' with no usable output${reasoningOnlyClause(criticLeg.data.promoted)}`
         : 'the critic leg produced no usable output'))
       : null),
     deadBenchSeats: [...base.deadBenchSeats,

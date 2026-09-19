@@ -18,8 +18,8 @@ const { materializeReviews, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
 const { resolveNoOutputBackstopMs } = require('../utils/no-output-backstop');
 const { retryBackstopMs } = require('./run-retry-window');
-const { waveStillDeadNote, srcLegStillDeadNote, retryLegStillDeadNote, missingLegStillDeadNote }
-  = require('./run-retry-notes');
+const { waveStillDeadNote, srcLegStillDeadNote, retryLegStillDeadNote, missingLegStillDeadNote,
+  reasoningOnlyClause } = require('./run-retry-notes'); // #257: the clause, from the notes module
 // briefingFor + bindRetryWave live in ./run-retry-launch (v4.8 T-A2 split); the pad/bind core it wraps is stage1-bind.js :: bindPaddedWave (SI-27).
 const { briefingFor, bindRetryWave } = require('./run-retry-launch');
 // Loss grouping lives in ./run-retry-group (v4.8 PR0 size-gate split).
@@ -223,7 +223,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
             ? `its first wave ${ff.waveId} produced no legs (${ff.reason}) and was relaunched once`
             : ff.class === 'missing'
               ? `${ff.reason} in wave ${ff.waveId}, and it was relaunched once`
-              : `its first leg ended '${ff ? ff.status : 'unknown'}' with no usable output and was relaunched once`,
+              : `its first leg ended '${ff ? ff.status : 'unknown'}' with no usable output${reasoningOnlyClause(ff && ff.promoted)} and was relaunched once`,
           effect: 'The seat is in this council; nothing was lost',
           data: { seat, retryWaveId: unit.waveId, retryOfWaveId: unit.retryOfWaveId, firstFailure: ff } });
       } else {

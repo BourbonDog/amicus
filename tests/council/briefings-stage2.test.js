@@ -283,3 +283,33 @@ describe('review judges never see the briefing — the anonymity narrowing (v4.9
     expect(task).toContain('<council_briefing purpose="background_reference_only">');
   });
 });
+
+// #257 tripwire (spec §3.6), the UNIT half. The Stage-1 half — the `reviews`
+// array run-stages actually hands onward — is pinned in
+// tests/council/run-stages.test.js ('the reviews handed onward carry no
+// promoted leg and no reasoning text'). Both halves exist because the defence
+// is in ONE place: `run-launch.js :: materializeReviews` skips a leg carrying
+// `promoted: true`. This builder has no filter of its own and must not grow one
+// — a second gate would make the real one deletable without a red test.
+describe('#257 — the judge bundle carries no promoted-reasoning text, because it never receives any', () => {
+  const REASONING = 'Let me carefully analyze the diff before I answer.';
+
+  test('the healed Stage-1 output reaches the judges intact and carries no reasoning text — and a hand-built promoted review WOULD be embedded verbatim, because materializeReviews is the only gate', () => {
+    // Shaped like scenario (a)'s output: the promoted leg never became a review,
+    // so the retry's text is what the seat contributes.
+    const healed = [
+      { label: 'Review A', text: 'Prose review a.' },
+      { label: 'Review B', text: 'Prose review b.' },
+    ];
+    const bundle = s2.buildJudgeBundle({ reviews: healed, findings: FINDINGS });
+    expect(bundle).toContain('Prose review b.');
+    expect(bundle).not.toContain(REASONING);
+
+    // The counter-case, stated so the real defence is not mistaken for this one:
+    // hand a promoted entry's text in and the builder embeds it, verbatim. That
+    // is correct — filtering here would duplicate the gate and hide its deletion.
+    const leaked = s2.buildJudgeBundle({
+      reviews: [{ label: 'Review A', text: REASONING }], findings: FINDINGS });
+    expect(leaked).toContain(REASONING);
+  });
+});

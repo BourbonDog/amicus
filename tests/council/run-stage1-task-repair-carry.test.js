@@ -8,7 +8,7 @@
 // having produced the requested work. The engine never substitutes it:
 // run-stages.js:258 pushes `text: m.text` — the seat's OWN Stage-1 output —
 // and only `res.findings` comes from the repair leg. The on-disk
-// review-<seat>.md was written by materializeReviews (run-launch.js:218)
+// review-<seat>.md was written by materializeReviews (run-launch.js:255)
 // BEFORE the repair loop runs, from that same original text, and no repair leg
 // is ever handed to materializeReviews. Stage 2 zips its bundle off `r.text`
 // (run-stage2.js:113), so the judges read the deliverable, not the JSON.
@@ -35,7 +35,7 @@
 //
 // The second half of the finding ("initially empty seats can enter Stage 2")
 // is refuted structurally by materializeReviews' empty-summary guard
-// (run-launch.js:213) — pinned in the last describe.
+// (run-launch.js:244) — pinned in the last describe.
 
 const fs = require('fs');
 const path = require('path');
@@ -193,7 +193,7 @@ describe('A1 refuted: a task repair swaps the JSON, never the deliverable', () =
 });
 
 describe('A1 second half refuted: an EMPTY task seat never reaches the repair loop', () => {
-  // materializeReviews skips a leg with no usable summary (run-launch.js:213),
+  // materializeReviews skips a leg with no usable summary (run-launch.js:244),
   // so an empty seat is a LOSS on the degrade path — it never becomes a
   // `materialized` entry, never buys a -p<N> repair, and can never enter Stage 2
   // "without having produced the requested work", because it never enters at all.

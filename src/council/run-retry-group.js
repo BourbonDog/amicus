@@ -2,10 +2,12 @@
 'use strict';
 // Stage-1 loss grouping: lensIndexOf + recordFailure + groupStage1Losses.
 // Moved verbatim from run-retry.js:24-126 (v4.8 PR0 size-gate split, zero
-// behavior). Pure but for ONE leaf require: ./run-retry-keys, itself require-free.
+// behavior). Pure but for two leaf requires: ./run-retry-keys and ./promoted (#257),
+// both of which are themselves require-free.
 // run-retry.js re-exports groupStage1Losses so existing import paths
 // (tests/council/run-retry.test.js) stay stable.
 const { seatKey, twinAliases, legLossKey, srcLegClaimer } = require('./run-retry-keys');
+const { promotedFacts } = require('./promoted');
 
 /** 1-based lens index for a loss: the waveId convention, else the seat's own
  *  bench position, else the alias's first bench index. v4.8 PR2b H4: the old
@@ -233,7 +235,9 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map(),
   }
   for (const leg of deadLegs) {
     const seat = leg.modelInput || leg.model;
-    const ff = { seat, class: 'leg', status: leg.status, reason: leg.error || null };
+    const pf = promotedFacts(leg);
+    const ff = { seat, class: 'leg', status: leg.status, reason: leg.error || null,
+      ...(pf ? { promoted: pf } : {}) }; // #257: the facts the notes name (spec R9)
     if (o.lenses) {
       const u = lensUnitFor(lensIndexOf(o, null, seat, seatOf.get(leg) || null));
       u.srcLegs.push(leg);
