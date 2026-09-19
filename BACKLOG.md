@@ -9152,8 +9152,28 @@ Deferred — one line each, none blocks anything:
   is unchanged because `isRetryable` is capacity-only (R-X24, measured in the SDD map); a
   reasoning-only answer earning a substitute would need a new retryable class. One reader this
   enumeration MISSED — the ch4 chair verdict-line repair, `run-chair.js:205` — was found by the
-  Task 15 docs review and gated under R-X27.
+  Task 15 docs review and gated under R-X27. Council round 2 (2026-09-19) closed the three leaks
+  the C build left: the repair prompts no longer carry promoted text (R-X29), no debate artifact is
+  written for a promoted leg (R-X30), and the `finish` bound is an identifier allowlist with one
+  shared token fragment (R-X31).
 - [ ] #257 (build) — the ttftMs roster test in tests/council/run-stats-entry.test.js cannot catch a
   stale IMPORTERS entry on its own: its set-union test passes whether result-schema.js is listed as
   an importer or a mention. Candidate: assert the importer regex per IMPORTERS entry inside the
   union test too.
+- [ ] #257 (council r2; PRE-EXISTING since #85, `79f03422`) — `leg.error` is interpolated raw into
+  the dead-leg announcement templates that reach the sticky PR comment:
+  `src/council/run-stages.js:120` (Stage-1 skipped leg); `src/council/run-retry-notes.js:147`
+  (still-dead first leg) and `:185`, the `retryCause` fragment rendered into all three arms of the
+  retry note at `:193`, `:196` and `:198`; `src/council/verdict-seat-loss.js:130-131`, where a dead
+  critic's `data.reason` — `leg.error` copied at `run-stages.js:123`, `run-retry-notes.js:150` and
+  `:201` — becomes `seatLoss.reason` verbatim; and, through the first failure's record,
+  `src/council/run-retry-group.js:239` (`reason: leg.error || null` for a `class: 'leg'` failure),
+  rendered raw at `src/council/run-retry-notes.js:197` and `:220` — the other half of the very
+  sentence whose `retryCause` is cited above. These are the same strings whose `finish` #257 bounds
+  to an identifier allowlist. (`src/council/run-retry.js` has no `error` read at all; the Stage-2
+  twin `src/council/run-stage2-notes.js:59` already bounds its copy with
+  `collapseExcerpt(leg.error, 200)` under #219, so Stage 2 is not in this gap.) Bounding the rest
+  changes pinned strings for any error over the bound — its own PR. Noted, not a defect: the raw
+  `finish` still reaches the machine fields unbounded (`src/utils/leg-riders.js:37`,
+  `src/utils/spend-ledger.js:101`, `src/sidecar/session-utils.js:108`) — data fields, not prose; the
+  bound is applied where prose is made (`promotedFacts`).

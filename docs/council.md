@@ -1435,10 +1435,15 @@ unparseable rather than applied: a defence leaves every one of its bundled findi
 standing (`action: 'no-response'`), a re-vote leaves the judge's provisional verdict standing,
 both record `conformance: 'unstructured'`, and the one bounded repair is the retry (a promoted
 repair leg is unparseable the same way) — unless the repair parses, in which case it is `repaired`
-and applied. The promoted leg still gets its own row — `rebuttal`/`revote`, or `superseded` when
-the repair came back with a leg of its own — carrying `promoted: true`. The fallback-substitution
-chain is unchanged: a reasoning-only answer is not a capacity signal, so it earns no substitute —
-the council rejects the leg one layer up.
+and applied. That repair's briefing carries no prior text: a promoted leg's reasoning is never fed
+back to be corrected — the briefing says the previous defence (or re-vote; or, for a promoted
+`-q<N>` judge repair, response) was written in the reasoning channel and asks for a fresh answer.
+The promoted leg still gets its own row — `rebuttal`/`revote`, or `superseded` when the repair came
+back with a leg of its own — carrying `promoted: true`, but no `rebuttal-<seat>.md` or
+`revote-<seat>.md` of its own: `materializeDebate` skips a promoted leg as `materializeReviews`
+does, and the reasoning stays in the leg's session `summary.md` and in `wave.json`. The
+fallback-substitution chain is unchanged: a reasoning-only answer is not a capacity signal, so it
+earns no substitute — the council rejects the leg one layer up.
 
 A solo `amicus start` is unchanged — it still prints the promoted reasoning as the answer. See
 [Troubleshooting § A Seat Answered Only in Its Reasoning Channel](./troubleshooting.md#a-seat-answered-only-in-its-reasoning-channel).

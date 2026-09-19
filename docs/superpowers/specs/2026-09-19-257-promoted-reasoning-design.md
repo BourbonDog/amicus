@@ -312,3 +312,49 @@ Rulings, each with its cost if wrong:
   the real leg. Cost: one field on debate rows the byte-order suite documented as "re-decide" —
   re-decided here.
 - R-X27 **The ch4 verdict-line repair is gated too.** Cost: one conjunct.
+
+## 11. Addendum — council round 2 (2026-09-19)
+
+Council round 2 on PR #270 (run `35444701260`, 4/4 seats, "Fix these first") confirmed twelve
+findings and contested one (its adjudicated sticky comment: 12 / 1 / 0 / 0). Five clusters bear on
+the design: A2 → R-X29; D2 → R-X30; A4 + B2 + C1 → R-X31, with A3 (the wave schema) refuted a second
+time and made moot inside it; B1 (`leg.error` raw) filed inside R-X31; and A1 + D1 — the Stage-2
+judge exception R4 — the owner's decision, recorded here when ruled. The remaining four are ruled
+without a code change. D3 (contested): `promotedOutput` is initialised to `''` in the mirror's state
+(`src/sidecar/conversation-mirror.js:47`) and its only assignments are `''` (`:164`) and the
+accumulated `reasoningOutput` string (`:276`), so the `.length` read at the mint
+(`src/headless.js:2129`) cannot throw. D4: the three `promotedFacts(leg)` reads in one dead-leg note
+(`src/council/run-stages.js:120`, `:123`) are pure reads of one leg on a path that runs once per
+lost seat, and the note is pinned byte-identical — left as is. D5: the two `require`s on one line at
+`src/council/run-debate-revote.js:52` are the 300-line gate's deliberate consequence (§10, the
+re-vote row); splitting that file is its own change. D6: `tokenSplit` and `reasoningOnlyClause` read
+`facts.finish` as given because every facts object they receive is minted by `promotedFacts` —
+directly (`src/council/chair-fallback.js:104`, `src/council/run-retry-notes.js:145`, `:190`,
+`src/council/run-stages.js:120`, `:123`) or through the first-failure record it minted
+(`src/council/run-retry-group.js:238` → `ff.promoted`, read at `src/council/run-retry-notes.js:198`,
+`:220`, `src/council/run-retry.js:226`) and the `data.promoted` the run.json record carries for
+`deriveSeatLoss` (`src/council/verdict-seat-loss.js:132-133`); the bound is producer-side by design
+(R-X31).
+
+Every `file:line` in this section is measured on `a028e12d`, the head carrying all three fixes: the
+table's middle column names the behaviour at `ba1b47d7`, the citations name where that code lives
+now.
+
+| finding | at `ba1b47d7` | rule |
+|---|---|---|
+| R-X29 — the bounded repairs fed a promoted leg's reasoning back verbatim | all three repair solos read the promoted `summary` and shipped it inside LC-12's `--- YOUR PREVIOUS <KIND> (verbatim — this is the text to correct) ---` block, unbounded: the defence (`run-debate.js:85`), the re-vote (`run-debate-revote.js:169`) and the Stage-2 `-q<N>` judge repair (`run-stage2.js:200`) | each call site ships `''` and the briefing grows a THIRD arm that says why and asks afresh — `Your previous defense was written in the reasoning channel and is not a defense — there is no prior text to correct; answer afresh. Do not invent a position to satisfy the schema: say so in your output.` (`briefings-debate.js:205-208`); the re-vote arm reads the same way for a re-vote, and the judge arm the same for a judgement, with its own do-not-invent clause (`briefings-stage2.js:183-186`). The judge repair's flag is `judging === '' && isPromotedLeg(leg)` (`run-stage2.js:214`), so a real `-q1` answer returns the verbatim arm to `-q2`. Named mutants DEFENSEREPAIRCARRIESREASONING, REVOTEREPAIRCARRIESREASONING, JUDGEREPAIRCARRIESREASONING. |
+| R-X30 — a kept promoted defence or re-vote was still materialized | `materializeDebate` (`run-launch.js:280`) wrote `leg.summary` for every entry that had one, so a promoted defence or re-vote — KEPT under R-X23 so its row could carry the fact — reached `rebuttal-<seat>.md` / `revote-<seat>.md`: an artifact that reads as a rebuttal and is none | the skip `materializeReviews` already had, `if (isPromotedLeg(leg)) { continue; }` (`run-launch.js:287`, its twin at `:250`). The `rebuttal` literal forwards `promoted` emit-when-true so the materializer can see it (`run-debate.js:138-141`); the `revote` literals already did under R-X26 (`run-debate-revote.js:293-295`). Named mutants DEBATEPROMOTEDMATERIALIZED, DEBATELITERALPROMOTEDDROPPED. |
+| R-X31 — the `finish` bound, the forked token fragment, the silent wave schema | the bound was a printable-ASCII strip (`[^\x20-\x7e]`) that kept every Markdown character, so a provider-controlled finish reached the sticky PR comment CI renders `verdict.json :: seatLoss.reason` into; the token parenthetical was hand-spelled a second time in `chair-fallback.js`; `wave.schema.json` said nothing about `promoted` (refuted as a defect — a wave's leg object is open — then made moot by declaring it) | the strip is an allowlist, `[^A-Za-z0-9_.:-]`, applied before the 40-char ceiling (`promoted.js:73`; `MAX_FINISH_CHARS` at `:37`); `tokenSplit(facts)` (`promoted.js:89`) is the one home — `reasoningOnlyClause` composes from it (`:104`) and `chair-fallback.js` imports it (`:16`, used at `:104`), both announcements byte-identical, pinned by string AND by source; `wave.schema.json:30-34` declares `promoted` as `{type: boolean, enum: [true]}` on its leg objects, which stay OPEN. Named mutants FINISHMARKDOWN, SPLITFORKED, SPLITINLINED. |
+
+Rulings, each with its cost if wrong:
+- R-X29 **No repair prompt carries a promoted leg's text.** Cost: a repair that could have used the
+  reasoning as context loses it — that is the thesis.
+- R-X30 **`materializeDebate` skips a promoted leg like `materializeReviews` does.** Cost: one fewer
+  artifact; the reasoning stays in the leg's session `summary.md` and `wave.json`.
+- R-X31 **The finish bound is an identifier allowlist; the token fragment has one home; the wave
+  schema declares the fact.** Cost: none measured. `leg.error`'s raw interpolation into the same
+  announcement strings is PRE-EXISTING — the Stage-1 dead-leg template has carried it since #85
+  (`79f03422`, 2026-08-01), and #202 (`f0915292`) copied the shape into Stage 2, where #219 has
+  since bounded it (`run-stage2-notes.js:59`, `collapseExcerpt(leg.error, 200)`). It is filed, not
+  fixed here: bounding the Stage-1 and retry templates changes pinned strings for every error over
+  the bound and belongs to its own PR.

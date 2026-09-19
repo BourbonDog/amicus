@@ -28,11 +28,22 @@ All notable changes to Amicus are documented here. Format follows
   reason `answered only in its reasoning channel (…); no synthesis to read`); debate defences and
   re-votes (unparseable: the original stands (a defence as `no-response`; a re-vote leaves the
   judge's provisional verdict), the one bounded repair is the retry, and the row keeps the real leg
-  with `promoted: true`). The fallback-substitution chain is unchanged: a reasoning-only answer is
-  not a capacity signal and earns no substitute. The engine's `finish` string is bounded to 40
-  printable characters before any announcement interpolates it.
+  with `promoted: true`). No repair prompt carries a promoted leg's reasoning: the defence, re-vote
+  and `-q<N>` judge repairs ship no prior text and say why — `Your previous defense was written in
+  the reasoning channel and is not a defense — there is no prior text to correct; answer afresh. …`
+  (the re-vote and judge arms read the same way for their own kind) — so a promoted deliberation
+  (149 KB in the measured case) is never fed back to be corrected. No `rebuttal-<seat>.md` or
+  `revote-<seat>.md` is written for a promoted defence or re-vote itself (a repair leg that answers
+  with real text is materialized as before): `materializeDebate` skips it as `materializeReviews`
+  does; the reasoning stays in the leg's session `summary.md` and in `wave.json`, and the row is the
+  record. The fallback-substitution chain is unchanged: a reasoning-only answer is not a capacity
+  signal and earns no substitute. The engine's `finish` string is reduced to identifier characters
+  (`A-Z a-z 0-9 _ . : -`, at most 40) before any announcement interpolates it, so a
+  provider-controlled finish cannot carry Markdown into a sticky PR comment; the token parenthetical
+  every announcement shares has one home (`promoted.js :: tokenSplit`).
   The fact rides every leg document (`promoted: true`, emit-when-true, declared in
-  `run.schema.json` and the tally schema). Measured motive: PR #254 round 1, where 40,332 reasoning
+  `run.schema.json`, the tally schema and, on its open leg objects, `wave.schema.json`).
+  Measured motive: PR #254 round 1, where 40,332 reasoning
   tokens and 1 output token became a 149 KB "review", 92 % of the Stage-2 bundle; three of four
   judges died on it. **Upgrade note:** a seat that 4.13.0 counted as reviewed on a promoted answer
   is now retried and, if it repeats, counted lost, and the run exits 2; a chair, defence or
