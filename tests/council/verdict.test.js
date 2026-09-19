@@ -459,4 +459,22 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
     expect(v.seatsReviewed).toEqual({ reviewed: 1, unverified: 0, refused: 0, of: 1 });
   });
   // Named mutant CENSUSCOERCED: `&& r.promoted !== true` → `&& !r.promoted` — the test above reads 0.
+
+  // R-X25: the two side-predicates gain the same guard as `reviewed` above, so the
+  // "unverified ≤ reviewed" / "refused ≤ reviewed" invariants rest on the predicates
+  // themselves rather than on a promoted row never reaching a materialized review.
+  test('V21 a promoted seat is NOT unverified even carrying findingsUnverified: true (#257 R-X25)', () => {
+    const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
+      runStats: [{ ...seatRow('qwen', 'complete'), promoted: true, findingsUnverified: true }] });
+    expect(v.seatsReviewed).toEqual({ reviewed: 0, unverified: 0, refused: 0, of: 1 });
+  });
+  // Named mutant UNVERIFIEDPROMOTED: delete `&& r.promoted !== true` from isUnverifiedSeat — the test above reads unverified: 1.
+
+  test('V22 a promoted seat is NOT refused even carrying a repairRefused object (#257 R-X25)', () => {
+    const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
+      runStats: [{ ...seatRow('qwen', 'complete'), promoted: true,
+        repairRefused: { code: 'REPAIR_CHANGED_FINDING_COUNT', detail: 'repair returned 2 findings, original attempted 3' } }] });
+    expect(v.seatsReviewed).toEqual({ reviewed: 0, unverified: 0, refused: 0, of: 1 });
+  });
+  // Named mutant REFUSEDPROMOTED: delete `&& r.promoted !== true` from isRefusedSeat — the test above reads refused: 1.
 });

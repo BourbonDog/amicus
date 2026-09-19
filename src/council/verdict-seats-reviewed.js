@@ -69,17 +69,22 @@ function isBenchRole(role) {
  * is not a completed bench seat is an unverified review of nothing — counted nowhere and
  * rendered nowhere; a real dead leg has the sink's own dead-leg row. `unverified` can
  * therefore never exceed `reviewed` (V15/V16). Named mutant: SUBSETBLIND
- * (`&& r.status === 'complete'` deleted from this function).
+ * (`&& r.status === 'complete'` deleted from this function). Both this predicate and its
+ * `isRefusedSeat` sibling below also gate `r.promoted !== true` (#257 R-X25), so that
+ * invariant now rests on the predicates themselves rather than on a promoted row being
+ * structurally unreachable here.
  */
 // !Array.isArray: an array carrying named properties is not a row — lostRowsOf's own plain-object guard already skips it, and the census must agree.
 function isUnverifiedSeat(r) {
   return !!r && typeof r === 'object' && !Array.isArray(r) && isBenchRole(r.role)
-    && r.status === 'complete' && r.findingsUnverified === true;
+    && r.status === 'complete' && r.promoted !== true // #257 R-X25
+    && r.findingsUnverified === true;
 }
 
 /** Its sibling for a refused repair: the same gate, and `repairRefused` a plain object. */
 function isRefusedSeat(r) {
   return !!r && typeof r === 'object' && !Array.isArray(r) && isBenchRole(r.role) && r.status === 'complete'
+    && r.promoted !== true // #257 R-X25
     && !!r.repairRefused && typeof r.repairRefused === 'object' && !Array.isArray(r.repairRefused);
 }
 
