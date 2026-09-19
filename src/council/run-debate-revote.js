@@ -71,7 +71,7 @@ function legOpts(ctx, waveId) {
  * contract this argument already satisfies exactly (a raw leg doc: `.model` IS the
  * resolved id, `model` here IS the alias). `role` is deliberately not passed: which
  * role this is depends on which list the caller pushes it onto, and `debate.js :: mk`
- * stamps it. Its byte diff + the pin that all of it is invisible to `mk`: "FOLD DIFF #2" and G6, tests/council/runstats-byte-order.test.js.
+ * stamps it. Its byte diff + the pin that all of it is invisible to `mk`: "FOLD DIFF #2" and G6, tests/council/runstats-byte-order.test.js. #257 R-X26: this hands the REAL leg document straight to buildRunStatsEntry, so the row it returns ALREADY carries `promoted` — no spread is needed here, and `mk` forwarding the field (pin G1f) is what carries it on to the superseded/repair rows.
  */
 function legRow(model, leg, conformance) {
   return buildRunStatsEntry({ leg, model, conformance, summary: leg && leg.summary });
@@ -292,7 +292,7 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     }
     legs.push({ model: judge, status: outLeg.status, durationMs: outLeg.durationMs, usage: outLeg.usage,
       conformance, summary: outLeg.summary || '', waveId: outLeg.waveId, seat,
-      ...(outLeg.model ? { resolvedModel: outLeg.model } : {}) });
+      ...(outLeg.model ? { resolvedModel: outLeg.model } : {}), ...(outLeg.promoted === true ? { promoted: true } : {}) }); // #257 R-X26 (named mutant "REVOTELITERALPROMOTEDDROPPED")
   }
   return { byJudge, legs, supersededLegs, repairLegs };
 }

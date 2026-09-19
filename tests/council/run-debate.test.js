@@ -665,18 +665,13 @@ describe('runDebate — a promoted defense is unparseable (#257 R-X23)', () => {
     // Exactly ONE bounded repair — the retry, and the only one.
     expect(seen).toEqual(['r-d1', 'r-d1r']);
     // The REAL leg is on the row, not the `status: 'error'` stub: complete, with the
-    // promoted leg's own durationMs/usage/waveId. ⚠️ MEASURED GAP, reported at Task 13:
-    // spec §10 R-X23 also says this row carries `promoted: true`. It does NOT, and
-    // keeping the leg is not what would make it — `debate.js :: debateRunStatsRows`'
-    // `mk` hands buildRunStatsEntry a SYNTHETIC five-field leg
-    // (status/durationMs/usage/waveId/model), and runDefenseSolo's returned literal
-    // drops `promoted` too. Widening `mk` is the change pin G1e
-    // (tests/council/runstats-byte-order.test.js) says "must be re-decided", and
-    // debate.js is not in this task's files — so what keeping the leg DOES buy is
-    // what is pinned here.
+    // promoted leg's own durationMs/usage/waveId — AND, per #257 R-X26, the cause itself.
+    // `promoted` is the one leg-sourced field `debate.js :: mk` forwards (pin G1f,
+    // tests/council/runstats-byte-order.test.js); named mutant DEBATEROWPROMOTEDDROPPED
+    // (delete that spread) reds the line below.
     const rebuttal = result.debatedInput.runStats.find(r => r.model === 'gemini' && r.role === 'rebuttal');
     expect(rebuttal).toMatchObject({ waveId: 'r-d1', status: 'complete', conformance: 'unstructured',
-      durationMs: 4200, usage: { tokens: { output: 0, reasoning: 1900 } } });
+      durationMs: 4200, usage: { tokens: { output: 0, reasoning: 1900 } }, promoted: true });
     // No adjudication moved.
     expect(tally(result.debatedInput).findings.find(f => f.id === 'A1').tier).toBe('Disputed');
     expect(result.verdictChanges).toBe(0);
@@ -707,11 +702,16 @@ describe('runDebate — a promoted defense is unparseable (#257 R-X23)', () => {
     expect(fs.readFileSync(path.join(tmp, 'rebuttal-gemini.md'), 'utf-8')).toBe(repaired);
     const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
     expect(rows).toHaveLength(2);
-    expect(rows.find(r => r.role === 'rebuttal')).toMatchObject({ waveId: 'r-d1r', conformance: 'repaired' });
-    // The promoted original is the SUPERSEDED row — kept, not discarded (same
-    // MEASURED `promoted` gap as above: `mk` drops it).
+    // The clean repair's row is the primary, and it is NOT promoted — the control that
+    // proves the key below is the leg's own fact, not a property of the describe.
+    const primary = rows.find(r => r.role === 'rebuttal');
+    expect(primary).toMatchObject({ waveId: 'r-d1r', conformance: 'repaired' });
+    expect('promoted' in primary).toBe(false);
+    // The promoted original is the SUPERSEDED row — kept, not discarded, and it carries
+    // the cause (#257 R-X26; legRow hands buildRunStatsEntry the REAL leg document and
+    // `mk` forwards the field on — named mutant DEBATEROWPROMOTEDDROPPED reds this).
     expect(rows.find(r => r.role === 'superseded')).toMatchObject(
-      { waveId: 'r-d1', conformance: 'unstructured', status: 'complete', wasChair: false });
+      { waveId: 'r-d1', conformance: 'unstructured', status: 'complete', wasChair: false, promoted: true });
   });
 
   test('a promoted defence REPAIR is not used either — the original stands and the round still degrades (#257 R-X23)', async () => {
@@ -941,6 +941,14 @@ describe('runDebate — a promoted re-vote is unparseable (#257 R-X23)', () => {
     expect(doc.revotes.some(r => r.judge === 'gpt')).toBe(false);
     expect(doc.revotes).toEqual(expect.arrayContaining([
       expect.objectContaining({ judge: 'qwen', id: 'A1', verdict: 'agree', applied: true })]));
+    // #257 R-X26: the `revote` row names the cause of the stand-down. The row is built
+    // from runRevoteWave's pushed literal (named mutant REVOTELITERALPROMOTEDDROPPED,
+    // src/council/run-debate-revote.js) and forwarded by `debate.js :: mk` (named mutant
+    // DEBATEROWPROMOTEDDROPPED). qwen re-voted cleanly and is the non-promoted control.
+    const revoteRows = result.debatedInput.runStats.filter(r => r.role === 'revote');
+    expect(revoteRows.find(r => r.model === 'gpt')).toMatchObject(
+      { waveId: 'r-rv-gptr', conformance: 'unstructured', promoted: true });
+    expect('promoted' in revoteRows.find(r => r.model === 'qwen')).toBe(false);
   });
 
   test("a promoted re-vote whose repair answers cleanly is applied, and the repair's body is what is materialized", async () => {

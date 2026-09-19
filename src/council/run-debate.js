@@ -97,6 +97,9 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
   return { raiser: raiserKey, byId: parsed.byId,
     leg: leg ? { model: raiserAlias, status: leg.status, durationMs: leg.durationMs, usage: leg.usage,
       conformance, summary: leg.summary, waveId: leg.waveId,
+      // #257 R-X26: the CAUSE rides the kept leg onto its `rebuttal` row (emit-when-true;
+      // debate.js :: mk forwards it — it is the one leg-sourced field that does).
+      ...(leg.promoted === true ? { promoted: true } : {}),
       ...(leg.model ? { resolvedModel: leg.model } : {}) } : stub,
     supersededLeg, repairLeg };
 }

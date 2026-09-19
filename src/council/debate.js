@@ -168,7 +168,7 @@ function debateRunStatsRows({ defenseLegs, revoteLegs, supersededLegs, repairLeg
   // corrected in W14): `mk` hands the entry a SYNTHETIC leg of five fields plus three explicit params,
   // so seat/findingsUnverified/repairRefused/summary — and any future leg-sourced field — reach these
   // rows ONLY by widening THIS list. MEASURED, already shipped: W13's `ttftMs` rides the leg into the
-  // entry and debate rows do not carry it. Widening is a behaviour change needing its own pins; filed.
+  // entry and debate rows do not carry it. #257 R-X26: `promoted` is the ONE leg-sourced field `mk` DOES forward (widened below, emit-when-true, pin G1f) — a reasoning-only leg is the CAUSE of that row's `no-response`/unstructured outcome, which the row would otherwise hide. Every other field, `ttftMs` included, still needs its own decision and its own pins (G1e stays true and stays pinned).
   // ⚠️ The four lists hold NORMALIZED rows, not leg docs, and their model fields MIRROR the entry's
   // `leg` contract: `l.model` is the ALIAS and `l.resolvedModel` the executable id, where the entry
   // reads `leg.model` AS the resolved id and takes the alias as its own `model` — passing `l`
@@ -184,7 +184,7 @@ function debateRunStatsRows({ defenseLegs, revoteLegs, supersededLegs, repairLeg
   // in tests/council/runstats-byte-order.test.js.
   const mk = (role) => (l) => buildRunStatsEntry({
     leg: { status: l.status, durationMs: l.durationMs, usage: l.usage,
-      waveId: l.waveId, model: l.resolvedModel },
+      waveId: l.waveId, model: l.resolvedModel, ...(l.promoted === true ? { promoted: true } : {}) }, // #257 R-X26 (named mutant "DEBATEROWPROMOTEDDROPPED")
     model: l.model, role, conformance: l.conformance });
   return [
     ...(defenseLegs || []).map(mk('rebuttal')),
