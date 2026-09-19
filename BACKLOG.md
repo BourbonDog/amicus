@@ -9125,8 +9125,10 @@ Deferred — one line each, none blocks anything:
 
 - [ ] #257 R1 — a solo `amicus start` still prints promoted reasoning as the answer with no stderr
   line; `metadata.json` says `promoted: true`. Candidate: one `Note:` on stderr.
-- [ ] #257 R10 — readers of a completed status this PR did not change: chair-fallback.js:87,
-  run-chair.js:61, run-debate.js:61/84/267, run-debate-revote.js:172/240,
+- [ ] #257 R1 (fanout surface) — `src/sidecar/fanout-output.js:27` — the `amicus fanout` CLI prints
+  a promoted leg's reasoning as its answer with no marker (R1's sibling on the fanout surface).
+- [x] #257 R10 — readers of a completed status this PR had not changed when this was filed:
+  chair-fallback.js:87, run-chair.js:61, run-debate.js:61/84/267, run-debate-revote.js:172/240,
   src/sidecar/fanout-leg-fallback.js:203 (the other seven are `src/council/`). A promoted chair
   verdict or debate defense is the same disease on
   another surface; the `promoted` fact is on those legs already.
@@ -9144,6 +9146,13 @@ Deferred — one line each, none blocks anything:
   so a lost seat's row reads `complete` beside the `Notice:` in "What was lost" — exactly the shape
   an empty-answer dead seat already has); `electron/workspace-ui/workspace-render.js:169` (the
   stage rail, not a leg). `src/sidecar/models-probe.js:41` was already ruled correct in spec R10.
+  ⚠️ **The record.** 2026-09-19, council round 1, owner decision C: every reader listed here now
+  stands a promoted leg down (`run-debate.js`'s `bad()` through the `conformance` the new gate sets;
+  the rest gated directly), R-X21–R-X26, except the substitution chain — `fanout-leg-fallback.js:203`
+  is unchanged because `isRetryable` is capacity-only (R-X24, measured in the SDD map); a
+  reasoning-only answer earning a substitute would need a new retryable class. One reader this
+  enumeration MISSED — the ch4 chair verdict-line repair, `run-chair.js:205` — was found by the
+  Task 15 docs review and gated under R-X27.
 - [ ] #257 (build) — the ttftMs roster test in tests/council/run-stats-entry.test.js cannot catch a
   stale IMPORTERS entry on its own: its set-union test passes whether result-schema.js is listed as
   an importer or a mention. Candidate: assert the importer regex per IMPORTERS entry inside the

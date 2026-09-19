@@ -20,12 +20,24 @@ All notable changes to Amicus are documented here. Format follows
   on `judge-reasoning-only` whose text names which; otherwise, when fewer than two judges remain
   usable, the thin-cross-review reason says `answered only in the reasoning channel with no
   parseable block`.
+  Every other reader of a leg in the council now treats a promoted leg as no deliverable: Stage-1
+  reviews (not materialized; the once-only retry fires); the Stage-1 `-p<N>` and Stage-2 `-q<N>`
+  repair solos (a promoted repair is a failed repair attempt inside the existing bound); the chair
+  (its walk retries and falls back exactly as for a chair with no output, its verdict-line repair
+  reads no `VERDICT:` line from reasoning, and `chairAttempts[]` records `no-output` with the
+  reason `answered only in its reasoning channel (…); no synthesis to read`); debate defences and
+  re-votes (unparseable: the original stands (a defence as `no-response`; a re-vote leaves the
+  judge's provisional verdict), the one bounded repair is the retry, and the row keeps the real leg
+  with `promoted: true`). The fallback-substitution chain is unchanged: a reasoning-only answer is
+  not a capacity signal and earns no substitute. The engine's `finish` string is bounded to 40
+  printable characters before any announcement interpolates it.
   The fact rides every leg document (`promoted: true`, emit-when-true, declared in
   `run.schema.json` and the tally schema). Measured motive: PR #254 round 1, where 40,332 reasoning
   tokens and 1 output token became a 149 KB "review", 92 % of the Stage-2 bundle; three of four
   judges died on it. **Upgrade note:** a seat that 4.13.0 counted as reviewed on a promoted answer
-  is now retried and, if it repeats, counted lost, and the run exits 2; `finish: 'length'` with no
-  text is still the `OUTPUT_LENGTH` death it was. (#257; closes the write-back half of #242's item 1
+  is now retried and, if it repeats, counted lost, and the run exits 2; a chair, defence or
+  re-vote that 4.13.0 accepted on a promoted answer is now retried or stands down;
+  `finish: 'length'` with no text is still the `OUTPUT_LENGTH` death it was. (#257; closes the write-back half of #242's item 1
   by removing its worst input)
 
 ## [4.13.0] - 2026-09-18
