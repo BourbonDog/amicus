@@ -981,8 +981,8 @@ itself is not lost). The MCP equivalent is `amicus_verdict`'s `render: true` + `
 is a **second** call after the first: call once with `record`/`decisions` and no `render` to get
 the decided verdict back as JSON and write it to `<run-folder>/verdict.json` yourself, then call
 again with `render: true` and `outDir: <run-folder>` — this refreshes `<outDir>/report.html` on
-disk and also returns the verdict's Markdown rendering (for `report.md`); it still does not write
-`verdict.json` itself.
+disk and also returns the verdict's Markdown rendering (the Markdown the Claude-authored
+`report.md` embeds — `src/` writes no such file); it still does not write `verdict.json` itself.
 
 **Windows PowerShell 5.1 caveat** (also called out in SKILL.md): redirecting `council tally`'s
 `--json` output with a bare `>` writes UTF-16 under legacy PowerShell 5.1, which then makes
@@ -1422,7 +1422,11 @@ thin-cross-review reason says `answered only in the reasoning channel and was no
 `judge-<seat>.md` is written from a promoted leg; the relaunch's real text is the judge artifact.
 That relaunch is recorded as the judge's first repair attempt — a `-q<N>` wave, a `role: 'repair'`
 row, and `conformance: 'repaired'` when it is used — so only the `Note:`'s prose tells a relaunch
-from a repair.
+from a repair; the relaunch and any repair after it share that one row shape, so the note's `why` is
+the one place that says which ending the judge had.
+A judge whose own answer was real but unparseable and whose repair comes back in the reasoning
+channel gets the same `Note:`, worded for the repair (`judge <alias>'s repair answered in its
+reasoning channel`).
 
 Every council reader of that leg stands it down the same way (#257). A promoted Stage-1
 `-p<N>` or Stage-2 `-q<N>` repair solo is a failed repair attempt inside the existing bound: its

@@ -25,7 +25,9 @@ All notable changes to Amicus are documented here. Format follows
   promoted leg; the relaunch's real text is the judge artifact. That relaunch is recorded as the
   judge's first repair attempt — a `-q<N>` wave, a `role: 'repair'` row, and
   `conformance: 'repaired'` when it is used — so only that `Note:`'s prose tells a relaunch from a
-  repair.
+  repair. A judge whose own answer was real but unparseable and whose repair comes back in the
+  reasoning channel is announced too, on the same channel, with a `Note:` that names the repair
+  rather than the judge's answer.
   Every reader of a leg in the council now treats a promoted leg as no deliverable: Stage-1
   reviews (not materialized; the once-only retry fires); the Stage-1 `-p<N>` and Stage-2 `-q<N>`
   repair solos (a promoted repair is a failed repair attempt inside the existing bound); the chair
@@ -44,9 +46,17 @@ All notable changes to Amicus are documented here. Format follows
   `wave.json`, and the row is the record. The fallback-substitution chain is unchanged: a
   reasoning-only answer is not a capacity signal and earns no substitute. The engine's `finish`
   string is reduced to identifier characters (`A-Z a-z 0-9 _ . : -`, at most 40) before any
-  announcement interpolates it, so a provider-controlled finish cannot carry Markdown into a sticky
-  PR comment; the token parenthetical every announcement shares has one home
-  (`promoted.js :: tokenSplit`).
+  announcement interpolates it, so a provider-controlled finish cannot open a link, a code span, a
+  tag or emphasis in any prose surface that renders it — the stderr `Notice:` lines, run.json, and
+  the Markdown `amicus council report` prints (the sticky PR comment never renders it); an
+  underscore survives only inside a word, where Markdown cannot open emphasis; the token
+  parenthetical every announcement shares has one home (`promoted.js :: tokenSplit`).
+  The Stage-1 dead-leg announcements bound the engine's error text the same way the Stage-2
+  judge-death prose already did — at its own cap — one line, no control characters, at most 800
+  characters, a cap
+  measured to pass every reason amicus itself mints (the `OUTPUT_LENGTH` remedy is 517 characters;
+  the longest, the extended no-output backstop reason, 518) — while `data.reason` keeps the
+  verbatim text.
   The fact rides every leg document (`promoted: true`, emit-when-true, declared in
   `run.schema.json`, the tally schema and, on its open leg objects, `wave.schema.json`).
   Measured motive: PR #254 round 1, where 40,332 reasoning
@@ -54,7 +64,9 @@ All notable changes to Amicus are documented here. Format follows
   judges died on it. **Upgrade note:** a seat that 4.13.0 counted as reviewed on a promoted answer
   is now retried and, if it repeats, counted lost, and the run exits 2; a Stage-2 judge, chair,
   defence or re-vote that 4.13.0 accepted on a promoted answer is now relaunched once or stands down;
-  `finish: 'length'` with no text is still the `OUTPUT_LENGTH` death it was. (#257; closes the write-back half of #242's item 1
+  `finish: 'length'` with no text is still the `OUTPUT_LENGTH` death it was. A seat that answers
+  only in its reasoning channel on every call will lose every council it sits on — retried once,
+  then lost, exit 2 — by design: re-seat it; a pre-flight warning for such a seat is filed. (#257; closes the write-back half of #242's item 1
   by removing its worst input)
 
 ## [4.13.0] - 2026-09-18

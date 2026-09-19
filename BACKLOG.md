@@ -9158,17 +9158,32 @@ Deferred — one line each, none blocks anything:
   shared token fragment (R-X31). The owner then withdrew the Stage-2 judge exception (A′, R-X32):
   a promoted judge, defence or re-vote is relaunched with its original briefing, never used as it
   stands and never repaired against its deliberation.
-- [ ] #257 (build, E1 review M6) — src/council/run-stage2.js is at 298/300 with two ~250-char
+  Council round 3 (2026-09-19): R-X35–R-X40.
+- [x] #257 (build, E1 review M6) — src/council/run-stage2.js is at 298/300 with two ~250-char
   lines (`:202` at 275 chars, `:261` at 249) carrying the R-X32 conjuncts; extract the judge
   leg-loop body (parse → bounded repair/relaunch → result row) into its own module so the next
   edit is not paid for in line length. Out of #257: the split would break the byte-parity posture
   this round depends on.
+  ✅ **done at round 3 (R-X37, run-stage2-judge.js).** The loop body moved VERBATIM to
+  `src/council/run-stage2-judge.js :: adjudicateJudgeLeg` (228 lines); `src/council/run-stage2.js`
+  is 177. Byte parity held — the seven `why` sentences are byte-identical and no test string
+  changed for the move itself.
 - [ ] #257 (build) — the ttftMs roster test in tests/council/run-stats-entry.test.js cannot catch a
   stale IMPORTERS entry on its own: its set-union test passes whether result-schema.js is listed as
   an importer or a mention. Candidate: assert the importer regex per IMPORTERS entry inside the
   union test too.
-- [ ] #257 (council r2; PRE-EXISTING since #85, `79f03422`) — `leg.error` is interpolated raw into
-  the dead-leg announcement templates that reach the sticky PR comment:
+- [x] #257 (council r2; PRE-EXISTING since #85, `79f03422`) — `leg.error` is interpolated raw into
+  the dead-leg announcement templates. ⚠️ **Two corrections, round 3 (2026-09-19).** (1) The
+  surface named below — "that reach the sticky PR comment" — was never measured and is FALSE: the
+  workflow's comment step (`.github/workflows/council-review.yml:1755`, body at `:1836-1878`)
+  interpolates neither `seatLoss` nor `degrades` anywhere, so no degrade prose reaches it; the true
+  prose surfaces are the stderr `Notice:` lines, run.json/verdict.json as text, and the Markdown
+  `amicus council report` prints (`src/council/report-md.js:59`). (2) The PROSE half is now CLOSED
+  by R-X38: all five Stage-1 sites bound their error text with
+  `collapseExcerpt(…, MAX_LEG_ERROR_CHARS = 800)` — `src/council/run-stages.js:127`,
+  `src/council/run-retry-notes.js:185`, `:225`, `:239`, `:263`. What remains RAW below is the
+  MACHINE half (`data.reason`, `verdict.json :: seatLoss.reason`), which stays raw BY DESIGN. The
+  sites as they were at the filing:
   `src/council/run-stages.js:120` (Stage-1 skipped leg); `src/council/run-retry-notes.js:147`
   (still-dead first leg) and `:185`, the `retryCause` fragment rendered into all three arms of the
   retry note at `:193`, `:196` and `:198`; `src/council/verdict-seat-loss.js:130-131`, where a dead
@@ -9184,3 +9199,41 @@ Deferred — one line each, none blocks anything:
   `finish` still reaches the machine fields unbounded (`src/utils/leg-riders.js:37`,
   `src/utils/spend-ledger.js:101`, `src/sidecar/session-utils.js:108`) — data fields, not prose; the
   bound is applied where prose is made (`promotedFacts`).
+
+### Round 3 (2026-09-19) — filed, not fixed
+
+- [ ] #257 (council r3, C2/HQ1) — nothing warns an operator BEFORE a run that a seat has been
+  losing councils by answering only in its reasoning channel: the loss is announced after the money
+  is spent (`src/council/verdict-seat-loss.js:132-133` and the dead-leg `Notice:` at
+  `src/council/run-stages.js:118-131`). R-X40 ruled the run-time behaviour CORRECT (owner decisions
+  A and B) and filed this instead. Candidate: a pre-flight / `doctor` row that reads the recent runs
+  for seats lost by promotion and names them before the bench is launched — the existing doctor-row
+  shape is `src/utils/doctor-output-budget-check.js :: evaluateOutputBudget` (`:131`, exported
+  at `:198`, consumed at `src/cli-handlers-doctor.js:180`).
+- [ ] #257 (council r3, from A1/R-X38) — `src/council/report-md.js :: renderMd` renders EVERY
+  degrade record as a Markdown **list item** (`:59`, and the notes list at `:69`, both `- ` +
+  `src/utils/degrade.js :: formatDegrade`), and `collapseExcerpt`
+  (`src/utils/text-sanitize.js:79`) does NOT neutralise Markdown-active characters — it strips
+  ANSI, bidi and control bytes, collapses whitespace and caps. So a provider error containing
+  Markdown still renders as Markdown in that list item. This affects #219's Stage-2 judge-death
+  prose too (`src/council/run-stage2-notes.js:59`). Candidate: a Markdown-neutral rendering at the
+  ONE renderer rather than a second sanitizer at each producer. (`report.html` is unaffected —
+  `src/council/report-html.js:31` escapes.)
+- [ ] #257 (council r3, F3 concern 3) — the #264 r1 duplicate-reason suppression compares
+  UNSANITISED strings while the prose now renders SANITISED ones: `src/council/run-retry-notes.js`
+  compares `retryRaw.trim()` against `ff.reason.trim()` at `:225` and then renders
+  `collapseExcerpt(retryRaw, MAX_LEG_ERROR_CHARS)`, so a retry error differing from the first
+  failure's ONLY in ANSI or control characters is not suppressed and the same reason renders twice.
+  One-line cure: compare the collapsed forms.
+- [ ] #257 (council r3, F3 concern 4) — `src/council/run-stage2-notes.js :: judgeDeadNote` still
+  caps its leg error at a bare literal `200` (`:59`, #219), so a judge dying `OUTPUT_LENGTH` or at
+  the no-output backstop loses its amicus-minted remedy in that prose — measured, the shortest
+  `OUTPUT_LENGTH` format is 265 characters and the longest minted reason is 518. R-X38's ruling (a
+  cap bounds provider noise and must pass every minted reason whole) applies here unchanged; it is
+  its own change because it moves a pinned Stage-2 string.
+- [ ] #257 (council r3, F3 concern 3) — `src/utils/output-length.js :: formatOutputLengthReason`
+  interpolates the operator-controlled `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` verbatim (`:83`
+  and `:84`), so the minted reason's length is operator-controlled and NO finite prose cap is a
+  proof that a minted reason survives it — R-X38's pin is a tripwire on drift, not a bound. The
+  guarantee belongs at the formatter: run the flag through
+  `src/utils/text-sanitize.js :: safeFragment` before interpolating it.
