@@ -9,8 +9,7 @@
  * object literal moved out of that file's leg loop into this module. The move is
  * meant to be BEHAVIOUR-FREE, and the only way to prove that is to assert the
  * record against the old inline text typed out by hand rather than against the
- * new function's own output. Verbatim, from `run-stage2.js:252-266` at
- * 61afc84b:
+ * new function's own output. Verbatim, from `run-stage2.js@61afc84b:252-266`:
  *
  *     ctx.degrade.note({
  *       channel: 'stage2-judge',
@@ -97,10 +96,14 @@ describe('judgeDeadNote — #202’s record, moved verbatim (#257 headroom)', ()
  * how each of those endings is said out loud, and it fires on EVERY one of them:
  * a silent path fails the amicus bar as hard as a crash.
  *
- * SIX ARMS, all pinned byte-exact below — `rescued` × {attempt 1, attempt 2},
- * and not-rescued × the four `relaunch` outcomes ('promoted', 'died',
- * 'answered', null = never relaunched, the cost ceiling arrived first). `kind`
- * stays 'info' on all six: a stood-down judge is already counted by
+ * SEVEN ARMS, all pinned byte-exact below — `rescued` × {attempt 1, attempt 2},
+ * and not-rescued × the five stand-down states ('relaunch-promoted',
+ * 'relaunch-died', 'relaunch-unparseable', 'relaunch-unrepaired',
+ * 'not-relaunched'), plus R-X36's 'repair-promoted' at the end, whose subject is
+ * the REPAIR rather than the judge's own answer. C4 (council round 3) made that
+ * cause ONE explicit state set by the caller, in place of the `relaunch` enum
+ * this function used to re-derive it from together with `attempts`. `kind` stays
+ * 'info' on all of them: a stood-down judge is already counted by
  * thin-cross-review, and this channel has never moved the exit code.
  *
  * NAMED MUTANT — STANDDOWNSILENT is recorded in tests/council/run-stages.test.js,
@@ -119,7 +122,7 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
 
   test('RESCUED by the relaunch itself (attempt 1): the relaunch\'s adjudication is the one used', () => {
     expect(promotedJudgeNote('gpt', SEAT, promotedLeg({ reasoning: 1200, output: 0 }),
-      { attempts: 1, rescued: true, relaunch: 'answered' })).toEqual({
+      { attempts: 1, rescued: true })).toEqual({
       kind: 'info',
       channel: 'judge-reasoning-only',
       what: 'judge gpt answered in its reasoning channel',
@@ -132,7 +135,7 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
 
   test('RESCUED by the relaunch\'s one repair (attempt 2): the note names the repair', () => {
     expect(promotedJudgeNote('gpt', SEAT, promotedLeg({ reasoning: 90, output: 0 }),
-      { attempts: 2, rescued: true, relaunch: 'answered' })).toEqual({
+      { attempts: 2, rescued: true })).toEqual({
       kind: 'info',
       channel: 'judge-reasoning-only',
       // `what` does not fork — the judge did answer in its reasoning channel
@@ -146,9 +149,9 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
     });
   });
 
-  test('STOOD DOWN — the relaunch was promoted again', () => {
+  test("STOOD DOWN — 'relaunch-promoted': the relaunch was promoted again", () => {
     expect(promotedJudgeNote('gpt', SEAT, promotedLeg({ reasoning: 1500, output: 0 }),
-      { attempts: 1, rescued: false, relaunch: 'promoted' })).toEqual({
+      { attempts: 1, rescued: false, standDown: 'relaunch-promoted' })).toEqual({
       kind: 'info',
       channel: 'judge-reasoning-only',
       what: 'judge gpt answered in its reasoning channel',
@@ -160,9 +163,9 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
     });
   });
 
-  test('STOOD DOWN — the relaunch died', () => {
+  test("STOOD DOWN — 'relaunch-died': the relaunch produced no usable text", () => {
     const note = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 700, output: 0 }),
-      { attempts: 1, rescued: false, relaunch: 'died' });
+      { attempts: 1, rescued: false, standDown: 'relaunch-died' });
     expect(note.why).toBe(HEAD + RELAUNCHED + 'the relaunch produced no usable text; '
       + unread(700, 0));
     expect(note.effect).toBe(LOST);
@@ -170,9 +173,9 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
       attempts: 1, relaunched: true });
   });
 
-  test('STOOD DOWN — the relaunch answered for real and its one repair still did not parse', () => {
+  test("STOOD DOWN — 'relaunch-unparseable': the relaunch answered for real and its one repair still did not parse", () => {
     const note = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 5, output: 2 }),
-      { attempts: 2, rescued: false, relaunch: 'answered' });
+      { attempts: 2, rescued: false, standDown: 'relaunch-unparseable' });
     expect(note.why).toBe(HEAD + RELAUNCHED + "the relaunch's answer did not parse after its "
       + 'one repair; ' + unread(5, 2));
     expect(note.effect).toBe(LOST);
@@ -180,13 +183,14 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
       attempts: 2, relaunched: true });
   });
 
-  test('STOOD DOWN — the relaunch answered for real and the ceiling arrived BEFORE its repair', () => {
+  test("STOOD DOWN — 'relaunch-unrepaired': the ceiling arrived BEFORE the relaunch's repair", () => {
     // Review I1. `ctx.overBudget()` is re-checked between the relaunch and the
-    // repair, so `relaunch: 'answered'` with `attempts: 1` is reachable and NO
-    // -q2 ever launched. The sentence must not name a repair that `data.attempts`
-    // denies in the same record — the defect class R-X13 was raised to remove.
+    // repair, so this ending is reachable with NO -q2 ever launched — which is
+    // why C4 gives it a state of its own rather than reading 'answered' through
+    // `attempts`. The sentence must not name a repair that `data.attempts` denies
+    // in the same record — the defect class R-X13 was raised to remove.
     const note = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 40000, output: 0 }),
-      { attempts: 1, rescued: false, relaunch: 'answered' });
+      { attempts: 1, rescued: false, standDown: 'relaunch-unrepaired' });
     expect(note.why).toBe(HEAD + RELAUNCHED + "the relaunch's answer did not parse — the cost "
       + 'ceiling was reached before its repair; ' + unread(40000, 0));
     expect(note.why).not.toContain('after its one repair');
@@ -195,9 +199,9 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
       attempts: 1, relaunched: true });
   });
 
-  test('STOOD DOWN — never relaunched at all, because the cost ceiling arrived first', () => {
+  test("STOOD DOWN — 'not-relaunched': the cost ceiling arrived before attempt 1", () => {
     const note = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 11, output: 0 }),
-      { attempts: 0, rescued: false, relaunch: null });
+      { attempts: 0, rescued: false, standDown: 'not-relaunched' });
     expect(note.why).toBe(HEAD + 'not relaunched — the cost ceiling was reached first; '
       + unread(11, 0));
     expect(note.effect).toBe(LOST);
@@ -209,10 +213,10 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
 
   test('`rescued` and `relaunched` are emit-when-true — absent, never false', () => {
     const stoodDown = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 5, output: 0 }),
-      { attempts: 1, rescued: false, relaunch: 'promoted' });
+      { attempts: 1, rescued: false, standDown: 'relaunch-promoted' });
     expect('rescued' in stoodDown.data).toBe(false);
     const never = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 5, output: 0 }),
-      { attempts: 0, rescued: false, relaunch: null });
+      { attempts: 0, rescued: false, standDown: 'not-relaunched' });
     expect('relaunched' in never.data).toBe(false);
     expect('rescued' in never.data).toBe(false);
     // The old R-X13 key is gone with the arm that minted it.
@@ -233,8 +237,65 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
 
   test('kind is `info` on both endings — it must never flip degraded, and so never the exit code', () => {
     expect(promotedJudgeNote('gpt', null, {}).kind).toBe('info');
-    expect(promotedJudgeNote('gpt', null, {}, { attempts: 1, rescued: true, relaunch: 'answered' })
+    expect(promotedJudgeNote('gpt', null, {}, { attempts: 1, rescued: true })
       .kind).toBe('info');
+  });
+
+  /**
+   * #257 R-X36 (council round 3, B1 — gpt, major). THE ONE ARM WHOSE SUBJECT IS
+   * THE REPAIR. Every arm above is about a judge whose OWN answer was its
+   * deliberation. This one is not: the judge answered for real, unusably, and
+   * the ordinary `-q<N>` repair of that answer came back promoted. Before
+   * R-X36 that ended in silence — the `-q<N>` ROW said `promoted: true`, the
+   * machine record, and the prose said nothing at all.
+   *
+   * The `what` therefore FORKS, deliberately: a reader who saw the promoted-
+   * original sentence here would come away believing the judge's own answer was
+   * deliberation, which is the opposite of what happened. The `data` forks too —
+   * `reasoningTokens`/`outputTokens` describe a promoted ORIGINAL's leg, and
+   * this leg is not one.
+   */
+  test('STOOD DOWN — R-X36: the judge\'s own answer was real and its repair came back promoted', () => {
+    const own = { status: 'complete', summary: 'Judged at length in prose; no trailing JSON.' };
+    expect(promotedJudgeNote('gemini', { id: 'gemini', alias: 'gemini' }, own,
+      { attempts: 2, rescued: false, standDown: 'repair-promoted', repairPromotedAttempt: 1 }))
+      .toEqual({
+        kind: 'info',
+        channel: 'judge-reasoning-only',
+        what: "judge gemini's repair answered in its reasoning channel",
+        why: 'its own answer was real but did not parse; repair attempt 1 was written in the '
+          + 'reasoning channel and is not a judgement, and the judge ended unusable',
+        effect: LOST,
+        data: { judge: 'gemini', seat: 'gemini', attempts: 2, repairPromotedAttempt: 1 },
+      });
+  });
+
+  test('R-X36: the attempt number is the one passed, not `attempts`, and an unbound seat is null', () => {
+    const note = promotedJudgeNote('gemini', null, { status: 'complete', summary: 'prose' },
+      { attempts: 2, rescued: false, standDown: 'repair-promoted', repairPromotedAttempt: 2 });
+    expect(note.why).toContain('repair attempt 2 was written in the reasoning channel');
+    expect(note.data).toEqual({ judge: 'gemini', seat: null, attempts: 2, repairPromotedAttempt: 2 });
+    // Neither `relaunched` nor `rescued`, and NOT the promoted-original's token
+    // counts: the original answered in its output channel, so there is no
+    // deliberation of its own to account for.
+    expect('relaunched' in note.data).toBe(false);
+    expect('reasoningTokens' in note.data).toBe(false);
+    expect('outputTokens' in note.data).toBe(false);
+  });
+
+  /**
+   * C4 (council round 3, contested minor). The cause used to be spread over
+   * `relaunch` + `attempts` + a three-conjunct `while` guard, and this function
+   * re-derived it. `standDown` is now the one explicit state; `relaunch` is gone
+   * and must not be read — a caller still passing it gets the default arm, which
+   * is what makes a half-finished rename LOUD rather than silently wrong.
+   */
+  test('the old `relaunch` option is gone — the note never reads it', () => {
+    const viaOld = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 5, output: 0 }),
+      { attempts: 1, rescued: false, relaunch: 'promoted' });
+    expect(viaOld.why).toBe(HEAD + 'not relaunched — the cost ceiling was reached first; '
+      + unread(5, 0));
+    expect('relaunched' in viaOld.data).toBe(false);
   });
 });
 
@@ -280,7 +341,7 @@ describe('thinCrossReviewWhy — the fromReasoning bucket', () => {
   });
 
   test('a judge that DIED is never in this bucket, whatever fromReasoning says', () => {
-    // run-stage2.js stamps `!legDied && isPromotedLeg(leg)`, so this shape
+    // run-stage2-judge.js stamps `!legDied && isPromotedLeg(leg)`, so this shape
     // cannot be produced — pinned anyway so the filter keeps reading `died`.
     expect(thinCrossReviewWhy([{ ok: true }, { ok: false, died: true, fromReasoning: true }]))
       .toBe('1 judge leg died before answering');

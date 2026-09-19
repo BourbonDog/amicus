@@ -139,7 +139,7 @@ test('thin cross-review fires through the REAL runCouncil path, and judges have 
   // counter modeled repeated per-judge solo calls, which is not how Stage 2
   // launches. A judge whose Stage-2 leg is 'complete' with non-empty (even if
   // unparseable) prose enters the bounded 2-attempt repair loop
-  // (run-stage2.js:200-233), so the two "bad" judges' repair solos must ALSO
+  // (run-stage2-judge.js :: adjudicateJudgeLeg), so the two "bad" judges' repair solos must ALSO
   // stay unparseable — a successful repair would make that judge usable and
   // defeat the <2 condition this test pins.
   const stillBad = (o) => okWave([mkLeg(o.model, 'still no parseable block')]);
@@ -184,7 +184,7 @@ test('the PR #254 shape: judges that DIED are named as dead, not as bad output',
   // run.json was sent at the wrong one.
   //
   // A dead judge leg ('error', no summary) skips the repair loop entirely
-  // (run-stage2.js gates it on 'complete' AND a summary), so unlike the
+  // (run-stage2-judge.js gates it on 'complete' AND a summary), so unlike the
   // unparseable fixture above this script needs no -q solos.
   const script = {
     'abc123-s1': (o) => okWave(o.models.map(m => mkLeg(m, review(m)))),

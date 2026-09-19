@@ -2210,10 +2210,13 @@ SECOND LINE
    *   · every path is announced on `judge-reasoning-only`, rescued or not — a
    *     silent path fails the product bar as hard as a crash.
    *
+   * ⚠️ #257 R-X37: every named mutant below is applied in
+   * `src/council/run-stage2-judge.js`, where this loop body now lives — the
+   * extraction moved the code, not the behaviour.
    * NAMED MUTANT — JUDGEOWNBLOCKUSED: restore `parseJudgeOutput(leg.summary,
-   * parseCtx)` for a promoted leg in run-stage2.js. Reds (a) below.
+   * parseCtx)` for a promoted leg in run-stage2-judge.js. Reds (a) below.
    * NAMED MUTANT — FROMREASONINGDROPPED: delete `fromReasoning:` from the
-   * `ok: false` push in run-stage2.js. Reds (b) below.
+   * `ok: false` push in run-stage2-judge.js. Reds (b) below.
    */
   const promotedJudgeLeg = (summary, waveId, slot, tokens) => ({
     ...mkLeg('gpt', summary, 'complete', waveId, slot),
@@ -2317,7 +2320,7 @@ SECOND LINE
    * WITHDRAWN with this ruling.
    *
    * NAMED MUTANT — RELAUNCHISREPAIR: drop the `isPromotedLeg(leg) && attempts === 1
-   * ? bundle :` fork in run-stage2.js so the -q1 is the repair prompt again.
+   * ? bundle :` fork in run-stage2-judge.js so the -q1 is the repair prompt again.
    * Reds this test.
    */
   test('#257 R-X32: the -q1 of a promoted judge is a RELAUNCH — its prompt is byte-identical to the -s2 bundle', async () => {
@@ -2358,11 +2361,12 @@ SECOND LINE
    * bundle to judge from, so the judge stands down and the run says so. The
    * cross-review proceeds with the judges that answered.
    *
-   * NAMED MUTANT — STANDDOWNDROPPED: remove the
-   * `&& !(isPromotedLeg(leg) && attempts === 1 && judging === '')` conjunct from
-   * run-stage2.js's `while`. A second solo launches. Reds this test.
+   * NAMED MUTANT — STANDDOWNDROPPED: remove the `&& !standDown` conjunct from
+   * run-stage2-judge.js's `while` (C4 replaced the old three-conjunct guard
+   * `!(isPromotedLeg(leg) && attempts === 1 && judging === '')` with that one
+   * read of the explicit state). A second solo launches. Reds this test.
    * NAMED MUTANT — STANDDOWNSILENT: drop the `else if (isPromotedLeg(leg))` note
-   * from the `!parsed.ok` branch. Reds this test's note assertions.
+   * from run-stage2-judge.js's `!parsed.ok` branch. Reds this test's note assertions.
    */
   test('#257 R-X32: a relaunch that is promoted again stands the judge down — one solo, no -q2, ok:false, fromReasoning, noted', async () => {
     const solos = [];
@@ -2786,13 +2790,14 @@ SECOND LINE
    * convention), so a NON-promoted judge rescued by a promoted repair raised
    * nothing at all — the measured gap this gate closes by construction.
    *
-   * With the gate, the note's repair arm can only ever describe one shape: a
-   * promoted ORIGINAL rescued by a NON-promoted repair, which is exactly what
-   * its `why` says. That arm is already pinned by '#257 (b2)' above — not
-   * duplicated here.
+   * With the gate, the note's promoted-ORIGINAL arms can only ever describe one
+   * shape: a promoted original rescued by a NON-promoted repair, which is exactly
+   * what their `why` says. That arm is already pinned by '#257 (b2)' above — not
+   * duplicated here. The silence this docblock recorded is closed by R-X36
+   * below, which gives the OTHER shape its own sentence.
    *
    * NAMED MUTANT — JUDGEREPAIRPROMOTEDUSED: drop `!isPromotedLeg(solo.leg) &&`
-   * from run-stage2.js's `const out = …` line. Reds the test below: `ok` flips
+   * from run-stage2-judge.js's `const out = …` line. Reds the test below: `ok` flips
    * to true and the reasoning's block becomes the adjudication.
    */
   test('a promoted -q1 repair supplies nothing: its block is never parsed (#257 R-X21)', async () => {
@@ -2833,9 +2838,12 @@ SECOND LINE
     expect(g.died).toBe(false);                // it answered; the REPAIRS were unusable
     // The ORIGINAL was not promoted, so this judge did not answer in its
     // reasoning channel — a different fact with a different fix (spec R4), and
-    // the note that names that fact must stay silent here.
+    // the marker that names that fact stays false here.
     expect(g.fromReasoning).toBe(false);
-    expect(ctx._notes.find((n) => n.channel === 'judge-reasoning-only')).toBeUndefined();
+    // #257 R-X36: the channel is no longer silent on this shape — but what it
+    // says is about the REPAIR, never the judge's own answer. Pinned in full below.
+    expect(ctx._notes.filter((n) => n.channel === 'judge-reasoning-only').map((n) => n.what))
+      .toEqual(["judge gemini's repair answered in its reasoning channel"]);
     expect(ctx._notes.find((n) => n.channel === 'stage2-judge')).toBeUndefined();
 
     // The bound is unchanged, and `judging` never became the promoted
@@ -2854,6 +2862,142 @@ SECOND LINE
     expect('promoted' in repairRows[1]).toBe(false);
   });
 
+  /**
+   * #257 R-X36 (council round 3, B1 — gpt, major). THE OTHER PROMOTED SHAPE.
+   * The R-X21 gate above stops a promoted repair from being READ. What it never
+   * did was SAY so: `judge-reasoning-only` keys on the ORIGINAL wave leg (#83's
+   * convention), so a judge whose own answer was real-but-unparseable, whose
+   * `-q<N>` repair came back promoted, and which then ended unusable, left a
+   * `-q<N>` row saying `promoted: true` — the machine record — and not one word
+   * of prose. Under owner decision A′ every path a promoted answer takes is
+   * announced, and this one was not.
+   *
+   * The `what` FORKS from the promoted-original arms deliberately: this judge's
+   * own answer was real, and a reader must not come away believing otherwise.
+   *
+   * It fires only when the judge ENDS unusable. Attempt 2 carries the ORIGINAL's
+   * real text, so a promoted attempt 1 followed by a parseable attempt 2 is just
+   * a failed repair with a row that says so — the CONTROL below.
+   *
+   * NAMED MUTANT — REPAIRPROMOTEDSILENT: in run-stage2-judge.js delete the
+   * `: (repairPromoted === null ? null : 'repair-promoted')` arm of the C4
+   * stand-down resolution. Reds the first test below.
+   */
+  const REPAIR_REASONING = 'Let me weigh the two reviews against each other first.';
+  // THE ADVERSARIAL SHAPE, as in R-X21 above: the promoted repair's reasoning
+  // CONTAINS a valid fenced block. What disqualifies it is the channel it came
+  // back on, not whether it happens to parse.
+  const promotedRepair = (waveId) => ({
+    ...mkLeg('gemini', `${REPAIR_REASONING}
+
+${
+      judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }])}`, 'complete', waveId, 1),
+    promoted: true, finish: 'stop',
+    usage: { tokens: { reasoning: 40332, output: 1 }, cost: { amount: 0.02, source: 'reported' } },
+  });
+  // The judge's OWN answer: REAL text in the output channel, with no block.
+  const REAL_BUT_UNPARSEABLE = 'Judged at length in prose, but the trailing JSON never appeared.';
+  const repairPromotedCtx = (secondSolo) => {
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', REAL_BUT_UNPARSEABLE, 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]),
+          'complete', opts.waveId, 2),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        return okWave([solos.length === 1 ? promotedRepair(opts.waveId) : secondSolo(opts.waveId)]);
+      },
+    });
+    return { ctx, solos };
+  };
+
+  test('#257 R-X36: a repair that comes back promoted is announced when the judge ends unusable', async () => {
+    const { ctx, solos } = repairPromotedCtx(
+      (waveId) => mkLeg('gemini', 'still no stage-2 block', 'complete', waveId, 1));
+    const { judgeResults, extraRows } = await runStage2(ctx,
+      { reviews: stage1Reviews(), labels, globalFindings });
+
+    expect(solos.map((s) => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    const g = judgeResults.find((j) => j.judge === 'gemini');
+    expect(g.ok).toBe(false);
+    expect(g.conformance).toBe('unstructured');
+    // The judge's OWN answer was real: this is a fact about its REPAIR, and the
+    // promoted-original marker must stay false or the two would be conflated.
+    expect(g.fromReasoning).toBe(false);
+
+    const notes = ctx._notes.filter((n) => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].kind).toBe('info');
+    expect(notes[0].what).toBe("judge gemini's repair answered in its reasoning channel");
+    expect(notes[0].why).toBe('its own answer was real but did not parse; repair attempt 1 was '
+      + 'written in the reasoning channel and is not a judgement, and the judge ended unusable');
+    expect(notes[0].effect).toBe('the judge is not counted; the cross-review proceeds with the '
+      + 'judges that answered, and thin-cross-review fires below two');
+    expect(notes[0].data).toEqual({ judge: 'gemini', seat: 'gemini', attempts: 2,
+      repairPromotedAttempt: 1 });
+    // Not a death; and the machine record the prose used to be missing is intact.
+    expect(ctx._notes.find((n) => n.channel === 'stage2-judge')).toBeUndefined();
+    const repairRows = extraRows.filter((r) => r.role === 'repair');
+    expect(repairRows[0]).toMatchObject({ waveId: 'abc123-q1', promoted: true,
+      conformance: 'unstructured' });
+    expect('promoted' in repairRows[1]).toBe(false);
+  });
+
+  test('#257 R-X36 CONTROL: a promoted repair whose NEXT attempt parses is just a failed repair — no note', async () => {
+    const { ctx } = repairPromotedCtx((waveId) => mkLeg('gemini',
+      judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]), 'complete', waveId, 1));
+    const { judgeResults, extraRows } = await runStage2(ctx,
+      { reviews: stage1Reviews(), labels, globalFindings });
+
+    const g = judgeResults.find((j) => j.judge === 'gemini');
+    expect(g.ok).toBe(true);
+    expect(g.conformance).toBe('repaired');
+    expect(g.fromReasoning).toBe(false);
+    // Nothing is announced at all — attempt 2 carried the ORIGINAL's real text
+    // and rescued the judge, so the promoted attempt 1 is a failed repair whose
+    // row already says `promoted: true`.
+    expect(ctx._notes).toEqual([]);
+    expect(extraRows.filter((r) => r.role === 'repair')[0])
+      .toMatchObject({ waveId: 'abc123-q1', promoted: true, conformance: 'unstructured' });
+  });
+
+  /**
+   * Round-3 review I1. The note fires on whatever the tracker says, and the
+   * tracker's SECOND conjunct decides WHICH attempt is named. Both repairs
+   * promoted is the only shape that can tell first from last — with one promoted
+   * repair the two readings agree, which is why the R-X36 test above cannot see
+   * this. `attempts` (how many ran) and `repairPromotedAttempt` (which one was
+   * promoted) deliberately differ here in the same record.
+   *
+   * NAMED MUTANT — FIRSTPROMOTEDREPAIRLOST: drop `&& repairPromoted === null` from
+   * the tracker in run-stage2-judge.js. Reds this test (it names attempt 2).
+   */
+  test('#257 R-X36: when BOTH repairs come back promoted, the FIRST is the one named', async () => {
+    const { ctx, solos } = repairPromotedCtx((waveId) => promotedRepair(waveId));
+    const { judgeResults, extraRows } = await runStage2(ctx,
+      { reviews: stage1Reviews(), labels, globalFindings });
+
+    // The ordinary two-repair bound is untouched by R-X36: a promoted repair
+    // supplies no block, so the loop spends both attempts and stops.
+    expect(solos.map((s) => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    const g = judgeResults.find((j) => j.judge === 'gemini');
+    expect(g.ok).toBe(false);
+    expect(g.fromReasoning).toBe(false);
+
+    const notes = ctx._notes.filter((n) => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);                       // ONE note, not one per promoted repair
+    expect(notes[0].why).toContain('repair attempt 1 was written in the reasoning channel');
+    expect(notes[0].data).toEqual({ judge: 'gemini', seat: 'gemini', attempts: 2,
+      repairPromotedAttempt: 1 });
+    // Both rows carry the machine record, which is what makes the prose's choice
+    // of attempt 1 a decision rather than the only thing it could have said.
+    expect(extraRows.filter((r) => r.role === 'repair').map((r) => r.promoted))
+      .toEqual([true, true]);
+  });
+
   test('judge still bad after 2 repairs → ok false, conformance unstructured', async () => {
     let soloCount = 0;
     const ctx = makeCtx({
@@ -2869,6 +3013,17 @@ SECOND LINE
     const g = judgeResults.find(j => j.judge === 'gemini');
     expect(g.ok).toBe(false);
     expect(g.conformance).toBe('unstructured');
+    // #257 R-X36 NEGATIVE PIN (round-3 review I1). This is the most common
+    // Stage-2 failure there is — an ordinary judge, two ordinary failed repairs,
+    // not a promoted leg anywhere — and the reasoning channel must stay SILENT on
+    // it. Announcing a reasoning channel no leg of this run ever used is prose
+    // contradicting the record beside it, the defect class R-X13 and R-X36 both
+    // exist to remove, and it is what the tracker's `isPromotedLeg(solo.leg)`
+    // conjunct prevents. `#257 BYTE PARITY` cannot cover this: that bench parses
+    // on the first pass and never reaches the `!parsed.ok` branch at all.
+    // NAMED MUTANT — REPAIRGUARDDROPPED: drop `isPromotedLeg(solo.leg) &&` from
+    // the `repairPromoted` tracker in run-stage2-judge.js. Reds this assertion.
+    expect(ctx._notes).toEqual([]);
   });
 
   test('cost ceiling blocks judge repair: no solo fires, judge ends unstructured', async () => {

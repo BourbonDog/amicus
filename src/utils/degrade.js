@@ -33,7 +33,7 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   'seat-unbound',
   // #202: a Stage-2 JUDGE leg that came back dead — bound to its seat, so
   // neither `seat-unbound` nor an orphan, and until now it had no channel at all
-  // and no case in run-stage2.js. Deliberately its own channel rather than
+  // and no case in the Stage-2 judge loop (run-stage2-judge.js). Deliberately its own channel rather than
   // `dead-leg`: that one is the Stage-1 BENCH roster's, feeds the retry pass and
   // the seat-loss surface, and a judge death reused on it would be counted as a
   // lost reviewer by consumers that only ever meant seats (verdict-seat-loss.js

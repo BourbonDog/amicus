@@ -75,12 +75,20 @@ function judgeDeadNote({ judge, seat, leg, judgesCount, runId }) {
  * is not one — it is the thinking that precedes one — so a promoted judge is
  * now relaunched once with the ORIGINAL bundle briefing (Stage 1's pattern:
  * retry, not repair, because a repair solo is a fresh session with no bundle
- * and so cannot succeed). `relaunch` records how that ended:
- *   · 'answered' — it produced real text; either it parsed (rescued, attempt 1)
- *                  or its one LC-12 repair followed (rescued or not, attempt 2).
- *   · 'promoted' — it answered in its reasoning channel AGAIN.
- *   · 'died'     — it came back with no usable text at all.
- *   · null       — no relaunch ran: the cost ceiling arrived first.
+ * and so cannot succeed). `standDown` records how that ended — ONE explicit
+ * state (council round 3, C4), set by the caller where the cause is KNOWN,
+ * replacing the `{ attempts, relaunch }` pair this function used to re-derive it
+ * from. Rescued endings carry no `standDown` at all and key on `attempts`:
+ *   · null (rescued)        — the relaunch's own adjudication (attempts 1) or
+ *                             its one LC-12 repair's (attempts 2) was used.
+ *   · 'relaunch-promoted'   — the relaunch answered in its reasoning channel AGAIN.
+ *   · 'relaunch-died'       — it came back with no usable text at all.
+ *   · 'relaunch-unparseable'— it answered for real and the one repair also failed.
+ *   · 'relaunch-unrepaired' — it answered for real and the cost ceiling arrived
+ *                             before that repair could run (review I1).
+ *   · 'not-relaunched'      — no relaunch ran: the cost ceiling arrived first.
+ *   · 'repair-promoted'     — R-X36's arm, and the ONE whose subject is not the
+ *                             judge's own answer; see the fork below.
  * EVERY one of those is announced, rescued or not: a silent path fails the
  * product bar as hard as a crash, and a stood-down judge changes the verdict's
  * basis. `rescued` and `relaunched` are emit-when-true, house style, so a
@@ -88,13 +96,33 @@ function judgeDeadNote({ judge, seat, leg, judgesCount, runId }) {
  * @param {string} judge alias
  * @param {object|null} seat
  * @param {object} leg the judge's ORIGINAL Stage-2 wave leg (#83's convention)
- * @param {{attempts?: number, rescued?: boolean, relaunch?: ?string}} [opts]
+ * @param {{attempts?: number, rescued?: boolean, standDown?: ?string,
+ *   repairPromotedAttempt?: ?number}} [opts]
  *   `attempts` is the `-q<N>` counter the caller already tracks (1 = the
  *   relaunch, 2 = its one repair); `rescued` says whether an adjudication was
- *   used in the end.
+ *   used in the end; `repairPromotedAttempt` belongs to the R-X36 arm alone and
+ *   is the attempt number of the repair that came back promoted — NOT
+ *   `attempts`, which is how many ran in total.
  * @returns {{kind: string, channel: string, what: string, why: string, effect: string, data: object}}
  */
-function promotedJudgeNote(judge, seat, leg, { attempts = 0, rescued = false, relaunch = null } = {}) {
+function promotedJudgeNote(judge, seat, leg, { attempts = 0, rescued = false, standDown = null,
+  repairPromotedAttempt = null } = {}) {
+  const notCounted = 'the judge is not counted; the cross-review proceeds with the judges that '
+    + 'answered, and thin-cross-review fires below two';
+  // #257 R-X36 (council round 3, B1): the one arm whose subject is the REPAIR.
+  // The judge's own answer was REAL — just unparseable — and the `-q<N>` repair
+  // of it came back promoted. Both the `what` and the `data` fork on purpose:
+  // the promoted-original sentence would tell a reader the judge's own answer
+  // was deliberation, and `reasoningTokens`/`outputTokens` account for a
+  // promoted ORIGINAL's leg, which this is not.
+  if (standDown === 'repair-promoted') {
+    return { kind: 'info', channel: 'judge-reasoning-only',
+      what: `judge ${judge}'s repair answered in its reasoning channel`,
+      why: `its own answer was real but did not parse; repair attempt ${repairPromotedAttempt} `
+        + 'was written in the reasoning channel and is not a judgement, and the judge ended unusable',
+      effect: notCounted,
+      data: { judge, seat: seat ? seat.id : null, attempts, repairPromotedAttempt } };
+  }
   // A non-promoted leg cannot reach here (the call site gates on isPromotedLeg),
   // so the fallback is defensive only — it keeps the sentence renderable rather
   // than throwing inside an announcement.
@@ -107,26 +135,27 @@ function promotedJudgeNote(judge, seat, leg, { attempts = 0, rescued = false, re
     ? (attempts === 2
       ? `${relaunched}the relaunch's answer needed one repair — the adjudication used came from that repair (attempt 2)`
       : `${relaunched}that relaunch's adjudication is the one used`)
-    : ({ promoted: `${relaunched}the relaunch answered in its reasoning channel again`,
-      died: `${relaunched}the relaunch produced no usable text`,
+    : ({ 'relaunch-promoted': `${relaunched}the relaunch answered in its reasoning channel again`,
+      'relaunch-died': `${relaunched}the relaunch produced no usable text`,
+      'relaunch-unparseable': `${relaunched}the relaunch's answer did not parse after its one repair`,
       // Review I1: the repair is NOT guaranteed to have run — `ctx.overBudget()`
-      // is re-checked between the relaunch and it (run-stage2.js's `while`), so
-      // `attempts` decides which sentence is true. Naming a repair that never
-      // launched is the same defect R-X13 was raised to remove, and `data.attempts`
-      // would contradict the prose in the same record.
-      answered: attempts === 2
-        ? `${relaunched}the relaunch's answer did not parse after its one repair`
-        : `${relaunched}the relaunch's answer did not parse — the cost ceiling was reached before its repair`,
-    }[relaunch] || 'not relaunched — the cost ceiling was reached first');
+      // is re-checked between the relaunch and it (run-stage2-judge.js's `while`),
+      // which is why this is a state of its own rather than the arm above read
+      // through `attempts`. Naming a repair that never launched is the same defect
+      // R-X13 was raised to remove, and `data.attempts` would contradict the
+      // prose in the same record.
+      'relaunch-unrepaired': `${relaunched}the relaunch's answer did not parse — the cost ceiling was reached before its repair`,
+    }[standDown] || 'not relaunched — the cost ceiling was reached first');
+  // The relaunch is what every arm but 'not-relaunched' has in common, and a
+  // rescue is only ever reached THROUGH it — so this is a read of the state, not
+  // a second encoding of it.
+  const relaunchRan = rescued || (!!standDown && standDown !== 'not-relaunched');
   return { kind: 'info', channel: 'judge-reasoning-only',
     what: `judge ${judge} answered in its reasoning channel`,
     why: `its own answer was its deliberation, not a judgement; ${cause}; ${unread}`,
-    effect: rescued
-      ? 'the adjudication counts; nothing else changes'
-      : 'the judge is not counted; the cross-review proceeds with the judges that answered, '
-        + 'and thin-cross-review fires below two',
+    effect: rescued ? 'the adjudication counts; nothing else changes' : notCounted,
     data: { judge, seat: seat ? seat.id : null, reasoningTokens: reasoning, outputTokens: output,
-      attempts, ...(relaunch ? { relaunched: true } : {}), ...(rescued ? { rescued: true } : {}) } };
+      attempts, ...(relaunchRan ? { relaunched: true } : {}), ...(rescued ? { rescued: true } : {}) } };
 }
 
 /** Thin-cross-review is announced below TWO usable judges: one judge is not a
@@ -136,8 +165,8 @@ const MIN_CROSS_REVIEW_JUDGES = 2;
 /**
  * Why fewer than two judges came back usable, in the judges' own terms.
  *
- * ⚠️ `died` and `emptyAnswer` are STAMPED by `run-stage2.js` beside its own
- * `legDied` predicate (`run-stage2.js:182`) and never re-derived here. That
+ * ⚠️ `died` and `emptyAnswer` are STAMPED beside their own `legDied`
+ * predicate in `run-stage2-judge.js :: adjudicateJudgeLeg`, and never re-derived here. That
  * predicate is `!(leg.status === 'complete' && leg.summary)` — died = NOT
  * (complete WITH a non-empty summary) — and it is the one this codebase already
  * shares between the DEAD_LEG classification and the `stage2-judge` degrade;
@@ -151,7 +180,7 @@ const MIN_CROSS_REVIEW_JUDGES = 2;
  *                   a dead process when the process finished (D3).
  *   · unparseable — it answered, unusably.
  *   · fromReasoning — #257 (spec R4): its engine answer had no text part, so the
- *                   leg came back `promoted: true` and run-stage2.js stamped
+ *                   leg came back `promoted: true` and run-stage2-judge.js stamped
  *                   `fromReasoning`. A SUBSET of unparseable, split out for the
  *                   same reason the other three were: "returned no parseable
  *                   Stage-2 block" names the output contract for what is a

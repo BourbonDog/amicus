@@ -64,6 +64,7 @@ src/
 │   ├── run-stage1-launch.js  # Stage-1 launch pass for the council engine.
 │   ├── run-stage1-rows.js
 │   ├── run-stage1-superseded.js
+│   ├── run-stage2-judge.js  # ONE judge leg, adjudicated: the body of `run-stage2.js :: runStage2`'s leg
 │   ├── run-stage2-notes.js
 │   ├── run-stage2.js
 │   ├── run-stages.js
@@ -588,6 +589,7 @@ evals/
 | `council/run-stage1-launch.js` | Stage-1 launch pass for the council engine. | `launchStage1()` |
 | `council/run-stage1-rows.js` |  | `pushDeadSeatRows()`, `supersededRows()` |
 | `council/run-stage1-superseded.js` |  | `supersededRows()` |
+| `council/run-stage2-judge.js` | ONE judge leg, adjudicated: the body of `run-stage2.js :: runStage2`'s leg | `adjudicateJudgeLeg()` |
 | `council/run-stage2-notes.js` |  | `thinCrossReviewNote()`, `thinCrossReviewWhy()`, `MIN_CROSS_REVIEW_JUDGES()`, `judgeDeadNote()`, `promotedJudgeNote()` |
 | `council/run-stage2.js` |  | `runStage2()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |

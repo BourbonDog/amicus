@@ -35,7 +35,7 @@ const { emitStageStarted } = require('../observe/events');
 const { isAbortExit } = require('./run-launch');
 // v4.8 PR3 Task 6: seat binding. ./seats requires NOTHING, so taking
 // sanitizeName straight from it (rather than run-launch's re-export) adds
-// zero cycle risk to this leaf — the same call run-stage2.js:27 makes.
+// zero cycle risk to this leaf — the same call run-stage2-judge.js :: adjudicateJudgeLeg makes.
 const { sanitizeName } = require('./seats');
 // v4.8 SI-27: the shared roster-padding core. ./stage1-bind requires only
 // ./seats, so this leaf stays cycle-free (see the module docblock's cycle-class

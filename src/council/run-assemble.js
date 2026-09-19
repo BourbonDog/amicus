@@ -211,7 +211,7 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   // #83 (v4.6 Plan 2): Stage-2 judge legs are ~38% of a run's cost and had no
   // runStats row at all — per-leg cost was unattributable from the artifact.
   // One row per judge, attributing the judge's ORIGINAL Stage-2 wave leg (never
-  // a repair solo's — run-stage2.js mirrors Stage-1's convention there); a judge
+  // a repair solo's — run-stage2-judge.js mirrors Stage-1's convention there); a judge
   // whose wave leg died still gets an honest error row.
   // v4.8 PR5a T4 (R5-8): the judge row carries its SEAT. PR4c withheld it because
   // `joinsLedger` has no 'judge' member, so nothing consumed it;
