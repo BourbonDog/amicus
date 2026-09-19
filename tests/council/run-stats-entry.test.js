@@ -166,8 +166,9 @@ describe('run-stats-entry — promoted rides the row (#257)', () => {
  * which is four chances to disagree and, as the pin above records, four ways to
  * ship a value the schema forbids.
  *
- * The predicate now lives in `src/utils/ttft.js :: isMeasuredTtft`. Three gates
- * IMPORT it. The fourth — `src/council/run-stats-entry.js` — cannot: P3 above
+ * The predicate now lives in `src/utils/ttft.js :: isMeasuredTtft`. Four gates
+ * IMPORT it (three until #202 made `council/tally.js` the fourth). The fifth —
+ * `src/council/run-stats-entry.js` — cannot: P3 above
  * pins that module REQUIRE-FREE so require-free consumers (./debate.js) can
  * import it, and the pin fires on the character sequence anywhere in the file,
  * comments included. It therefore spells the same expression inline, and this
@@ -188,8 +189,13 @@ describe('run-stats-entry — promoted rides the row (#257)', () => {
  *                   SAME expression by hand"
  *   · fanout-leg    RED 3 / 2 — "…dropped on BOTH hops" and the `result &&`
  *                   shape pin (tests/sidecar/fanout.test.js) · "…gates import it"
- *   · result-schema RED 2 / 1 — "buildRunResult drops a dishonest
- *                   metadata.ttftMs" · "…gates import it"
+ *   · leg-riders    RED 2 / 1 — "buildRunResult drops a dishonest
+ *                   metadata.ttftMs" · "…gates import it". MEASURED while this
+ *                   gate still stood in result-schema.js
+ *                   (`src/utils/result-schema.js@7e2fc83f:83`); #257 moved it to
+ *                   `src/utils/leg-riders.js :: legRiders`, which buildRunResult
+ *                   spreads — so apply GATESPLIT there, and the same two tests
+ *                   still red because the fixture drives buildRunResult.
  *   · headless      RED 2 / 2 — "CLOCK SKEW…"
  *                   (tests/no-output-backstop-wiring.test.js) · "…gates import it"
  * ⚠️ The result-schema fixture had to be written DIRECTLY against
@@ -204,7 +210,16 @@ describe('the ttftMs emit gate is ONE predicate (PR #207 round 3, B3)', () => {
   // RE-PROJECTION, not a producer — see utils/ttft.js. Its own pins live in tally.test.js
   // ('the TTFT probe reaches the published artifacts'), including the drift pin that fires
   // for ANY future buildRunStatsEntry key that allowlist is not taught to carry.
-  const IMPORTERS = ['src/headless.js', 'src/sidecar/fanout-leg.js', 'src/utils/result-schema.js',
+  // #257: the wave document's gate moved. `utils/result-schema.js` no longer imports the
+  // predicate or calls it — its rider block (ttftMs included) was extracted to
+  // `utils/leg-riders.js :: legRiders`, which `buildRunResult` spreads. The GATE is there
+  // now, so the importer is leg-riders.js; result-schema.js kept only the words and moved
+  // to MENTIONS_ONLY below. The count is unchanged: four importers, five gates.
+  // Named mutant "ROSTERSTALE" — put `src/utils/result-schema.js` back into this list
+  // (an extraction's classic residue: the roster still names the file the gate LEFT).
+  // "the four importable gates import it" reds on it, because the file matches neither
+  // the `require('./ttft')` nor the `isMeasuredTtft(` pattern any more.
+  const IMPORTERS = ['src/headless.js', 'src/sidecar/fanout-leg.js', 'src/utils/leg-riders.js',
     'src/council/tally.js'];
   const INLINE = 'src/council/run-stats-entry.js';
 
@@ -223,8 +238,19 @@ describe('the ttftMs emit gate is ONE predicate (PR #207 round 3, B3)', () => {
    * from here into IMPORTERS to silence a failure: that list also drives "the
    * four importable gates import it", which requires a real `isMeasuredTtft`
    * call. A file that gates belongs there; a file that talks belongs here.
+   *
+   * `utils/result-schema.js` (#257): it WAS the third importer until its rider
+   * block — ttftMs, finish, variant, variantUnverified, backstop — was lifted
+   * whole into `utils/leg-riders.js :: legRiders` so `promoted` could join it
+   * (that file sat at the 300-line gate). `buildRunResult` now spreads
+   * `legRiders(metadata)`, so it still PRODUCES the field and its docblock still
+   * names it, but it neither imports the predicate nor calls it: the decision
+   * here is that the gate travelled with the code and this file now only talks
+   * about it. The behavioural pin stays where it was — "buildRunResult drops a
+   * dishonest metadata.ttftMs" above drives the moved gate THROUGH
+   * buildRunResult, which is the rebuild path a caller actually reaches.
    */
-  const MENTIONS_ONLY = ['src/council/debate.js'];
+  const MENTIONS_ONLY = ['src/council/debate.js', 'src/utils/result-schema.js'];
 
   /** Every .js file under src/, repo-relative, forward-slashed. */
   function srcFiles(dir = 'src') {
