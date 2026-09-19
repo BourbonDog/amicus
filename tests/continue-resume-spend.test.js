@@ -314,7 +314,7 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
     // Named mutant "CONTINUEVARIANTDROPPED": drop the variant args from continue.js's finalizeSession call.
     seedSession(projectDir, 'old0e2e6');
     runHeadless.mockResolvedValue({
-      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'new0e2e6', variant: 'low', usage,
+      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'new0e2e6', variant: 'low', promoted: true, usage,
     });
     await continueSidecar({
       taskId: 'old0e2e6', newTaskId: 'new0e2e6', briefing: 'follow-up',
@@ -326,13 +326,16 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
     expect(meta.status).toBe('complete');
     expect(meta.variant).toBe('low');
     expect('variantUnverified' in meta).toBe(false);
+    // #257: `promoted` rides the same opts passthrough. Named mutant
+    // "CONTINUEPROMOTEDDROPPED": drop `promoted` from continue.js's finalizeSession opts.
+    expect(meta.promoted).toBe(true);
   });
 
   it('a COMPLETED resume stamps the variant it sent and no unverified flag', async () => {
     // Named mutant "RESUMEVARIANTDROPPED": drop the variant args from resume.js's finalizeSession call.
     seedSession(projectDir, 'res0e2e6');
     runHeadless.mockResolvedValue({
-      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'res0e2e6', variant: 'low', usage,
+      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'res0e2e6', variant: 'low', promoted: true, usage,
     });
     await resumeSidecar({
       taskId: 'res0e2e6', project: projectDir, headless: true, timeout: 5, json: true,
@@ -342,6 +345,9 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
     expect(meta.status).toBe('complete');
     expect(meta.variant).toBe('low');
     expect('variantUnverified' in meta).toBe(false);
+    // #257: `promoted` rides the same opts passthrough. Named mutant
+    // "RESUMEPROMOTEDDROPPED": drop `promoted` from resume.js's finalizeSession opts.
+    expect(meta.promoted).toBe(true);
   });
 
   // Council #232 r1 B1: a resume REUSES the session's own metadata.json, so a

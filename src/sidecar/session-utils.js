@@ -110,6 +110,7 @@ function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   if (typeof opts.variant === 'string') { metadata.variant = opts.variant; } else { delete metadata.variant; }
   if (opts.variantUnverified === true) { metadata.variantUnverified = true; } else { delete metadata.variantUnverified; }
   if (isBackstopRecord(opts.backstop)) { metadata.backstop = opts.backstop; } else { delete metadata.backstop; } // #251 item 1: same rule as finish; this is the path a leg the extension SAVED takes (named mutants "SOLOBACKSTOPDROPPED" / "STALEBACKSTOP", tests/sidecar/session-utils.test.js)
+  if (opts.promoted === true) { metadata.promoted = true; } else { delete metadata.promoted; } // #257: emit-when-true / delete-when-absent, like finish (named mutants "SOLOPROMOTEDDROPPED" / "STALEPROMOTED", tests/sidecar/session-utils.test.js)
   metadata.status = opts.status || (hasSummary ? 'complete' : 'error');
   metadata.completedAt = new Date().toISOString();
   writeFileAtomic(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });

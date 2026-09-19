@@ -117,9 +117,9 @@ function updateSessionStatus(sessionDir, status) {
     // #218 PR 4 whole-branch review (REC-3): the per-attempt fields are this attempt's to stamp
     // — an abort or crash of the resumed run must not ship the previous attempt's as its own
     // (the terminal writers preserve every key they do not set). Named mutant
-    // "RESUMESTALEVARIANT" (tests/sidecar/resume.test.js): drop the first three of the FOUR deletes below; "RESUMESTALEBACKSTOP" (#251 item 1, same file): drop the fourth.
+    // "RESUMESTALEVARIANT" (tests/sidecar/resume.test.js): drop the first three of the FIVE deletes below; "RESUMESTALEBACKSTOP" (#251 item 1, same file): drop the fourth; "RESUMESTALEPROMOTED" (#257, same file): drop the fifth.
     // council #235 r5 (J2/A4): `reason` and the terminal timestamps are stamped ONLY by a terminal writer, so an attempt that never reaches one must not inherit the previous attempt's — a resume that crashes mid-attempt used to leave `status: 'running'` beside the last failure's reason and completion time, and both are read (src/utils/result-schema.js reports `metadata.reason` for every non-complete status and `completedAt || abortedAt` as the end; the MCP server prints the reason and adds `crashedAt` to that chain). ALL THREE timestamps go (wave 6 repair): `abortedAt` is the one an `amicus abort` writes and `completedAt` is never written on that path, so clearing only `completedAt` left the defect live on the commonest precursor to a resume — and, for an attempt that stamped both, made the reported end fall through to the OLDER one. Named mutants "RESUMESTALEREASON" (drop `reason`/`completedAt`) and "RESUMESTALEABORTEDAT" (drop `abortedAt`/`crashedAt`).
-    delete meta.finish; delete meta.variant; delete meta.variantUnverified; delete meta.backstop;
+    delete meta.finish; delete meta.variant; delete meta.variantUnverified; delete meta.backstop; delete meta.promoted;
     delete meta.reason; delete meta.completedAt; delete meta.abortedAt; delete meta.crashedAt;
   }
   writeFileAtomic(metaPath, JSON.stringify(meta, null, 2));
@@ -260,7 +260,7 @@ async function resumeSidecar(options) {
       writeFileAtomic(metaPath, JSON.stringify(updatedMetadata, null, 2), { mode: 0o600 });
       logger.error('Resume completed with error', { taskId, error: updatedMetadata.reason });
     } else {
-      finalizeSession(sessionDir, summary, project, updatedMetadata, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified, backstop: result && result.backstop }); // named mutant "RESUMEVARIANTDROPPED" (tests/continue-resume-spend.test.js)
+      finalizeSession(sessionDir, summary, project, updatedMetadata, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified, backstop: result && result.backstop, promoted: result && result.promoted }); // named mutants "RESUMEVARIANTDROPPED" (tests/continue-resume-spend.test.js) and "RESUMEPROMOTEDDROPPED" (#257, same file)
     }
     // v4.3: attribute resume spend (C9/E4). Reload metadata, write usage + append
     // a ledger row (status: statusFromResult, matching start.js — not terminal.status).

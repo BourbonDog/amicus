@@ -643,6 +643,41 @@ describe('runFanout orchestrator', () => {
     expect('variant' in wave.legs[1]).toBe(false);
   });
 
+  it('#257: a completed leg whose result carries promoted: true stamps promoted on the leg patch; a result without it stamps no key', async () => {
+    // Named mutant "LEGPROMOTEDDROPPED": drop the `promoted:` line from `legPatch`.
+    // The LEG document only: the wave doc's leg entry is written by a second, enumerated
+    // literal (result-schema.js :: buildRunResult) that is a separate writer.
+    mockRunHeadless
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), promoted: true }))
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId)); // answered normally: nothing to promote
+    await runFanout({ ...baseOpts(), waveId: 'pro12345' });
+    const legMeta1 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'pro12345-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta1.promoted).toBe(true);
+    const legMeta2 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'pro12345-2', 'metadata.json'), 'utf-8'));
+    expect('promoted' in legMeta2).toBe(false);
+  });
+
+  it('#257: clearAttemptFields drops promoted before a substitute attempt', () => {
+    // Named mutant "SCRUBKEEPSPROMOTED": remove `'promoted'` from the scrub list in
+    // fanout-leg.js :: clearAttemptFields — a substitute that answers NORMALLY would then be
+    // credited with the dead attempt's promoted reasoning answer, the #251 item 1 carry again.
+    const { clearAttemptFields } = require('../../src/sidecar/fanout-leg');
+    const legDir = fsReal.mkdtempSync(pathReal.join(os.tmpdir(), 'amicus-scrub-'));
+    try {
+      fsReal.writeFileSync(pathReal.join(legDir, 'metadata.json'),
+        JSON.stringify({ taskId: 'w16-1', status: 'error', promoted: true, finish: 'length' }, null, 2));
+      clearAttemptFields(legDir);
+      const meta = JSON.parse(fsReal.readFileSync(pathReal.join(legDir, 'metadata.json'), 'utf-8'));
+      expect('promoted' in meta).toBe(false);
+      expect('finish' in meta).toBe(false); // control: the family it joins still goes
+      expect(meta.taskId).toBe('w16-1');    // only the per-attempt family goes
+    } finally {
+      fsReal.rmSync(legDir, { recursive: true, force: true });
+    }
+  });
+
   it('one leg failing yields partial results, sibling summaries intact, exit 2', async () => {
     mockRunHeadless
       .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId))

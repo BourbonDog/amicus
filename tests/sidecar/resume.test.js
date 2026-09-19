@@ -191,6 +191,18 @@ describe('Resume Operations', () => {
       expect('backstop' in onDisk).toBe(false);
     });
 
+    it("the running write drops the previous attempt's promoted too (#257)", () => {
+      // Named mutant "RESUMESTALEPROMOTED": drop `delete meta.promoted` from the reopen line — a
+      // resumed attempt that answers NORMALLY would ship the previous attempt's promotion as its
+      // own, and an abort or crash of this attempt would leave it on the document unchallenged.
+      fs.writeFileSync(path.join(tmpDir, 'metadata.json'), JSON.stringify({ taskId: 'abc123', status: 'complete', thinking: 'high', promoted: true }));
+      updateSessionStatus(tmpDir, 'running');
+      const onDisk = JSON.parse(fs.readFileSync(path.join(tmpDir, 'metadata.json'), 'utf-8'));
+      expect(onDisk.status).toBe('running');
+      expect(onDisk.thinking).toBe('high'); // the REQUEST is not per-attempt state
+      expect('promoted' in onDisk).toBe(false);
+    });
+
     it("the running write also drops the previous attempt's reason / completedAt (council #235 r5, J2/A4)", () => {
       // Named mutant "RESUMESTALEREASON": drop the `reason`/`completedAt` deletes — a resume that
       // crashes mid-attempt leaves metadata reading `status: 'running'` while still carrying the

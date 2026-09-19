@@ -209,7 +209,7 @@ async function startSidecar(options) {
     logger.error('Session completed with error', { taskId, error: meta.reason });
   } else {
     // complete / timed-out / aborted: persist the (possibly partial) summary with the correct status.
-    finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified, backstop: result && result.backstop });
+    finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified, backstop: result && result.backstop, promoted: result && result.promoted }); // named mutant "STARTPROMOTEDDROPPED" (#257, tests/start-terminal-status.test.js): drop the promoted arg
   }
 
   const { resolveUsage } = require('../utils/pricing');

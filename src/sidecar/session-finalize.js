@@ -70,6 +70,7 @@ function finalizeHeadlessResult(sessionDir, result, project, metadata) {
     if (result && typeof result.variant === 'string') { metadata.variant = result.variant; } else { delete metadata.variant; } // #218 PR 4: same rule as finish (named mutant "SHAREDNOVARIANT", tests/shared-server-finalize.test.js)
     if (result && result.variantUnverified === true) { metadata.variantUnverified = true; } else { delete metadata.variantUnverified; }
     stampBackstop(metadata, result); // #251 item 1: same rule again (named mutant "SHAREDNOBACKSTOP", tests/shared-server-finalize.test.js)
+    delete metadata.promoted; // #257 (spec R12): never stamped on an error leg — even a hand-assembled result carrying promoted: true — and a stale one from an earlier completed turn is removed, the delete half of the rule the four lines above apply (named mutant "SHAREDSTALEPROMOTED", tests/shared-server-finalize.test.js)
     metadata.completedAt = new Date().toISOString();
     writeFileAtomic(
       path.join(sessionDir, 'metadata.json'),
@@ -80,7 +81,7 @@ function finalizeHeadlessResult(sessionDir, result, project, metadata) {
   }
   // complete / timed-out / aborted: persist the (possibly partial) summary with
   // the resolved status. Explicit status means the #36 guard won't re-classify.
-  finalizeSession(sessionDir, (result && result.summary) || '', project, metadata, { status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified, backstop: result && result.backstop });
+  finalizeSession(sessionDir, (result && result.summary) || '', project, metadata, { status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified, backstop: result && result.backstop, promoted: result && result.promoted }); // named mutant "SHAREDPROMOTEDDROPPED" (#257, tests/shared-server-finalize.test.js): drop the promoted arg
 }
 
 module.exports = { resolveTerminalState, finalizeHeadlessResult, stampBackstop };
