@@ -113,7 +113,7 @@
           "promoted": {
             "type": "boolean",
             "enum": [true],
-            "description": "#257, optional, emit-when-true. The engine's last assistant message carried reasoning and no text part, and conversation-mirror.js promoted the reasoning to the leg's output as a stand-in — so `summary` is the model's deliberation, not its answer. A council treats such a Stage-1 leg as no deliverable (the once-only retry fires; a repeat is a lost seat) and uses such a judge only when a parseable fenced block is available — its own, or one the bounded judge repair supplied. Absent means the output is the model's answer text. Never present on a leg whose status is 'error'. tally.js carries it verbatim from the leg document; a promoted bench seat is excluded from `seatsReviewed.reviewed`."
+            "description": "#257, optional, emit-when-true. The engine's last assistant message carried reasoning and no text part, and conversation-mirror.js promoted the reasoning to the leg's output as a stand-in — so `summary` is the model's deliberation, not its answer. A council treats such a Stage-1 leg as no deliverable (the once-only retry fires; a repeat is a lost seat) and uses such a judge only when a parseable fenced block is available — its own, or one the bounded judge repair supplied. Absent means the output is the model's answer text. Present on a completed, timed-out or aborted leg whose last finalized message was reasoning-only — the mint sits at headless's normal terminal return, which serves all three; never on a leg whose status is 'error'. tally.js carries it verbatim from the leg document; a promoted bench seat is excluded from `seatsReviewed.reviewed`."
           }
         }
       }

@@ -83,13 +83,34 @@ once-only retry (`:87`) → healed (`Recovered:`) or `stillDeadLegs` (`:149`) �
 (`:177`) is never computed on chain-of-thought.
 
 ### 3.4 What the announcements say (the one voice, `src/utils/degrade.js:96-102`)
-- Retry heal: `Recovered: seat <seat>'s review — the first attempt answered only in its reasoning
+- Retry heal — **DESIGN SKETCH, not the shipped string** (amended at build, R-X17, 2026-09-19):
+  the sketch below invented a new sentence; what shipped is the EXISTING heal announcement with
+  R9's clause spliced in after "with no usable output", which is what R9 always said and what
+  keeps every non-promoted heal byte-identical.
+  Sketch: `Recovered: seat <seat>'s review — the first attempt answered only in its reasoning
   channel (<reasoning> reasoning tokens, <output> output tokens; finish '<finish>'), which is not
-  a review. The retry's review is the one the judges read.` — the cause clause is computed where
-  the retry names first-attempt deaths today (`src/council/run-retry-notes.js`; the plan cites the
-  line).
-- Still lost: `Notice: seat <seat> lost — both attempts answered only in the reasoning channel;
+  a review. The retry's review is the one the judges read.`
+  **Shipped** (record fields pinned at `tests/council/run-retry.test.js:1374-1377` and
+  `tests/council/run-stages.test.js:818-819`, rendered by `formatDegrade`,
+  `src/utils/degrade.js:103`, as `<lead>: <what> — <why>. <effect>.`):
+  `Recovered: seat a reviewed on retry — its first leg ended 'complete' with no usable output — it
+  answered only in its reasoning channel (40332 reasoning / 1 output tokens, finish 'stop'), which
+  is not a review and was relaunched once. The seat is in this council; nothing was lost.`
+  The cause clause is computed where the retry names first-attempt deaths today
+  (`src/council/run-retry-notes.js`; the plan cites the line).
+- Still lost — **DESIGN SKETCH, not the shipped string** (amended at build, R-X17, 2026-09-19);
+  same rule: the existing still-dead announcement with R9's clause appended once per attempt.
+  Sketch: `Notice: seat <seat> lost — both attempts answered only in the reasoning channel;
   no review reached the judges. <effect from the existing lost-seat record>.`
+  **Shipped** (the `what`/`why` pinned at `tests/council/run-stages.test.js:860-861`, scenario (b),
+  and the same `why` shape for another seat at `tests/council/run-retry.test.js:1409-1412`; the
+  `effect` is `legEffect`, `src/council/run-retry-notes.js:23-25`, over that scenario's two-seat
+  bench — pinned as a formula, not as this string; same renderer):
+  `Notice: seat b did not review — the leg ended 'complete' with no usable output — it answered
+  only in its reasoning channel (40332 reasoning / 1 output tokens, finish 'stop'), which is not a
+  review; its once-only retry also ended 'complete' — it answered only in its reasoning channel
+  (40332 reasoning / 1 output tokens, finish 'stop'), which is not a review. 1 of 2 seats
+  reviewed; the run continues with the bench that did and will exit degraded (2).`
 - The dead-seat row (`src/council/run-stage1-rows.js:211-212`) keeps the leg's true
   `status: complete` and carries `promoted: true`; **the census
   (`src/council/verdict-seats-reviewed.js:101-128`) counts `reviewed` as

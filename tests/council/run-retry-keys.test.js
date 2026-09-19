@@ -31,7 +31,9 @@ describe('run-retry-keys — extraction pins (v4.8 Phase 2 T-A1)', () => {
 
   test('P2 — the module\'s source contains no `require(`, so it stays the leaf', () => {
     // Three separate comments now rest their cycle-safety claim on this file being
-    // require-free: its own header, run-retry-group.js:5-6, and run-stage1-rows.js:10-13.
+    // require-free: its own header, run-retry-group.js:5-6, and run-stage1-rows.js:10-15
+    // (that last range grew by two lines when #257 added ./promoted as run-retry-group's
+    // second leaf and the sentence was reworded to name both).
     // A require added here would falsify all three silently, so the property is pinned
     // rather than merely asserted in prose. Same idiom and same rationale as
     // tests/council/run-stats-entry.test.js:23-27.

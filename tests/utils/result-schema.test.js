@@ -133,8 +133,11 @@ describe('result-schema', () => {
     // #257: the rider block moved out to ./leg-riders.js (this file was 300/300,
     // so `promoted` could not be a fourth field crammed onto the last rider line).
     // An extraction is only safe if the DOCUMENT is unchanged, so this golden is
-    // the literal JSON.stringify of this exact call made BEFORE the move (scratch
-    // script, run at 2826646d: node .superpowers/sdd/golden-riders.js). Both the
+    // the literal JSON.stringify of this exact call made BEFORE the move (run at
+    // 2826646d by `node .superpowers/sdd/golden-riders.js` — a scratch script under
+    // the ignored `.superpowers/` dir, NOT committed, so do not go looking for it;
+    // the golden was independently recomputed from `7e2fc83f:src/utils/result-schema.js`
+    // at the whole-branch review and matched). Both the
     // key ORDER and every value are pinned; a reordered spread in leg-riders.js
     // reds it even though `toEqual` would pass.
     it('the rider extraction is byte-identical: the whole document, key order included (#257)', () => {

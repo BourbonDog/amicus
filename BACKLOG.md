@@ -9130,6 +9130,20 @@ Deferred — one line each, none blocks anything:
   src/sidecar/fanout-leg-fallback.js:203 (the other seven are `src/council/`). A promoted chair
   verdict or debate defense is the same disease on
   another surface; the `promoted` fact is on those legs already.
+  ⚠️ **R-X17 (2026-09-19, whole-branch review) completes that enumeration.** Two more surfaces
+  read a leg's **`summary`**, not its status, and a promoted repair leg whose deliberation happens
+  to contain a parseable block is used silently: the Stage-1 `-p<N>` repair solo
+  (`src/council/run-stages.js:214-216` — `const repaired = (solo.leg && solo.leg.summary) || ''`
+  then `validateFindings(repaired)`) and the Stage-2 `-q<N>` repair solo
+  (`src/council/run-stage2.js:224-226` — the same read into `parseJudgeOutput`). Neither is gated
+  on `isPromotedLeg`. Same disease, another surface.
+  ⚠️ The remaining completed-status readers were RULED CORRECT AS-IS at that review, recorded so
+  they are not re-adjudicated: `src/utils/result-schema.js:93`/`:147` (wave-status aggregation — a
+  promoted leg IS complete for wave status); `src/spend-query.js:43`/`:109` (a receipt; `--failed`
+  rightly excludes it); `src/council/report-cost.js:54` (the cost table prints `r.status` verbatim,
+  so a lost seat's row reads `complete` beside the `Notice:` in "What was lost" — exactly the shape
+  an empty-answer dead seat already has); `electron/workspace-ui/workspace-render.js:169` (the
+  stage rail, not a leg). `src/sidecar/models-probe.js:41` was already ruled correct in spec R10.
 - [ ] #257 (build) — the ttftMs roster test in tests/council/run-stats-entry.test.js cannot catch a
   stale IMPORTERS entry on its own: its set-union test passes whether result-schema.js is listed as
   an importer or a mention. Candidate: assert the importer regex per IMPORTERS entry inside the
