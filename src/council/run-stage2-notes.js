@@ -50,9 +50,9 @@ function judgeDeadNote({ judge, seat, leg, judgesCount, runId }) {
   return {
     channel: 'stage2-judge',
     what: `judge ${judge} did not adjudicate`,
-    // #219: `why` is PROSE — it renders into run.json, the report and the
-    // sticky PR comment — so the provider's text is collapsed to one bounded
-    // line. `data.reason` below stays VERBATIM on purpose: it is the machine
+    // #219: `why` is PROSE — it reaches the stderr `Notice:` line, run.json, and
+    // the `amicus council report` Markdown — so the provider's text is collapsed
+    // to one bounded line. `data.reason` below stays VERBATIM on purpose: it is the machine
     // surface, it is JSON (nothing to inject), and truncating it would cost
     // exactly the fidelity a reader opens run.json for.
     why: `its Stage-2 leg ended '${leg.status}'`

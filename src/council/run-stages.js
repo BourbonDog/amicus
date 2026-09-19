@@ -119,7 +119,7 @@ async function runStage1(ctx) {
     ctx.degrade.note({
       channel: 'dead-leg',
       what: `seat ${leg.modelInput || leg.model} did not review`,
-      // #257 R-X38: `why` is PROSE — stderr, run.json, report.md — so the provider's error is
+      // #257 R-X38: `why` is PROSE — stderr, run.json, the `amicus council report` Markdown — so the provider's error is
       // bounded to one sanitized line, as the judge-death prose is (`run-stage2-notes.js ::
       // judgeDeadNote`, #219). `data.reason` stays VERBATIM: machine surface, not a sentence.
       // The cap bounds provider NOISE, never an amicus-minted reason — the ruling and the

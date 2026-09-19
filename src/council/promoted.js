@@ -63,9 +63,12 @@ const FINISH_LONE_UNDERSCORE = /(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])/g;
  * five Stage-1 announcements, the `Notice:` lines run-degrade.js writes to
  * stderr, the degrade text carried in run.json / verdict.json, and the MARKDOWN
  * REPORT — `report-md.js :: renderMd` renders each degrade record as a LIST
- * ITEM (`- ` + formatDegrade(d)), which `amicus council report` writes to
- * stdout and the MCP `report` tool hands to a client to RENDER. That list item
- * is the one surface where a Markdown-active character actually renders; the
+ * ITEM (`- ` + formatDegrade(d)), which `amicus council report`
+ * (`cli-handlers-council.js`) writes to stdout, and which the `amicus_verdict`
+ * MCP tool (schema `mcp-tools.js:514`, handler `mcp-server.js :: amicus_verdict`)
+ * returns to a client to RENDER when called with `render: true` — there is no
+ * separate MCP `report` tool. That list item is the one surface where a
+ * Markdown-active character actually renders; the
  * on-disk report artifact is report.html, and report-html.js escapes it. The
  * bound is applied HERE, at the one producer, for all of them, rather than at
  * each reader (repo rule #219, and the house rule that one value has one

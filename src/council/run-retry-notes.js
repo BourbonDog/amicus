@@ -17,7 +17,7 @@
  * already destructure this module, take the clause from one place.
  *
  * #257 R-X38: the second require is the house sanitizer, itself a leaf. Every `why` below
- * quotes a PROVIDER-controlled error into prose that reaches stderr, run.json and report.md,
+ * quotes a PROVIDER-controlled error into prose that reaches stderr, run.json, and the `amicus council report` Markdown,
  * so each is bounded to one sanitized line as `run-stage2-notes.js :: judgeDeadNote` already
  * bounds its own (#219). The `data` fields keep RAW bytes — machine surface, not a sentence.
  */
