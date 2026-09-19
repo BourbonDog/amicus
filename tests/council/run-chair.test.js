@@ -11,6 +11,9 @@ const { scriptedLaunchers, happyScript, baseOptions, mkLeg, okWave } =
 // deliberately does NOT re-export (pinned in tests/council/chair-fallback.test.js),
 // so the unit pins below read it from the module that owns it.
 const { classifyChairAttempt } = require('../../src/council/chair-fallback');
+// Council r2: the chair reason's token parenthetical has ONE home — promoted.js
+// — and the identity pin below reads it from there rather than re-spelling it.
+const { promotedFacts, tokenSplit } = require('../../src/council/promoted');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-chair-')); });
@@ -401,6 +404,53 @@ describe('#257: a promoted chair leg is no synthesis (R-X22)', () => {
     // The control: a leg that is not promoted classifies exactly as it always has.
     expect(classifyChairAttempt({ status: 'complete', summary: 'Synthesis.' }))
       .toEqual({ outcome: 'completed', reason: null });
+  });
+
+  /**
+   * Council r2: the `(<r> reasoning / <o> output tokens[, finish '<f>'])`
+   * parenthetical was hand-written TWICE — once in promoted.js's Stage-1 clause,
+   * once here — so the chair walk and the retry notes could drift apart without
+   * a single test noticing. It has one home now, and this is an IDENTITY pin:
+   * the expectation is BUILT from `tokenSplit`, so a second hand-composed copy
+   * in chair-fallback.js fails here even while it still reads correctly today.
+   * The byte-for-byte wording stays pinned by PROMOTED_REASON above.
+   * Named mutant SPLITFORKED: chair-fallback.js composes the fragment itself
+   * again with one character changed. Red set: this test.
+   */
+  test('the chair reason is COMPOSED from promoted.js :: tokenSplit — one fragment, two callers (council r2)', () => {
+    const legs = [
+      { status: 'complete', summary: REASONING_TEXT, promoted: true, finish: 'stop',
+        usage: { tokens: { reasoning: 40332, output: 1 } } },
+      // The fallback chair's own facts: no `finish`, so the optional segment is absent.
+      { status: 'complete', summary: REASONING_TEXT, promoted: true,
+        usage: { tokens: { reasoning: 12000, output: 0 } } },
+    ];
+    for (const leg of legs) {
+      expect(classifyChairAttempt(leg).reason).toBe(
+        `answered only in its reasoning channel (${tokenSplit(promotedFacts(leg))}); no synthesis to read`);
+    }
+    // The fragment really is the Stage-1 one: the two announcements differ only
+    // in the sentence they are quoted into, never in the numbers or the finish.
+    expect(tokenSplit(promotedFacts(legs[0]))).toBe("40332 reasoning / 1 output tokens, finish 'stop'");
+  });
+
+  /**
+   * The identity pin above compares STRINGS, so a hand-written fork that is
+   * byte-identical today would still pass it — it only catches a fork once it
+   * has already drifted, which is one regression too late. This reads the
+   * SOURCE, the same move tests/council/promoted.test.js's LEAF pin makes: the
+   * chair reason must be COMPOSED from the shared fragment, and the fragment's
+   * own text must not appear in this file at all.
+   * Named mutant SPLITINLINED: paste the fragment back inline, unchanged. Red
+   * set: this test (and this test only — that is the whole point of it).
+   */
+  test('chair-fallback.js CALLS tokenSplit and does not re-spell the fragment (council r2)', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '../../src/council/chair-fallback.js'), 'utf8');
+    expect(src).toContain('tokenSplit(');
+    // The fragment's own text. Present here = a second home for it, whatever it
+    // currently reads, and the two announcements are free to drift again.
+    expect(src).not.toContain(' reasoning / ');
   });
 });
 

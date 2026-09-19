@@ -22,7 +22,19 @@
         "aborted": { "type": "number" }
       }
     },
-    "legs": { "type": "array", "items": { "type": "object" } },
+    "legs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "promoted": {
+            "type": "boolean",
+            "enum": [true],
+            "description": "#257, optional, emit-when-true: this leg's output is its promoted reasoning (see run.schema.json's `promoted`). The leg object is open — a wave's legs are run documents and every field run.schema.json declares may appear here."
+          }
+        }
+      }
+    },
     "prompt": { "type": ["object", "null"] },
     "createdAt": { "type": ["string", "null"] },
     "completedAt": { "type": ["string", "null"] },

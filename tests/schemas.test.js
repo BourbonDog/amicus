@@ -236,6 +236,36 @@ describe('published result-family schemas validate real builder output (v4.0 §7
     expect(compile('wave')(doc)).toBe(false);
   });
 
+  // #257 (council r2): a wave's legs ARE run documents, so a promoted leg reaches
+  // wave.json too — but `legs.items` was the bare `{ "type": "object" }`, which
+  // left "does the wave schema close its legs?" an open question the review asked
+  // twice. It declares `promoted` now, on the same emit-when-true terms as
+  // run.schema.json, and the leg object stays OPEN (no additionalProperties:
+  // false): declaring one key must not turn a leg into a closed shape, or every
+  // other field run.schema.json declares would start failing the wave.
+  test('wave.schema.json declares promoted on its legs: true validates, false / "true" reject, and the leg object stays OPEN', () => {
+    const validate = compile('wave');
+    const schema = JSON.parse(fs.readFileSync(path.join(SCHEMAS_DIR, 'wave.schema.json'), 'utf-8'));
+    expect(schema.properties.legs.items.properties.promoted).toMatchObject({ type: 'boolean', enum: [true] });
+    expect(schema.properties.legs.items.additionalProperties).toBeUndefined();
+    expect(schema.properties.legs.items.required).toBeUndefined();
+
+    const withLeg = leg => buildWaveResult({
+      waveId: 'sch-wave-6', legs: [leg],
+      promptMeta: { source: 'file', file: 'briefing.md', chars: 42 },
+      createdAt: '2026-07-19T10:00:00.000Z', completedAt: '2026-07-19T10:05:00.000Z',
+    });
+    expectValid(validate, withLeg({ ...runDoc, promoted: true }));
+    expect(validate(withLeg({ ...runDoc, promoted: false }))).toBe(false);
+    expect(validate(withLeg({ ...runDoc, promoted: 'true' }))).toBe(false);
+    expect(validate(withLeg({ ...runDoc, promoted: 1 }))).toBe(false);
+    // A leg carrying arbitrary additive keys still validates — the object is open.
+    expectValid(validate, withLeg({ ...runDoc, promoted: true, backstop: { status: 'idle' }, somethingNew: [1, 2] }));
+    // …and a wave whose leg was never promoted carries no key at all.
+    expect('promoted' in runDoc).toBe(false);
+    expectValid(validate, withLeg(runDoc));
+  });
+
   test('abort.schema.json accepts buildAbortResult output', () => {
     expectValid(compile('abort'), buildAbortResult({ scope: 'session', taskId: 't1', aborted: ['t1'] }));
     expectValid(compile('abort'), buildAbortResult({ scope: 'all', taskId: null, aborted: [] }));

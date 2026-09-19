@@ -30,7 +30,9 @@ function isPromotedLeg(leg) {
 /**
  * A `finish` identifier's cap — the same ceiling `schemas/run.schema.json` puts
  * on the backstop's `status`, and the one `session-status.js` spells as
- * `MAX_STATUS_TYPE_CHARS`: an identifier, not a sentence.
+ * `MAX_STATUS_TYPE_CHARS`: an identifier, not a sentence. It is the SECOND of
+ * the two bounds `promotedFacts` applies: the token allowlist below decides
+ * WHICH characters may reach this ceiling at all, and this decides how many.
  */
 const MAX_FINISH_CHARS = 40;
 
@@ -43,11 +45,20 @@ const MAX_FINISH_CHARS = 40;
  * five Stage-1 announcements, and into verdict.json's `seatLoss.reason`, which
  * CI renders into a sticky PR comment. It is therefore BOUNDED here, at the one
  * producer, rather than at each reader (repo rule #219, and the house rule that
- * one value has one sanitizer): everything outside printable ASCII is DROPPED —
- * C0 controls, DEL, an ANSI escape's introducer, bidi overrides that would
- * reorder the sentence it is quoted into — and what remains is cut to
- * `MAX_FINISH_CHARS`. Nothing printable left means there was no usable finish,
- * so it is `null`, indistinguishable from an absent one.
+ * one value has one sanitizer): the bound is an ALLOWLIST of the token
+ * characters a finish is actually spelled with — `A-Z a-z 0-9 _ . : -`, enough
+ * for every real value ('stop', 'length', 'end_turn', 'tool_calls',
+ * 'content-filter', 'stop:1') — and every other character is DROPPED, after
+ * which what remains is cut to `MAX_FINISH_CHARS`. Nothing left means there was
+ * no usable finish, so it is `null`, indistinguishable from an absent one.
+ *
+ * An ALLOWLIST, not the printable-ASCII strip this started as (council r2): a
+ * strip keeps every Markdown-active character, so a provider-controlled finish
+ * of `[click](http://x)` would reach that sticky PR comment as a LINK. The
+ * allowlist drops brackets, parentheses, backticks, angle brackets, pipes and
+ * spaces for the same reason it drops C0 controls, DEL, an ANSI escape's
+ * introducer and the bidi overrides that would reorder the sentence it is
+ * quoted into: none of them belong in an identifier.
  *
  * HAND-SPELLED, not `text-sanitize.js :: collapseExcerpt`: this module is a LEAF
  * (see the header) and requiring the house sanitizer would end that. The
@@ -59,7 +70,7 @@ function promotedFacts(leg) {
   if (!isPromotedLeg(leg)) { return null; }
   const t = (leg.usage && leg.usage.tokens) || {};
   const finish = typeof leg.finish === 'string'
-    ? leg.finish.replace(/[^\x20-\x7e]/g, '').slice(0, MAX_FINISH_CHARS)
+    ? leg.finish.replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, MAX_FINISH_CHARS)
     : '';
   return {
     reasoning: Number.isInteger(t.reasoning) && t.reasoning >= 0 ? t.reasoning : 0,
@@ -69,15 +80,28 @@ function promotedFacts(leg) {
 }
 
 /**
+ * The token split every announcement of a promoted leg quotes:
+ * `<r> reasoning / <o> output tokens[, finish '<f>']`. ONE home (council r2) —
+ * the clause below and chair-fallback.js's chair reason both read it, so the
+ * wording cannot drift between the Stage-1 notes and the chair walk. The EMPTY
+ * STRING for anything that is not a facts object, matching the clause.
+ */
+function tokenSplit(facts) {
+  if (!facts || typeof facts !== 'object' || Array.isArray(facts)) { return ''; }
+  const finish = facts.finish ? `, finish '${facts.finish}'` : '';
+  return `${facts.reasoning} reasoning / ${facts.output} output tokens${finish}`;
+}
+
+/**
  * The one clause the retry heal note, the still-dead notes and the skipped-leg
  * note append after "with no usable output". The EMPTY STRING for anything
  * that is not a facts object, so every announcement for a leg that is not
- * promoted stays byte-identical (spec R9).
+ * promoted stays byte-identical (spec R9) — the guard is kept HERE rather than
+ * delegated to `tokenSplit`, which would otherwise leave an empty parenthetical.
  */
 function reasoningOnlyClause(facts) {
   if (!facts || typeof facts !== 'object' || Array.isArray(facts)) { return ''; }
-  const finish = facts.finish ? `, finish '${facts.finish}'` : '';
-  return ` — it answered only in its reasoning channel (${facts.reasoning} reasoning / ${facts.output} output tokens${finish}), which is not a review`;
+  return ` — it answered only in its reasoning channel (${tokenSplit(facts)}), which is not a review`;
 }
 
-module.exports = { isPromotedLeg, promotedFacts, reasoningOnlyClause };
+module.exports = { isPromotedLeg, promotedFacts, tokenSplit, reasoningOnlyClause };

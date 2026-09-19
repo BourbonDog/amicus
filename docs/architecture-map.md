@@ -560,7 +560,7 @@ evals/
 | `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()`, `parseChairAnswer()` |
 | `council/peer-split.js` |  | `peersOf()`, `unattributedPeerDrops()` |
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
-| `council/promoted.js` | The ONE vocabulary for a leg that answered only in its reasoning channel (#257). | `isPromotedLeg()`, `promotedFacts()`, `reasoningOnlyClause()` |
+| `council/promoted.js` | The ONE vocabulary for a leg that answered only in its reasoning channel (#257). | `isPromotedLeg()`, `promotedFacts()`, `tokenSplit()`, `reasoningOnlyClause()` |
 | `council/report-cost.js` |  | `buildCostModel()` |
 | `council/report-html.js` |  | `renderHtml()` |
 | `council/report-lost-rows.js` |  | `lostRowsOf()` |

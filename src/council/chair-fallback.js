@@ -13,7 +13,7 @@
 
 // #257 R-X22: ./promoted is a LEAF (it requires nothing), so this require adds
 // no edge to the module graph beyond the vocabulary itself.
-const { isPromotedLeg, promotedFacts } = require('./promoted');
+const { isPromotedLeg, promotedFacts, tokenSplit } = require('./promoted');
 
 /**
  * Chair fallback promotion (spec §4): the highest peers-only street-cred
@@ -98,10 +98,10 @@ function classifyChairAttempt(rawLeg, errorDoc) {
     if (isPromotedLeg(rawLeg)) {
       // #257 R-X22: the closed `outcome` enum is untouched; the cause rides `reason`, which the
       // chair-failed `why` prints verbatim ("ch1 <model>: <reason>"). Named mutant "CHAIRREASONDROPPED".
-      const f = promotedFacts(rawLeg);
-      const finish = f.finish ? `, finish '${f.finish}'` : '';
+      // Council r2: the parenthetical is promoted.js's `tokenSplit`, not a second hand-written
+      // copy of it — this reason and the Stage-1 clause cannot drift apart. Mutant "SPLITFORKED".
       return { outcome: 'no-output',
-        reason: `answered only in its reasoning channel (${f.reasoning} reasoning / ${f.output} output tokens${finish}); no synthesis to read` };
+        reason: `answered only in its reasoning channel (${tokenSplit(promotedFacts(rawLeg))}); no synthesis to read` };
     }
     const hasOutput = rawLeg.summary && String(rawLeg.summary).trim();
     return hasOutput ? { outcome: 'completed', reason: null }
