@@ -86,6 +86,69 @@ describe('repair prompts', () => {
     expect(t).toContain('NOT_PARSEABLE: x');
     expect(t).toContain('"revotes"');
   });
+
+  // ---- #257 R-X29: THE THIRD ARM ----
+  // A promoted leg's `summary` is its REASONING, not its answer, and it is
+  // unbounded — the motivating case was ~165,000 characters of deliberation fed
+  // back under "this is the text to correct". The two callers now ship NO prior
+  // text and set `promoted`, so the arm below is what the seat reads. The two
+  // OLDER arms are pinned byte-identical beside it: this fix adds a case, it does
+  // not reword the ones that were already right.
+  const ERRORS = [{ code: 'REASONING_ONLY', detail: 'answered only in its reasoning channel' }];
+  const EMPTY_TAIL = 'Do not invent a position to satisfy the schema: say so in your output.';
+  const PROMOTED_DEFENSE_ARM = 'Your previous defense was written in the reasoning channel '
+    + 'and is not a defense — there is no prior text to correct; answer afresh. ' + EMPTY_TAIL;
+  const PROMOTED_REVOTE_ARM = 'Your previous re-vote was written in the reasoning channel '
+    + 'and is not a re-vote — there is no prior text to correct; answer afresh. ' + EMPTY_TAIL;
+
+  test('#257 R-X29: a promoted defense repair carries the reasoning-channel arm and NO prior-text block', () => {
+    const t = d.buildDefenseRepairPrompt({ errors: ERRORS, defense: '', promoted: true });
+    expect(t).toContain(PROMOTED_DEFENSE_ARM);
+    expect(t).not.toContain('YOUR PREVIOUS DEFENSE');
+    expect(t).not.toContain('Your previous defense response was empty');
+    // Still a repair: the errors and the contract ride as they always did.
+    expect(t).toContain('REASONING_ONLY: answered only in its reasoning channel');
+    expect(t).toContain(d.DEFENSE_CONTRACT);
+  });
+
+  test('#257 R-X29: a promoted re-vote repair carries the reasoning-channel arm and NO prior-text block', () => {
+    const t = d.buildRevoteRepairPrompt({ errors: ERRORS, revote: '', promoted: true });
+    expect(t).toContain(PROMOTED_REVOTE_ARM);
+    expect(t).not.toContain('YOUR PREVIOUS RE-VOTE');
+    expect(t).not.toContain('Your previous re-vote response was empty');
+    expect(t).toContain(d.REVOTE_CONTRACT);
+  });
+
+  test('#257 R-X29: the two OLDER arms are byte-identical — the empty arm', () => {
+    for (const [build, kind] of [[d.buildDefenseRepairPrompt, 'defense'],
+      [d.buildRevoteRepairPrompt, 're-vote']]) {
+      const t = build({ errors: ERRORS });
+      expect(t).toContain(`Your previous ${kind} response was empty — there is no prior text `
+        + 'to correct. ' + EMPTY_TAIL);
+      expect(t).not.toContain('written in the reasoning channel');
+    }
+  });
+
+  test('#257 R-X29: the two OLDER arms are byte-identical — the verbatim arm', () => {
+    const prior = 'I defend A1 in prose, with no json block.';
+    expect(d.buildDefenseRepairPrompt({ errors: ERRORS, defense: prior })).toContain(
+      '--- YOUR PREVIOUS DEFENSE (verbatim — this is the text to correct) ---\n'
+      + prior + '\n--- END OF YOUR PREVIOUS DEFENSE ---');
+    expect(d.buildRevoteRepairPrompt({ errors: ERRORS, revote: prior })).toContain(
+      '--- YOUR PREVIOUS RE-VOTE (verbatim — this is the text to correct) ---\n'
+      + prior + '\n--- END OF YOUR PREVIOUS RE-VOTE ---');
+  });
+
+  test('#257 R-X29: real prior text still wins — `promoted` never suppresses a genuine answer', () => {
+    // Belt-and-braces on the arm ORDER. The callers pass `''` with `promoted`,
+    // so this shape should be unreachable; pinned so a future caller that sets
+    // the flag without clearing the text cannot silently lose the seat's answer.
+    const prior = 'A real, non-promoted defence.';
+    const t = d.buildDefenseRepairPrompt({ errors: ERRORS, defense: prior, promoted: true });
+    expect(t).toContain(prior);
+    expect(t).toContain('YOUR PREVIOUS DEFENSE');
+    expect(t).not.toContain('written in the reasoning channel');
+  });
 });
 
 describe('buildDebateAddendum (spec §5.3c)', () => {

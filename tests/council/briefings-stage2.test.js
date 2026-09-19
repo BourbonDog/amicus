@@ -233,6 +233,46 @@ describe('repair prompts', () => {
     expect(text.startsWith('Do NOT use any tools')).toBe(true);
     expect(text).toContain('VERDICT: Ship it');
   });
+
+  // ---- #257 R-X29: THE THIRD ARM ----
+  // A promoted judge's `summary` is its REASONING, not its judgement, and the
+  // docblock's "embedded verbatim and uncapped" is exactly why that mattered:
+  // the motivating case handed ~165,000 characters of deliberation back under
+  // "this is the text to correct". run-stage2.js now passes `''` + `promoted`.
+  const ERRORS = [{ code: 'NO_BLOCK', detail: 'no fenced json block' }];
+  const JUDGE_TAIL = 'Do not invent rankings or adjudications to satisfy the schema: '
+    + 'say so in your output.';
+  const PROMOTED_JUDGE_ARM = 'Your previous response was written in the reasoning channel '
+    + 'and is not a judgement — there is no prior text to correct; answer afresh. ' + JUDGE_TAIL;
+
+  test('#257 R-X29: a promoted judge repair carries the reasoning-channel arm and NO prior-text block', () => {
+    const text = s2.buildJudgeRepairPrompt({ errors: ERRORS, judgement: '', promoted: true });
+    expect(text).toContain(PROMOTED_JUDGE_ARM);
+    expect(text).not.toContain('YOUR PREVIOUS JUDGEMENT');
+    expect(text).not.toContain('Your previous response was empty');
+    expect(text).toContain('NO_BLOCK: no fenced json block');
+    expect(text).toContain(s2.JUDGE_OUTPUT_CONTRACT);
+  });
+
+  test('#257 R-X29: both Stage-2 repair surfaces carry the arm — the task twin delegates', () => {
+    // judgeRepairPromptFor forks on intent (v4.9 W7 F1); the arm must reach a
+    // task judge too, or a task run keeps the defect the review run lost.
+    for (const intent of ['task', undefined]) {
+      expect(s2.judgeRepairPromptFor(intent, { errors: ERRORS, judgement: '', promoted: true }))
+        .toContain(PROMOTED_JUDGE_ARM);
+    }
+  });
+
+  test('#257 R-X29: the two OLDER arms are byte-identical', () => {
+    const empty = s2.buildJudgeRepairPrompt({ errors: ERRORS });
+    expect(empty).toContain('Your previous response was empty — there is no prior judgement '
+      + 'to correct. ' + JUDGE_TAIL);
+    expect(empty).not.toContain('written in the reasoning channel');
+    const prior = 'I judged at length in prose, with no trailing JSON.';
+    expect(s2.buildJudgeRepairPrompt({ errors: ERRORS, judgement: prior })).toContain(
+      '--- YOUR PREVIOUS JUDGEMENT (verbatim — this is the text to correct) ---\n'
+      + prior + '\n--- END OF YOUR PREVIOUS JUDGEMENT ---');
+  });
 });
 
 describe('review judges never see the briefing — the anonymity narrowing (v4.9 W7 T-B)', () => {

@@ -613,6 +613,13 @@ describe('runDebate — one bounded repair per defense solo', () => {
 
     expect(prompts['r-d1r']).toContain(bad);
     expect(prompts['r-d1r']).toContain('YOUR PREVIOUS DEFENSE');
+    // #257 R-X29 CONTROL: a NON-promoted defence keeps the verbatim block,
+    // byte-identical, and never reads the reasoning-channel arm. This is the
+    // half the promoted fix must not touch.
+    expect(prompts['r-d1r']).toContain(
+      '--- YOUR PREVIOUS DEFENSE (verbatim — this is the text to correct) ---\n'
+      + bad + '\n--- END OF YOUR PREVIOUS DEFENSE ---');
+    expect(prompts['r-d1r']).not.toContain('written in the reasoning channel');
   });
 });
 
@@ -799,7 +806,20 @@ describe('runDebate — a promoted defense is unparseable (#257 R-X23)', () => {
     expect(fs.readFileSync(path.join(tmp, 'rebuttal-gpt.md'), 'utf-8')).toBe(cleanDefence);
   });
 
-  test("the repair prompt names the reasoning-channel cause, and carries the promoted seat's own text", async () => {
+  /**
+   * #257 R-X29 — the repair prompt NEVER carries a promoted leg's reasoning.
+   *
+   * This test previously asserted the opposite ("carries the promoted seat's own
+   * text"): it pinned the defect the round-2 council found. A promoted
+   * `summary` is the seat's deliberation, not a defence, and it is UNBOUNDED —
+   * the motivating case was ~165,000 characters handed back under "this is the
+   * text to correct". The repair now ships no prior text at all and asks afresh,
+   * and the briefing says truthfully why.
+   *
+   * NAMED MUTANT — DEFENSEREPAIRCARRIESREASONING: pass `defense: leg.summary`
+   * again at run-debate.js's buildDefenseRepairPrompt call. Reds this test.
+   */
+  test('the repair prompt names the reasoning-channel cause and carries NO prior text at all (#257 R-X29)', async () => {
     const tmp = mkTmp('run-debate-promoted-defense-prompt-');
     const input = provisionalInput();
     const prompts = {};
@@ -814,10 +834,18 @@ describe('runDebate — a promoted defense is unparseable (#257 R-X23)', () => {
       launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
     }), { provisionalRecord: tally(input), tallyInput: input });
 
-    // The `errors[]` the parse-gate mints ride the LC-12 repair prompt verbatim.
+    // The `errors[]` the parse-gate mints still ride the repair prompt verbatim.
     expect(prompts['r-d1r']).toContain('REASONING_ONLY: answered only in its reasoning channel');
-    expect(prompts['r-d1r']).toContain('YOUR PREVIOUS DEFENSE');
-    expect(prompts['r-d1r']).toContain(inReasoning.trim());
+    // …but the reasoning itself does NOT, and there is no "correct this" block.
+    expect(prompts['r-d1r']).not.toContain('YOUR PREVIOUS DEFENSE');
+    expect(prompts['r-d1r']).not.toContain(inReasoning.trim());
+    expect(prompts['r-d1r']).not.toContain('caps at 5');
+    // The third arm, byte-exact — it must say WHY, not pretend the seat was silent.
+    expect(prompts['r-d1r']).toContain(
+      'Your previous defense was written in the reasoning channel and is not a defense — '
+      + 'there is no prior text to correct; answer afresh. '
+      + 'Do not invent a position to satisfy the schema: say so in your output.');
+    expect(prompts['r-d1r']).not.toContain('Your previous defense response was empty');
   });
 });
 
@@ -866,6 +894,12 @@ describe('runDebate — re-vote repair branch', () => {
       const repairCall = launched.find(o => o.waveId === 'r-rv-gptr');
       expect(repairCall.prompt).toContain('prose only, no json block');
       expect(repairCall.prompt).toContain('YOUR PREVIOUS RE-VOTE');
+      // #257 R-X29 CONTROL: a NON-promoted re-vote keeps the verbatim block,
+      // byte-identical, and never reads the reasoning-channel arm.
+      expect(repairCall.prompt).toContain(
+        '--- YOUR PREVIOUS RE-VOTE (verbatim — this is the text to correct) ---\n'
+        + 'prose only, no json block\n--- END OF YOUR PREVIOUS RE-VOTE ---');
+      expect(repairCall.prompt).not.toContain('written in the reasoning channel');
     });
 
     test("the repaired leg's conformance is 'repaired', and the round is not degraded", () => {
@@ -1036,9 +1070,22 @@ describe('runDebate — a promoted re-vote is unparseable (#257 R-X23)', () => {
     const doc = JSON.parse(fs.readFileSync(path.join(tmp, 'debate.json'), 'utf-8'));
     expect(doc.revotes).toEqual(expect.arrayContaining([
       expect.objectContaining({ judge: 'gpt', id: 'A1', verdict: 'dispute', applied: true })]));
-    // LC-12 with the reasoning-channel cause named in the errors it ships.
+    // #257 R-X29: the cause is NAMED in the errors it ships — and the promoted
+    // reasoning is not shipped at all. This assertion block previously read
+    // `toContain('YOUR PREVIOUS RE-VOTE')`: it pinned the defect. A promoted
+    // `summary` is unbounded deliberation, not a re-vote.
+    //
+    // NAMED MUTANT — REVOTEREPAIRCARRIESREASONING: pass `revote: leg.summary`
+    // again at run-debate-revote.js's buildRevoteRepairPrompt call. Reds this test.
     expect(prompts['r-rv-gptr']).toContain('REASONING_ONLY: answered only in its reasoning channel');
-    expect(prompts['r-rv-gptr']).toContain('YOUR PREVIOUS RE-VOTE');
+    expect(prompts['r-rv-gptr']).not.toContain('YOUR PREVIOUS RE-VOTE');
+    expect(prompts['r-rv-gptr']).not.toContain(gptFlip.trim());
+    expect(prompts['r-rv-gptr']).not.toContain('defense convincing');
+    expect(prompts['r-rv-gptr']).toContain(
+      'Your previous re-vote was written in the reasoning channel and is not a re-vote — '
+      + 'there is no prior text to correct; answer afresh. '
+      + 'Do not invent a position to satisfy the schema: say so in your output.');
+    expect(prompts['r-rv-gptr']).not.toContain('Your previous re-vote response was empty');
   });
 });
 

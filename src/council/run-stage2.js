@@ -196,7 +196,8 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     // artifact to name). Stage 2 is the worse place for this omission than Stage 1:
     // a judge that refuses has no `conformance` column, so the tally silently shows
     // fewer votes and a finding's basis counts can flip its tier.
-    let judging = leg.summary || '';
+    // #257 R-X29: a PROMOTED summary is unbounded REASONING, not a judgement, so it never becomes `judging` and never rides a repair prompt (named mutant "JUDGEREPAIRCARRIESREASONING", tests/council/run-stages.test.js).
+    let judging = isPromotedLeg(leg) ? '' : (leg.summary || '');
     while (!parsed.ok && leg.status === 'complete' && leg.summary && attempts < 2 && !ctx.overBudget()) {
       attempts += 1;
       repairSeq += 1;
@@ -208,8 +209,9 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         // above rides. A judge briefed on the task contract must be repaired
         // against the task contract — a repair solo is a fresh session, so the
         // contract embedded here is the only output shape it ever sees.
+        // #257 R-X29: `promoted` is true only while no real text exists — once a non-promoted repair produces some, `judging` holds it (below) and the verbatim arm is truthful again.
         prompt: stage2.judgeRepairPromptFor(o.intent,
-          { errors: parsed.errors, judgement: judging }),
+          { errors: parsed.errors, judgement: judging, promoted: judging === '' && isPromotedLeg(leg) }),
         project: ctx.scratchDir, waveId, timeout: o.timeout,
         gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
         councilRunId: o.runId, councilName: o.councilName,

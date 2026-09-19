@@ -165,8 +165,8 @@ async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedI
   const repairId = `${waveId}-${sanitizeName(key)}r`;
   runState.appendStageWave(ctx.o.runDir, 'debate-revote', repairId);
   const r2 = await ctx.launchers.launchSolo({ ...legOpts(ctx, repairId), model: judge,
-    // ⚠️ LC-12: ditto — the re-vote output being repaired rides with its errors.
-    prompt: dbrief.buildRevoteRepairPrompt({ errors: parsed.errors, revote: leg.summary }) });
+    // ⚠️ LC-12: ditto — the re-vote output being repaired rides with its errors. NOT when it was promoted (#257 R-X29): `summary` is then unbounded reasoning, not a re-vote, so the briefing says so and asks afresh (named mutant "REVOTEREPAIRCARRIESREASONING", tests/council/run-debate.test.js).
+    prompt: dbrief.buildRevoteRepairPrompt({ errors: parsed.errors, revote: isPromotedLeg(leg) ? '' : leg.summary, promoted: isPromotedLeg(leg) }) });
   ctx.addWave(r2.wave);
   if (isAbortExit(r2.exitCode)) { return { aborted: r2.exitCode }; }
   const leg2 = r2.leg && r2.leg.status === 'complete' ? r2.leg : null;

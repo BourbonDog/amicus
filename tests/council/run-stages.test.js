@@ -2317,6 +2317,52 @@ SECOND LINE
   });
 
   /**
+   * #257 R-X29 — the judge half of "no repair prompt carries a promoted leg's
+   * reasoning". `judging` seeded from `leg.summary` fed the whole deliberation
+   * back to the `-q<N>` solo under "YOUR PREVIOUS JUDGEMENT (verbatim — this is
+   * the text to correct)", unbounded: the motivating case was ~165,000
+   * characters. It now seeds to `''` for a promoted leg, and the briefing's
+   * third arm says why and asks for a fresh judgement.
+   *
+   * NAMED MUTANT — JUDGEREPAIRCARRIESREASONING: restore
+   * `let judging = leg.summary || '';` in run-stage2.js. Reds this test.
+   */
+  test('#257 R-X29: a promoted judge\'s -q1 repair carries the reasoning-channel arm, never the reasoning', async () => {
+    const REASONING = 'I should weigh Review A against Review B, at enormous length…';
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        promotedJudgeLeg(REASONING, opts.waveId, 2, { reasoning: 40332, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        const leg = mkLeg('gpt', 'still no stage-2 block', 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    // The bounded repair loop still runs — the gate is on the TEXT, not the loop.
+    expect(solos.map(s => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    expect(solos[0].prompt).not.toContain(REASONING);
+    expect(solos[0].prompt).not.toContain('YOUR PREVIOUS JUDGEMENT');
+    expect(solos[0].prompt).toContain(
+      'Your previous response was written in the reasoning channel and is not a judgement — '
+      + 'there is no prior text to correct; answer afresh. '
+      + 'Do not invent rankings or adjudications to satisfy the schema: say so in your output.');
+    expect(solos[0].prompt).not.toContain('Your previous response was empty');
+    // -q2 repairs -q1's output, which was a REAL (non-promoted) answer: the
+    // verbatim arm is truthful again, so the third arm must NOT persist.
+    expect(solos[1].prompt).toContain('YOUR PREVIOUS JUDGEMENT');
+    expect(solos[1].prompt).toContain('still no stage-2 block');
+    expect(solos[1].prompt).not.toContain('written in the reasoning channel');
+    expect(solos[1].prompt).not.toContain(REASONING);
+  });
+
+  /**
    * Ruling R-X13 — THE THIRD PATH the spec missed. The note site sits after the
    * `if (!parsed.ok) { … continue; }` block, so it is also reached when the
    * promoted leg produced NO block and a bounded `-q<N>` repair supplied the
