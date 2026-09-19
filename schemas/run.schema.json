@@ -91,6 +91,11 @@
         }
       ],
       "description": "#251 item 1, optional, EMIT-WHEN-SET. The no-output backstop's decision record for this leg: the window in force at its FIRST firing, the elapsed time at that firing, the engine session status it read (a type identifier; 'unknown' for a probe that could not answer), whether the window was extended once (then `extendedToMs`), or — for a busy/retry session that was NOT extended — why (`at-cap`: the window was already at the leg-cap clamp; `retry-beyond-window`: the engine's next attempt lay past the extended window, its schedule in `retryNextIso`; `pre-send`: the engine never returned from the prompt send; `elapsed`: the extended deadline had already passed when the decision ran, so the extension was refused and nothing was granted). Absent means the backstop never fired for this leg. Present on a COMPLETED leg with `extended: true` means the extension saved it. Written by `src/utils/no-output-backstop.js :: decideBackstopExtension`, validated at every writer by `isBackstopRecord`. Council #269 r1 (D4): the four `oneOf` arms MIRROR that predicate — extended carries `extendedToMs` and never a `why`; a not-extended record carries at most one `why`, and `retryNextIso` only with `retry-beyond-window`. One inequality the predicate enforces is NOT expressible in JSON Schema without `$data`: the producer enforces `extendedToMs > windowMs`; the schema cannot."
+    },
+    "promoted": {
+      "type": "boolean",
+      "enum": [true],
+      "description": "#257, optional, emit-when-true. The engine's last assistant message carried reasoning and no text part, and conversation-mirror.js promoted the reasoning to the leg's output as a stand-in — so `summary` is the model's deliberation, not its answer. A council treats such a Stage-1 leg as no deliverable (the once-only retry fires; a repeat is a lost seat) and uses such a judge only when its fenced block parses. Absent means the output is the model's answer text. Never present on a leg whose status is 'error'."
     }
   }
 }

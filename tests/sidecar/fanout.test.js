@@ -452,7 +452,7 @@ describe('runFanout orchestrator', () => {
     // A leg with no session id still produces a well-formed document: the
     // key is absent on disk (undefined, not a written null — the
     // read-merge-write convention) but the emitted wave doc coerces the
-    // absence to schema-valid null (result-schema.js:72), never undefined.
+    // absence to schema-valid null (result-schema.js:75), never undefined.
     const legMeta2 = JSON.parse(fsReal.readFileSync(
       pathReal.join(project, '.claude', 'amicus_sessions', 'sess1234-2', 'metadata.json'), 'utf-8'));
     expect(legMeta2.status).toBe('complete');

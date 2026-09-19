@@ -262,6 +262,7 @@ src/
 │   ├── idle-watchdog.js  # IdleWatchdog - BUSY/IDLE state machine with self-terminating timer.
 │   ├── input-validators.js
 │   ├── known-flags.js
+│   ├── leg-riders.js  # The emit-when-set rider block every leg run document carries.
 │   ├── legacy-mcp-migration.js
 │   ├── lifecycle.js
 │   ├── live-probes.js  # The single gate on outbound AUTHENTICATED network probes made by diagnostics
@@ -766,6 +767,7 @@ evals/
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
 | `utils/input-validators.js` |  | `validateStartInputs()`, `levenshteinDistance()`, `suggestCommand()` |
 | `utils/known-flags.js` |  | `getKnownFlags()`, `unknownFlags()`, `INTERNAL_FLAGS()` |
+| `utils/leg-riders.js` | The emit-when-set rider block every leg run document carries. | `legRiders()` |
 | `utils/legacy-mcp-migration.js` |  | `claudeCodeConfigPath()`, `claudeDesktopConfigPath()`, `inspectLegacySidecarEntry()`, `removeLegacySidecarEntry()`, `inspectAllLegacySidecarEntries()` |
 | `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `exitReaping()`, `ONE_SHOT_COMMANDS()` |
 | `utils/live-probes.js` | The single gate on outbound AUTHENTICATED network probes made by diagnostics | `enableLiveProbes()`, `liveProbesAllowed()`, `_resetLiveProbes()` |

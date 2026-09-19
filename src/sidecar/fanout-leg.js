@@ -187,7 +187,7 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // runSingleAttempt against the SAME legId/legDir (fanout-leg-fallback.js
     // "SAME leg dir under the SAME legId"), and writeLegPatch's read-merge-
     // write only drops keys that are `undefined`, not ones explicitly set to
-    // `null`. This does not disagree with result-schema.js:72's
+    // `null`. This does not disagree with result-schema.js:75's
     // `metadata.opencodeSessionId || null` — that coercion runs downstream,
     // on the per-request OUTPUT run document, where run.schema.json requires
     // the field always present as string|null. The two layers do different

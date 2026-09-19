@@ -97,7 +97,7 @@ function roleAt(seats, seatId) {
  *
  * Callers legitimately hold legs from several waves at once, so a leg stamped
  * with a DIFFERENT waveId is ignored rather than reported — call once per wave
- * over the same array. A leg with NO waveId (result-schema.js:61 falls back to
+ * over the same array. A leg with NO waveId (result-schema.js:64 falls back to
  * `metadata.parentWave || null`, and the council fixtures omit it) may bind
  * ONLY by an exact roster-slot id: adopting it by alias would silently claim a
  * foreign wave's leg.
