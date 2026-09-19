@@ -183,31 +183,25 @@ function buildRevoteBundle({ findings, date, intent }) {
  * therefore stay one spelling for both intents; pinned in
  * tests/council/briefings-debate.test.js ("frame-neutral in both intents").
  *
- * ⚠️ #257 R-X29, the THIRD arm: a PROMOTED leg's `summary` is its reasoning, not
- * its answer, and it is unbounded (the motivating case ran to ~165,000 characters
- * of deliberation). Feeding it back under "this is the text to correct" asked the
- * seat to correct something it never chose to say, at whatever length it thought
- * at. A promoted previous answer therefore ships NO prior text at all — the
- * callers pass `''` — and this arm says truthfully why and asks for a fresh
- * answer. It is a THIRD arm rather than a reuse of the empty one because "you
- * said nothing" and "you said it in the wrong channel" are different facts with
- * different fixes; both existing arms stay byte-identical (pinned in
- * tests/council/briefings-debate.test.js).
+ * ⚠️ #257 R-X34 — this function has TWO arms, and a PROMOTED previous answer is
+ * not one of them. R-X29 briefly added a third ("written in the reasoning
+ * channel … answer afresh"); owner decision A′ then removed the case that
+ * reached it. A leg that answered only in its reasoning channel never produced
+ * an answer to repair AGAINST, so run-debate.js and run-debate-revote.js do not
+ * call a repair builder for it at all — they RELAUNCH the seat with its original
+ * briefing (the defence brief, or the shared re-vote bundle). Nothing may pass a
+ * promoted `summary` here: it is deliberation, not an answer, and it is
+ * unbounded (~165,000 characters in the motivating case).
  * @param {string} kind 'defense' | 're-vote'
  * @param {string} contract the trailing-JSON contract for that kind
  * @param {Array<{code:string,detail:string}>} errors
  * @param {string} [prior] the text that ACTUALLY failed validation
- * @param {boolean} [promoted] the previous answer came back in the reasoning channel
  */
-function repair(kind, contract, errors, prior, promoted) {
+function repair(kind, contract, errors, prior) {
   const lines = (errors || []).map(e => `- ${e.code}: ${e.detail}`).join('\n');
   const text = typeof prior === 'string' ? prior.trim() : '';
-  const absent = promoted === true
-    ? `Your previous ${kind} was written in the reasoning channel and is not a ${kind} — `
-      + 'there is no prior text to correct; answer afresh. '
-      + 'Do not invent a position to satisfy the schema: say so in your output.'
-    : `Your previous ${kind} response was empty — there is no prior text to correct. `
-      + 'Do not invent a position to satisfy the schema: say so in your output.';
+  const absent = `Your previous ${kind} response was empty — there is no prior text to correct. `
+    + 'Do not invent a position to satisfy the schema: say so in your output.';
   const block = text
     ? [`--- YOUR PREVIOUS ${kind.toUpperCase()} (verbatim — this is the text to correct) ---`,
       text,
@@ -225,8 +219,8 @@ function repair(kind, contract, errors, prior, promoted) {
   ].join('\n\n');
 }
 
-function buildDefenseRepairPrompt({ errors, defense, promoted }) { return repair('defense', DEFENSE_CONTRACT, errors, defense, promoted); }
-function buildRevoteRepairPrompt({ errors, revote, promoted }) { return repair('re-vote', REVOTE_CONTRACT, errors, revote, promoted); }
+function buildDefenseRepairPrompt({ errors, defense }) { return repair('defense', DEFENSE_CONTRACT, errors, defense); }
+function buildRevoteRepairPrompt({ errors, revote }) { return repair('re-vote', REVOTE_CONTRACT, errors, revote); }
 
 /**
  * Chair-packet "Debate round outcomes" section (spec §5.3c). De-anonymized —

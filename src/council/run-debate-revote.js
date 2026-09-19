@@ -142,18 +142,18 @@ function reVoteUnboundNote(waveId, judge, key, leg) {
 }
 
 /**
- * v4.9 W2 (SI-16): the one bounded repair for an ALIVE-but-unparseable re-vote
- * leg (spec §5.7 — only ONE repair is spent), split out of runRevoteWave's leg
- * loop. The CALLER owns the `alive && !parsed.ok` gate; this function always
- * launches exactly one repair solo. It returns the post-repair view the caller
- * records from there on — `parsed`, `conformance`, `outLeg` (the repaired leg
- * when the repair completed, else the original) — plus exactly one non-null
- * row: `supersededRow` (completed repair — the pre-repair leg's row) or
- * `repairRow` (dead repair — the failed attempt's own row), for the caller to
- * push. A user abort mid-repair returns `{ aborted: <exitCode> }` alone, which
- * the caller propagates as its own return.
+ * v4.9 W2 (SI-16): the one bounded retry for an ALIVE-but-unparseable re-vote
+ * leg (spec §5.7 — only ONE is spent), split out of runRevoteWave's leg loop.
+ * The CALLER owns the `alive && !parsed.ok` gate; this always launches exactly
+ * one solo — a repair, or (#257 R-X33, owner A′) a RELAUNCH with the shared
+ * `bundle` when the leg was promoted — deliberation is re-asked, never corrected.
+ * It returns the post-retry view the caller records from there on — `parsed`,
+ * `conformance`, `outLeg` (the new leg when it completed, else the original) —
+ * plus exactly one non-null row: `supersededRow` (completed retry — the pre-retry
+ * leg's row) or `repairRow` (dead retry — the failed attempt's own row), for the
+ * caller to push. A user abort returns `{ aborted: <exitCode> }` alone, propagated.
  */
-async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedIds }) {
+async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedIds, bundle }) {
   // One repair, solo, to that judge. The id is built from the SEAT key so
   // two twins never share one repair id (and one never overwrites the
   // other's run-state entry). ⚠️ The trailing `r` is load-bearing: it is what
@@ -165,8 +165,8 @@ async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedI
   const repairId = `${waveId}-${sanitizeName(key)}r`;
   runState.appendStageWave(ctx.o.runDir, 'debate-revote', repairId);
   const r2 = await ctx.launchers.launchSolo({ ...legOpts(ctx, repairId), model: judge,
-    // ⚠️ LC-12: ditto — the re-vote output being repaired rides with its errors. NOT when it was promoted (#257 R-X29): `summary` is then unbounded reasoning, not a re-vote, so the briefing says so and asks afresh (named mutant "REVOTEREPAIRCARRIESREASONING", tests/council/run-debate.test.js).
-    prompt: dbrief.buildRevoteRepairPrompt({ errors: parsed.errors, revote: isPromotedLeg(leg) ? '' : leg.summary, promoted: isPromotedLeg(leg) }) });
+    // ⚠️ LC-12: the re-vote output being repaired rides with its errors. #257 R-X33 (owner A′): a PROMOTED re-vote is instead RELAUNCHED with the shared re-vote bundle — a repair prompt never carries its deliberation (named mutant "REVOTERELAUNCHISREPAIR", tests/council/run-debate.test.js).
+    prompt: isPromotedLeg(leg) ? bundle : dbrief.buildRevoteRepairPrompt({ errors: parsed.errors, revote: leg.summary }) });
   ctx.addWave(r2.wave);
   if (isAbortExit(r2.exitCode)) { return { aborted: r2.exitCode }; }
   const leg2 = r2.leg && r2.leg.status === 'complete' ? r2.leg : null;
@@ -243,7 +243,7 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
       : { ok: false, byId: {}, errors: [{ code: alive ? 'REASONING_ONLY' : 'DEAD_LEG', detail: alive ? 'answered only in its reasoning channel' : 'no summary' }] }; // #257 R-X23 (named mutant "REVOTEPROMOTEDUSED")
     let conformance = alive && !isPromotedLeg(leg) ? 'clean' : 'unstructured';
     if (alive && !parsed.ok) {
-      const rep = await repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedIds });
+      const rep = await repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedIds, bundle });
       if (rep.aborted) { return { aborted: rep.aborted }; }
       ({ parsed, conformance, outLeg } = rep);
       if (rep.supersededRow) { supersededLegs.push(rep.supersededRow); }

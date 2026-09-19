@@ -807,19 +807,24 @@ describe('runDebate — a promoted defense is unparseable (#257 R-X23)', () => {
   });
 
   /**
-   * #257 R-X29 — the repair prompt NEVER carries a promoted leg's reasoning.
+   * #257 R-X33 (owner decision A′) — a promoted defence's one bounded retry is a
+   * RELAUNCH, not a repair.
    *
-   * This test previously asserted the opposite ("carries the promoted seat's own
-   * text"): it pinned the defect the round-2 council found. A promoted
-   * `summary` is the seat's deliberation, not a defence, and it is UNBOUNDED —
-   * the motivating case was ~165,000 characters handed back under "this is the
-   * text to correct". The repair now ships no prior text at all and asks afresh,
-   * and the briefing says truthfully why.
+   * Two earlier shapes of this test pinned two earlier answers. The first
+   * asserted the repair carried the promoted seat's own text (the defect the
+   * round-2 council found: a promoted `summary` is deliberation, not a defence,
+   * and it is UNBOUNDED — ~165,000 characters in the motivating case, handed
+   * back under "this is the text to correct"). The second (R-X29) kept the
+   * repair shape but shipped no prior text and named the cause in a third
+   * briefing arm. The owner ruled A′: a leg that never answered has nothing to
+   * repair AGAINST, so it is simply ASKED AGAIN — the original -d1 brief, byte
+   * for byte. The briefing arm R-X29 added is withdrawn (R-X34).
    *
-   * NAMED MUTANT — DEFENSEREPAIRCARRIESREASONING: pass `defense: leg.summary`
-   * again at run-debate.js's buildDefenseRepairPrompt call. Reds this test.
+   * NAMED MUTANT — DEFENSERELAUNCHISREPAIR: drop the `isPromotedLeg(leg) ?
+   * brief :` ternary at run-debate.js's repair launch so the repair prompt is
+   * always built. Reds this test.
    */
-  test('the repair prompt names the reasoning-channel cause and carries NO prior text at all (#257 R-X29)', async () => {
+  test('#257 R-X33: a promoted defence\'s one repair is a RELAUNCH — its prompt is byte-identical to the -d1 brief', async () => {
     const tmp = mkTmp('run-debate-promoted-defense-prompt-');
     const input = provisionalInput();
     const prompts = {};
@@ -834,17 +839,18 @@ describe('runDebate — a promoted defense is unparseable (#257 R-X23)', () => {
       launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
     }), { provisionalRecord: tally(input), tallyInput: input });
 
-    // The `errors[]` the parse-gate mints still ride the repair prompt verbatim.
-    expect(prompts['r-d1r']).toContain('REASONING_ONLY: answered only in its reasoning channel');
-    // …but the reasoning itself does NOT, and there is no "correct this" block.
-    expect(prompts['r-d1r']).not.toContain('YOUR PREVIOUS DEFENSE');
+    // THE pin: the retry is the ORIGINAL briefing, not a repair turn built from it.
+    expect(typeof prompts['r-d1']).toBe('string');
+    expect(prompts['r-d1'].length).toBeGreaterThan(0);
+    expect(prompts['r-d1r']).toBe(prompts['r-d1']);
+    // Corollaries, spelled out so a failure names WHAT leaked rather than just
+    // "strings differ": no repair frame, no prior-text block, no deliberation.
+    expect(prompts['r-d1r']).not.toContain('YOUR PREVIOUS');
     expect(prompts['r-d1r']).not.toContain(inReasoning.trim());
     expect(prompts['r-d1r']).not.toContain('caps at 5');
-    // The third arm, byte-exact — it must say WHY, not pretend the seat was silent.
-    expect(prompts['r-d1r']).toContain(
-      'Your previous defense was written in the reasoning channel and is not a defense — '
-      + 'there is no prior text to correct; answer afresh. '
-      + 'Do not invent a position to satisfy the schema: say so in your output.');
+    expect(prompts['r-d1r']).not.toContain('REASONING_ONLY');
+    // R-X34: the third arm is withdrawn — a relaunch cannot reach it, and nothing else may.
+    expect(prompts['r-d1r']).not.toContain('written in the reasoning channel');
     expect(prompts['r-d1r']).not.toContain('Your previous defense response was empty');
   });
 });
@@ -1070,22 +1076,54 @@ describe('runDebate — a promoted re-vote is unparseable (#257 R-X23)', () => {
     const doc = JSON.parse(fs.readFileSync(path.join(tmp, 'debate.json'), 'utf-8'));
     expect(doc.revotes).toEqual(expect.arrayContaining([
       expect.objectContaining({ judge: 'gpt', id: 'A1', verdict: 'dispute', applied: true })]));
-    // #257 R-X29: the cause is NAMED in the errors it ships — and the promoted
-    // reasoning is not shipped at all. This assertion block previously read
-    // `toContain('YOUR PREVIOUS RE-VOTE')`: it pinned the defect. A promoted
-    // `summary` is unbounded deliberation, not a re-vote.
-    //
-    // NAMED MUTANT — REVOTEREPAIRCARRIESREASONING: pass `revote: leg.summary`
-    // again at run-debate-revote.js's buildRevoteRepairPrompt call. Reds this test.
-    expect(prompts['r-rv-gptr']).toContain('REASONING_ONLY: answered only in its reasoning channel');
+    // #257 R-X33: the retry that produced `repaired` was a RELAUNCH — it carried
+    // none of the promoted judge's deliberation and no repair frame at all. The
+    // byte-identity to the re-vote bundle is pinned in the next test; these are
+    // the corollaries, kept here so a leak reds the OUTCOME test too.
     expect(prompts['r-rv-gptr']).not.toContain('YOUR PREVIOUS RE-VOTE');
     expect(prompts['r-rv-gptr']).not.toContain(gptFlip.trim());
     expect(prompts['r-rv-gptr']).not.toContain('defense convincing');
-    expect(prompts['r-rv-gptr']).toContain(
-      'Your previous re-vote was written in the reasoning channel and is not a re-vote — '
-      + 'there is no prior text to correct; answer afresh. '
-      + 'Do not invent a position to satisfy the schema: say so in your output.');
+    expect(prompts['r-rv-gptr']).not.toContain('REASONING_ONLY');
+    // R-X34: the withdrawn third arm, and the empty arm it was carved out of.
+    expect(prompts['r-rv-gptr']).not.toContain('written in the reasoning channel');
     expect(prompts['r-rv-gptr']).not.toContain('Your previous re-vote response was empty');
+  });
+
+  /**
+   * #257 R-X33 (owner decision A′), the re-vote half. The re-vote's briefing is
+   * SHARED — one `revote-bundle.md` for the whole wave — so a promoted judge's
+   * relaunch is that same bundle, not a per-seat rebuild. Pinned three ways at
+   * once (the launchWave prompt, the on-disk artifact, the repair solo's prompt)
+   * because two of the three agreeing would not prove the third is the briefing
+   * the round actually ran on.
+   *
+   * NAMED MUTANT — REVOTERELAUNCHISREPAIR: drop the `isPromotedLeg(leg) ?
+   * bundle :` ternary at run-debate-revote.js's repairRevoteLeg launch so the
+   * repair prompt is always built. Reds this test.
+   */
+  test("#257 R-X33: a promoted re-vote's one repair is a RELAUNCH — its prompt is byte-identical to the re-vote bundle", async () => {
+    const tmp = mkTmp('run-debate-promoted-revote-relaunch-');
+    const input = provisionalInput();
+    const prompts = {};
+    let wavePrompt = null;
+    const repaired = revoteOut([{ id: 'A1', verdict: 'dispute', reason: 'still unsupported' }]);
+    await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        prompts[opts.waveId] = opts.prompt;
+        const body = opts.waveId === 'r-d1' ? defended : repaired;
+        const l = leg(opts.waveId === 'r-d1' ? 'gemini' : 'gpt', body, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async (opts) => { wavePrompt = opts.prompt; return revoteWave(promotedLeg('gpt', gptFlip, 'r-rv', 1)); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    // THE pin: the shared bundle, byte for byte, on all three surfaces.
+    expect(typeof wavePrompt).toBe('string');
+    expect(wavePrompt.length).toBeGreaterThan(0);
+    expect(fs.readFileSync(path.join(tmp, 'revote-bundle.md'), 'utf-8')).toBe(wavePrompt);
+    expect(prompts['r-rv-gptr']).toBe(wavePrompt);
+    // …and it is NOT the defence brief that went to -d1: the relaunch is per STAGE.
+    expect(prompts['r-rv-gptr']).not.toBe(prompts['r-d1']);
   });
 });
 

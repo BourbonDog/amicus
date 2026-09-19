@@ -81,8 +81,8 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
     const res2 = await ctx.launchers.launchSolo({
       ...legOpts(ctx, repairId), model: raiserAlias,
       // ⚠️ LC-12: a repair solo is a fresh session — the defense that failed rides along.
-      // #257 R-X29: NOT when it was promoted — `summary` is then unbounded reasoning, not a defence; the briefing says so and asks afresh (named mutant "DEFENSEREPAIRCARRIESREASONING", tests/council/run-debate.test.js).
-      prompt: dbrief.buildDefenseRepairPrompt({ errors: parsed.errors, defense: isPromotedLeg(leg) ? '' : leg.summary, promoted: isPromotedLeg(leg) }),
+      // #257 R-X33 (owner A′): a promoted defence is RELAUNCHED with its ORIGINAL brief — a repair prompt never carries its deliberation (named mutant "DEFENSERELAUNCHISREPAIR", tests/council/run-debate.test.js).
+      prompt: isPromotedLeg(leg) ? brief : dbrief.buildDefenseRepairPrompt({ errors: parsed.errors, defense: leg.summary }),
     });
     ctx.addWave(res2.wave);
     if (isAbortExit(res2.exitCode)) { return { raiser: raiserKey, aborted: res2.exitCode }; }
