@@ -273,3 +273,36 @@ in its reasoning channel (measured once in three rounds on qwen — expect it ra
 - #12 corollary 3: the docs that PROMISE today's behaviour are listed (R8).
 - #61 counts: 4 direct metadata writers + 1 shared, 3 files at 300/300, 1 pin rewritten.
 - #64 power: the live sample rate is "once in three rounds", stated, not promised.
+
+## 10. Addendum — every remaining reader (owner decision C at council round 1, 2026-09-19)
+
+R10 and R-X17 filed the chair, debate and repair readers as out of scope. Council round 1 on PR #270
+rated that the headline gap; the owner ruled "C": pull them all in. Measured map: the SDD ledger's
+`r10-sites-map.md` (every anchor re-verified at `4a2c111c`). Rulings R-X21–R-X25 below; each site
+gets ONE conjunct, `&& !isPromotedLeg(<leg>)`, and rides its existing not-ok path unchanged.
+
+| site | today | rule |
+|---|---|---|
+| Stage-1 `-p<N>` repair solo (`run-stages.js:214`) | the repair leg's reasoning becomes `repairing` and is validated as findings | a promoted repair is a FAILED repair attempt inside the existing bound (`attempts < 2`): `repaired` is `''`; the `role: 'repair'` row (built by `buildRunStatsEntry`) carries `promoted: true`; the seat ends `conformance: 'unstructured'` exactly as after a dead repair. No new note (R-X21). |
+| Stage-2 `-q<N>` judge repair (`run-stage2.js:225`) | a promoted repair's reasoning is parsed and, if a block parses, USED | the same conjunct: a promoted repair is never used; the loop's existing arms run. The measured gap "a promoted repair of a non-promoted judge fires no `judge-reasoning-only` note" closes by construction — such a repair can no longer supply the block, so the note's `attempts > 0` arm fires only for a promoted ORIGINAL rescued by a non-promoted repair, which is what its `why` says. The judge artifact `judge-<seat>.md` is still written for a promoted judge (the audit trail the note points at). |
+| Chair attempt (`run-chair.js:61`) + classifier (`chair-fallback.js:87`) | a promoted chair leg is `ok`; its reasoning becomes the synthesis | `ok` gains the conjunct, so the walk continues (ch2 same chair, ch3 the ledger-promoted fallback, then give-up → `chair-failed`, exit 2 — the existing path). The classifier returns `{ outcome: 'no-output', reason: 'answered only in its reasoning channel (<r> reasoning / <o> output tokens[, finish '<f>']); no synthesis to read' }` — the closed `outcome` enum is untouched and the `chair-failed` `why` prints the reason with zero template edits. The `chair-attempt` row carries `promoted: true`. (R-X22) |
+| Debate defence (`run-debate.js:61-67`, `:84-88`) | a promoted defence is `leg`-truthy; its reasoning is parsed and, if it parses, applied | gate the PARSE, not the leg: a promoted defence is UNPARSEABLE — `parsed = { ok: false, byId: allNoResponse(expectedIds), errors: [{ code: 'REASONING_ONLY', detail: 'answered only in its reasoning channel' }] }`, `conformance: 'unstructured'`; the real leg document is KEPT so the `rebuttal` row carries `promoted: true` and its usage; the one bounded repair runs as for any unparseable defence; a promoted repair leg is unparseable the same way; `bad()` degrades the round through `conformance` (no `debate-degraded` wording change — "returned unstructured output" is what the parser saw). Every affected finding's original stands (`action: 'no-response'`, the existing enum). (R-X23) |
+| Debate re-vote (`run-debate-revote.js:240-245`, `:172-173`) | a promoted re-vote is `alive`; its reasoning is parsed | the same parse gate: `parsed` is the failed parse with `code: 'REASONING_ONLY'`, `conformance: 'unstructured'`, the ONE bounded repair runs, a promoted repair leg is unparseable the same way; the judge's provisional verdict stands. The file is at 300/300: every edit is in place and the `./promoted` require shares an existing require line. (R-X23) |
+| Fallback-substitution chain (`fanout-leg-fallback.js:203`) | a promoted attempt is `complete` and returned | UNCHANGED, ruled out: `isRetryable` is capacity-only, so a conjunct there changes nothing; a reasoning-only answer is not a capacity signal and earns no substitute. The council rejects the leg one layer up. (R-X24) |
+| Census predicates `isUnverifiedSeat` / `isRefusedSeat` (`verdict-seats-reviewed.js:77`, `:82`) | reachable only through a materialized review, so unreachable for a promoted row | both gain `&& r.promoted !== true` so the "unverified ≤ reviewed" invariant rests on the predicates, not on unreachability. (R-X25) |
+
+Out of this PR, filed: `src/sidecar/fanout-output.js:27` — the `amicus fanout` CLI prints a promoted
+leg's reasoning as its answer with no marker (R1's sibling on the fanout surface).
+
+Rulings, each with its cost if wrong:
+- R-X21 **The repair solos gate and stay silent at run time.** A failed repair is silent today by
+  design (its record is the `role: 'repair'` row and the seat's `unstructured` conformance); a
+  promoted repair joins that class, and its row says `promoted: true`. Cost: a reader of the run
+  learns the cause from the row, not from a `Notice:`.
+- R-X22 **The chair carries the cause in `chairAttempts[].reason`.** No new enum value, no new
+  channel, no template edit. Cost: none measured; a promoted chair costs the walk's two extra legs.
+- R-X23 **Debate treats a promoted answer as unparseable, keeps the leg, repairs once.** Cost: one
+  bounded repair leg is still paid for a promoted defence or re-vote — the same price an
+  unparseable one pays today.
+- R-X24 **The substitution chain is unchanged.** Cost: none — measured to change nothing.
+- R-X25 **The two census predicates gain the guard.** Cost: none — unreachable today.
