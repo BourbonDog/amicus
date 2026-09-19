@@ -39,7 +39,10 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   // lost reviewer by consumers that only ever meant seats (verdict-seat-loss.js
   // already gates the Stage-2 notes out of `seat-unbound` for the same reason).
   'stage2-judge',
-  // #257: a Stage-2 judge answered only in its reasoning channel and its fenced block still parsed — kind 'info', the adjudication counts.
+  // #257: a Stage-2 judge answered only in its reasoning channel and its adjudication
+  // was used — its own fenced block parsed, or the judge repair supplied one; kind
+  // 'info', the adjudication counts. (R-X13/R-X19: the note fires on BOTH success
+  // arms and its `why` names which — run-stage2-notes.js :: promotedJudgeNote.)
   'judge-reasoning-only',
   // #242 / spec §5 (v4.9.8): render-time rows the report derives from runStats
   // (council/report-lost-rows.js) — never emitted by the sink, so neither can
