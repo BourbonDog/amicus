@@ -11,7 +11,7 @@
 // review-<seat>.md was written by materializeReviews (run-launch.js:218)
 // BEFORE the repair loop runs, from that same original text, and no repair leg
 // is ever handed to materializeReviews. Stage 2 zips its bundle off `r.text`
-// (run-stage2.js:112), so the judges read the deliverable, not the JSON.
+// (run-stage2.js:113), so the judges read the deliverable, not the JSON.
 //
 // TWO named mutants, because the deliverable reaches Stage 2 down two
 // independent paths and no single mutant reaches both. Both measured 2026-08-25

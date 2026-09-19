@@ -260,6 +260,45 @@ describe('thin cross-review channel', () => {
         + '1 judge result predates the died marker (outcome unknown)');
   });
 
+  /**
+   * #257 (spec R4) — the FIFTH bucket. A judge leg whose engine answer had no
+   * text part comes back with its reasoning promoted to output (`promoted:
+   * true`), and run-stage2.js stamps `fromReasoning` on the result. When such a
+   * judge produces no parseable block, calling it "returned no parseable
+   * Stage-2 block" names the output contract for what is a missing-text-part
+   * fact about the engine — a different problem with a different fix, which is
+   * the same wrong-cause defect #202 and #251 item 3 split the other buckets to
+   * remove. The clause sits AFTER `unparseable` and is disjoint from it.
+   */
+  const fromReasoning = { ok: false, died: false, emptyAnswer: false, fromReasoning: true };
+
+  test('#257 a judge that answered only in its reasoning channel says THAT', () => {
+    expect(thinCrossReviewNote([{ ok: true }, fromReasoning]).why)
+      .toBe('1 answered only in the reasoning channel with no parseable block');
+    expect(thinCrossReviewNote([{ ok: true }, fromReasoning, fromReasoning]).why)
+      .toBe('2 answered only in the reasoning channel with no parseable block');
+  });
+
+  test('#257 the fifth bucket is disjoint, and the five sum to the failures', () => {
+    expect(thinCrossReviewNote([{ ok: true }, unparseable, fromReasoning]).why)
+      .toBe('1 returned no parseable Stage-2 block; '
+        + '1 answered only in the reasoning channel with no parseable block');
+    expect(thinCrossReviewNote([died, emptyAnswer, unparseable, fromReasoning, preMarker]).why)
+      .toBe('1 judge leg died before answering; 1 returned an empty answer; '
+        + '1 returned no parseable Stage-2 block; '
+        + '1 answered only in the reasoning channel with no parseable block; '
+        + '1 judge result predates the died marker (outcome unknown)');
+  });
+
+  test('#257 BYTE IDENTITY: nothing changes for a bench with no promoted judge', () => {
+    // spec R6/R9. The four pins above this one are the real guard — this one
+    // says out loud that they are expected to stay byte-identical forever.
+    expect(thinCrossReviewNote([{ ok: true }, unparseable, unparseable]).why)
+      .toBe('2 returned no parseable Stage-2 block');
+    expect(thinCrossReviewNote([{ ok: true }, died, unparseable]).why)
+      .toBe('1 judge leg died before answering; 1 returned no parseable Stage-2 block');
+  });
+
   test('a bench too small to cross-review says THAT, not something about the judges', () => {
     // usableJudges < 2 with nothing failed: a one-judge bench. The old sentence
     // asserted "the other judges produced no parseable block" about judges that

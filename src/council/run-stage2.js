@@ -23,15 +23,16 @@ const stage2 = require('./briefings-stage2');
 const { parseJudgeOutput } = require('./parse-stage2');
 const { sanitizeName, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
-// #219 (council, glm minor): `leg.error` is UNTRUSTED provider text. The house
-// sanitizer — one sanitizer, one dialect (utils/text-sanitize.js).
-const { collapseExcerpt } = require('../utils/text-sanitize');
 const { buildRunStatsEntry } = require('./run-assemble');
 // v4.8 PR3 Task 4: seat binding. artifactName is NOT re-exported from
 // run-launch.js (its exports stop at sanitizeName/isAbortExit), so it comes
 // straight from ./seats — that module requires nothing, zero cycle risk.
 const { artifactName } = require('./seats');
 const { orphanLegNote, bindPaddedWave } = require('./stage1-bind');
+// #257: the judge-death record moved to run-stage2-notes.js for the headroom the
+// third judge arm needed; `promoted` has ONE vocabulary, ./promoted (a leaf).
+const { judgeDeadNote, promotedJudgeNote } = require('./run-stage2-notes');
+const { isPromotedLeg } = require('./promoted');
 
 /**
  * Bind the -s2 wave's legs to the seats `reviews[]` holds and note the two
@@ -248,23 +249,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
       // cost-accounting degrade. An unparseable-but-ANSWERED judge is a
       // different fact and is deliberately excluded — it already darkens the
       // seat's row via `conformance: 'unstructured'`, and it is repairable.
-      if (legDied) {
-        ctx.degrade.note({
-          channel: 'stage2-judge',
-          what: `judge ${judge} did not adjudicate`,
-          // #219: `why` is PROSE — it renders into run.json, the report and the
-          // sticky PR comment — so the provider's text is collapsed to one
-          // bounded line. `data.reason` below stays VERBATIM on purpose: it is
-          // the machine surface, it is JSON (nothing to inject), and truncating
-          // it would cost exactly the fidelity a reader opens run.json for.
-          why: `its Stage-2 leg ended '${leg.status}'`
-            + (leg.error ? `: ${collapseExcerpt(leg.error, 200)}` : ''),
-          effect: `the cross-review was adjudicated by fewer than the ${judges.length} judges the `
-            + 'bench implies; the run continues and will exit degraded (2)',
-          data: { judge, seat: seat ? seat.id : null, waveId: `${o.runId}-s2`,
-            status: leg.status, reason: leg.error || null },
-        });
-      }
+      if (legDied) { ctx.degrade.note(judgeDeadNote({ judge, seat, leg, judgesCount: judges.length, runId: o.runId })); }
       judgeResults.push({ judge, seat, ok: false, order: null, orderSeats: null, adjudications: null,
         // #251 item 3: the ONE `legDied` predicate above, carried forward rather
         // than re-derived downstream. run.js's thin-cross-review note needs to
@@ -272,6 +257,10 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         // two different fixes — and this is the only place that fact is known.
         died: legDied,
         emptyAnswer: legAnsweredEmpty,
+        // #257 (spec R4): it answered only in its reasoning channel AND did not
+        // parse. Carried, not re-derived: the thin-cross-review reason names the
+        // reasoning channel rather than the output contract — a different fix.
+        fromReasoning: !legDied && isPromotedLeg(leg),
         conformance: leg.status === 'complete' ? 'unstructured' : 'clean',
         // #83 (v4.6 Plan 2): the judge's ORIGINAL Stage-2 wave leg, mirroring
         // Stage-1's convention (reviews carry the original wave leg even when a
@@ -282,6 +271,12 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         leg: leg || null });
       continue;
     }
+    // #257 (spec R4/R11): a parseable adjudication COUNTS — a judge has no retry,
+    // and rejecting a paid-for verdict would thin the cross-review for a reason
+    // that is not about what the judge decided. Kind 'info'; the exit code holds.
+    // `attempts` rides along: TWO paths reach here (R-X13), and the note must not
+    // claim the leg's own block parsed when the repair loop above supplied it.
+    if (isPromotedLeg(leg)) { ctx.degrade.note(promotedJudgeNote(judge, seat, leg, attempts)); }
     // v4.8 T3.2: labels.seatMap (anonymize.js :: assignLabels) threads through
     // so orderSeats can disambiguate a twin bench's `order`, which stays
     // alias-only. T3.3 wired it into street-cred.js :: rankPositions, via
@@ -290,7 +285,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     // `died: false` by construction: a dead leg's `parsed` is the DEAD_LEG arm,
     // which never becomes ok. Stamped anyway so every entry has the same shape.
     judgeResults.push({ judge, seat, ok: true, order, orderSeats, adjudications: parsed.adjudications,
-      died: false, emptyAnswer: false, conformance, leg: leg || null });
+      died: false, emptyAnswer: false, fromReasoning: isPromotedLeg(leg), conformance, leg: leg || null });
   }
   return { aborted: null, judgeResults, extraRows };
 }

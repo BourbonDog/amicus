@@ -1960,6 +1960,221 @@ SECOND LINE
     expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeUndefined();
   });
 
+  /**
+   * #257 (spec R4) — THE THIRD JUDGE ARM. A leg whose engine answer had no text
+   * part gets its reasoning promoted to output and comes back `promoted: true`.
+   * Stage 1 rejects such a review outright, because a retry can go and get a
+   * real one. A judge has NO retry: rejecting it would throw away an
+   * adjudication the run has already paid for and would thin the cross-review
+   * for a reason that has nothing to do with what the judge decided. So the rule
+   * is PARSE AS TODAY, and the outcome splits:
+   *   · the fenced block parses  → it is USED, and an `info` note on
+   *     `judge-reasoning-only` records that the deliberation went unread.
+   *   · it does not parse        → `ok:false` carrying `fromReasoning: true`, so
+   *     the thin-cross-review reason names the reasoning channel instead of the
+   *     generic "no parseable Stage-2 block" (two facts, two fixes).
+   *
+   * NAMED MUTANT — JUDGEPROMOTEDSILENT: delete the
+   * `if (isPromotedLeg(leg)) { ctx.degrade.note(promotedJudgeNote(...)); }` line
+   * from run-stage2.js. Reds (a) below.
+   * NAMED MUTANT — FROMREASONINGDROPPED: delete `fromReasoning:` from the
+   * `ok: false` push in run-stage2.js. Reds (b) below.
+   */
+  const promotedJudgeLeg = (summary, waveId, slot, tokens) => ({
+    ...mkLeg('gpt', summary, 'complete', waveId, slot),
+    promoted: true,
+    usage: { cost: { amount: 0.01, source: 'reported' }, tokens },
+  });
+
+  test('#257 (a): a PROMOTED judge whose block parses is USED, and noted as info', async () => {
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        promotedJudgeLeg(judgeOut(['Review A', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]),
+        opts.waveId, 2, { reasoning: 1200, output: 0 }),
+      ]),
+      onSolo: () => { throw new Error('a parseable judge must not be repaired'); },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.ok).toBe(true);
+    expect(gpt.adjudications).toEqual([{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]);
+    expect(gpt.order).toEqual(['gemini', 'gpt']);            // de-anonymized like any other judge
+    expect(gpt.fromReasoning).toBe(true);
+
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);                            // exactly one, for the one promoted judge
+    expect(notes[0].kind).toBe('info');
+    expect(notes[0].what).toBe('judge gpt answered in its reasoning channel');
+    expect(notes[0].why).toContain('1200 reasoning / 0 output tokens');
+    expect(notes[0].data).toMatchObject({ judge: 'gpt', reasoningTokens: 1200, outputTokens: 0 });
+    // R-X13: this judge's OWN block parsed on the first pass (onSolo throws, so
+    // no repair ran), so the note takes the parse arm and `repaired` is absent.
+    expect(notes[0].why.startsWith('its fenced block parsed and was used;')).toBe(true);
+    expect('repaired' in notes[0].data).toBe(false);
+    // It is not a death and it is not a loss — neither louder channel fires.
+    expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeUndefined();
+    // Parity: the judge that was NOT promoted carries the marker as false, never absent.
+    expect(judgeResults.find(j => j.judge === 'gemini').fromReasoning).toBe(false);
+  });
+
+  test('#257 (a2): through the REAL sink the info note survives and does NOT degrade the run', async () => {
+    // The sibling above drives makeCtx's raw collector, which accepts any
+    // channel string — the same false green #202's drift pin was filed about.
+    // Only the real sink proves `judge-reasoning-only` is REGISTERED (not
+    // rewritten to `internal`) and that kind 'info' leaves the exit code alone.
+    const { createDegradeSink } = require('../../src/council/run-degrade');
+    const sinkDir = fs.mkdtempSync(path.join(tmp, 'stage2-promoted-'));
+    const degraded = { value: false };
+    const sink = createDegradeSink({ runDir: sinkDir, degraded, write: () => {} });
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      degrade: sink,
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        promotedJudgeLeg(judgeOut(['Review A', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]),
+        opts.waveId, 2, { reasoning: 800, output: 0 }),
+      ]),
+      onSolo: () => { throw new Error('a parseable judge must not be repaired'); },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    const rec = sink.all().find(r => r.channel === 'judge-reasoning-only');
+    expect(rec).toBeDefined();                 // NOT rewritten to 'internal'
+    expect(rec.kind).toBe('info');
+    expect(degraded.value).toBe(false);        // => exit code unaffected
+  });
+
+  test('#257 (b): a PROMOTED judge with no parseable block is ok:false, fromReasoning, NOT dead', async () => {
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        // A promoted leg's summary is the REASONING text — long, present, and
+        // carrying no fenced block. It therefore enters the bounded repair loop
+        // exactly like any other unparseable answer; the repairs stay unusable.
+        promotedJudgeLeg('I should weigh Review A against Review B…',
+          opts.waveId, 2, { reasoning: 1500, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        const leg = mkLeg('gpt', 'still no stage-2 block', 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.ok).toBe(false);
+    expect(gpt.died).toBe(false);              // it answered — just not usably
+    expect(gpt.emptyAnswer).toBe(false);
+    expect(gpt.fromReasoning).toBe(true);
+    // Neither channel fires from Stage 2: it is not a death, and the block
+    // never parsed so there is no adjudication to note as used.
+    expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeUndefined();
+    expect(ctx._notes.find(n => n.channel === 'judge-reasoning-only')).toBeUndefined();
+
+    // …and the fact reaches the reason run.js prints, which is the whole point
+    // of carrying it on the result rather than re-deriving it downstream.
+    const { thinCrossReviewNote } = require('../../src/council/run-stage2-notes');
+    expect(thinCrossReviewNote(judgeResults).why)
+      .toBe('1 answered only in the reasoning channel with no parseable block');
+  });
+
+  /**
+   * Ruling R-X13 — THE THIRD PATH the spec missed. The note site sits after the
+   * `if (!parsed.ok) { … continue; }` block, so it is also reached when the
+   * promoted leg produced NO block and a bounded `-q<N>` repair supplied the
+   * parseable one. The note still fires (a silent success path fails the amicus
+   * bar), but its `why` must name what actually happened: the leg's own block
+   * never parsed — that is why the repair loop ran at all — and the adjudication
+   * used came from the repair solo. The judge is pushed `conformance: 'repaired'`.
+   *
+   * NAMED MUTANT — REPAIRARMDROPPED: make `why` unconditional in
+   * run-stage2-notes.js :: promotedJudgeNote (the attempts === 0 wording on both
+   * arms). Reds this test's `why`/`data.repaired` assertions.
+   */
+  test('#257 (b2): a promoted judge whose REPAIR parses is used, and still noted as info', async () => {
+    // The note keys on the ORIGINAL wave leg (#83's convention), so a judge
+    // that only became usable after a -q<N> repair is still a judge that
+    // answered in its reasoning channel.
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        promotedJudgeLeg('reasoning prose, no block', opts.waveId, 2, { reasoning: 90, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        const leg = mkLeg('gpt', judgeOut(['Review A', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.ok).toBe(true);
+    expect(gpt.conformance).toBe('repaired');
+    expect(gpt.fromReasoning).toBe(true);
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    // R-X13: NOT 'its fenced block parsed and was used' — it did not.
+    expect(notes[0].why.startsWith(
+      'its own answer carried no parseable block; the adjudication used came from '
+      + 'the judge repair (attempt ')).toBe(true);
+    expect(notes[0].data.repaired).toBe(true);
+    // The token counts still come off the ORIGINAL promoted leg, not the repair solo.
+    expect(notes[0].why).toContain('(90 reasoning / 0 output tokens)');
+    // `what` and `effect` do not fork — the same judge, the same consequence.
+    expect(notes[0].what).toBe('judge gpt answered in its reasoning channel');
+    expect(notes[0].effect).toBe('the adjudication counts; nothing else changes');
+  });
+
+  test('#257 (c) NEGATIVE PIN: a promoted judge that DIED is a death, never a reasoning note', async () => {
+    // `promoted` is emit-when-true and never minted on a death (spec R12), so
+    // this shape should be unreachable — pinned so the `!legDied` guard on
+    // `fromReasoning`, and the placement of the info note on the ok:true path,
+    // are both load-bearing rather than incidental.
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        { ...deadLeg('gpt', 'error', 'NO_OUTPUT_BACKSTOP: no output in 300s', opts.waveId, 2),
+          promoted: true },
+      ]),
+      onSolo: () => { throw new Error('a dead judge leg must not be repaired'); },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.died).toBe(true);
+    expect(gpt.fromReasoning).toBe(false);
+    expect(ctx._notes.find(n => n.channel === 'judge-reasoning-only')).toBeUndefined();
+    expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeDefined();
+  });
+
+  test('#257 BYTE PARITY: a bench with NO promoted judge raises no new note at all', async () => {
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+      ]),
+      onSolo: () => { throw new Error('no repairs expected'); },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    expect(ctx._notes).toEqual([]);
+    for (const j of judgeResults) { expect(j.fromReasoning).toBe(false); }
+  });
+
   test('#83: each judgeResult carries its leg for cost attribution', async () => {
     // Same ctx-construction pattern as the happy-path test above (no repairs;
     // both judges parse clean on the first pass) — driven the same way.

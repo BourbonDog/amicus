@@ -588,7 +588,7 @@ evals/
 | `council/run-stage1-launch.js` | Stage-1 launch pass for the council engine. | `launchStage1()` |
 | `council/run-stage1-rows.js` |  | `pushDeadSeatRows()`, `supersededRows()` |
 | `council/run-stage1-superseded.js` |  | `supersededRows()` |
-| `council/run-stage2-notes.js` |  | `thinCrossReviewNote()`, `thinCrossReviewWhy()`, `MIN_CROSS_REVIEW_JUDGES()` |
+| `council/run-stage2-notes.js` |  | `thinCrossReviewNote()`, `thinCrossReviewWhy()`, `MIN_CROSS_REVIEW_JUDGES()`, `judgeDeadNote()`, `promotedJudgeNote()` |
 | `council/run-stage2.js` |  | `runStage2()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `initCouncilRun()`, `checkpoint()` |
