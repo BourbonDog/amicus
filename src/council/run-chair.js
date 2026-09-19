@@ -202,7 +202,8 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     // it never supplies a terminal line; a ch4 that never launched gets no
     // row at all, because there is nothing billed to attribute. The push sits
     // AFTER the verdict parse so it stamps the ch4 leg's own measured outcome (PR 199 D1).
-    overallVerdict = parseChairTerminal((repair.leg && repair.leg.summary) || '', o.intent);
+    // #257 R-X27: a promoted verdict-line repair supplies no line — the existing no-parseable-VERDICT arm of chair-failed fires (named mutant "CH4PROMOTEDUSED", tests/council/run-chair.test.js)
+    overallVerdict = parseChairTerminal((repair.leg && !isPromotedLeg(repair.leg) && repair.leg.summary) || '', o.intent);
     chairConformance = overallVerdict ? 'repaired' : 'unstructured';
     if (repair.leg) {
       chairRows.push(buildRunStatsEntry({

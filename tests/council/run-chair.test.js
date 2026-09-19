@@ -883,4 +883,62 @@ describe('chair VERDICT-line repair (one re-prompt)', () => {
     expect(input.runStats.find(r => r.wasChair).conformance).toBe('unstructured');
     expect(readVerdict().overallVerdict).toBeNull();
   });
+
+  /**
+   * #257 R-X27 — the ninth reader, on this surface. `parseChairTerminal`
+   * (parse-stage2.js :: parseTerminalLine) scans EVERY line and keeps the LAST
+   * match, so a ch4 repair leg that answered only in its reasoning channel
+   * hands the council a verdict out of its own deliberation: `overallVerdict`
+   * is set and `chairConformance` reads 'repaired'. It is no repair. The
+   * summary is stood down at the parse, and the EXISTING no-parseable-line arm
+   * of chair-failed fires — the same outcome as a repair that simply never
+   * produced a line (the test two above this one).
+   */
+  const REASONING_TEXT = 'Let me carefully analyze the bench before I answer.';
+  // A ch4 repair leg carrying a VERDICT line inside its deliberation. `promoted`
+  // is the ONLY difference between the two tests below.
+  const ch4Leg = (promoted) => ({
+    ...mkLeg('deepseek', `${REASONING_TEXT}\nVERDICT: Ship it`, 'complete', 0.01, 'abc123-ch4'),
+    ...(promoted ? { promoted: true, finish: 'stop',
+      usage: { tokens: { reasoning: 40332, output: 1 }, cost: { amount: 0.01, source: 'reported' } } } : {}),
+  });
+  const ch4Script = (promoted) => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Great synthesis, no verdict line.', 'complete', 0.03)]);
+    script['abc123-ch4'] = () => okWave([ch4Leg(promoted)]);
+    return script;
+  };
+
+  test('a PROMOTED ch4 repair supplies no VERDICT line even though its reasoning contains one: overallVerdict null, the no-parseable-line chair-failed arm, exit 2 (#257 R-X27)', async () => {
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(ch4Script(true)), appendRunFn: jest.fn(), statsFn: () => [],
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);
+    expect(readVerdict().overallVerdict).toBeNull();
+    // The EXISTING arm, verbatim — R-X27 adds no wording (run-chair.js:221).
+    const chairFailed = (run.degrades || []).find(d => d.channel === 'chair-failed');
+    expect(chairFailed).toBeDefined();
+    expect(chairFailed.why).toBe('the chair ran but its output carried no parseable VERDICT: line');
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    expect(input.runStats.find(r => r.wasChair).conformance).toBe('unstructured');
+    // The repair LAUNCHED and was paid for, so its row stands — minted by
+    // buildRunStatsEntry from repair.leg, so `promoted: true` rides it unchanged.
+    const repairRows = input.runStats.filter(r => r.role === 'repair');
+    expect(repairRows).toHaveLength(1);
+    expect(repairRows[0]).toMatchObject({ model: 'deepseek', wasChair: false, status: 'complete',
+      waveId: 'abc123-ch4', conformance: 'unstructured', promoted: true });
+  });
+
+  test('positive control: the SAME ch4 summary on a NON-promoted leg still repairs — overallVerdict Ship it, conformance repaired, exit 0', async () => {
+    const { exitCode } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(ch4Script(false)), appendRunFn: jest.fn(), statsFn: () => [],
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(0);
+    expect(readVerdict().overallVerdict).toBe('Ship it');
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    expect(input.runStats.find(r => r.wasChair).conformance).toBe('repaired');
+    expect(input.runStats.find(r => r.role === 'repair').conformance).toBe('clean');
+  });
 });
