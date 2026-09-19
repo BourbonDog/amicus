@@ -116,14 +116,21 @@ function deriveSeatLoss({ runId, critic, degrades = [] } = {}) {
     // the old `ended '${status}'` template rendered the literal string
     // "ended 'null'". A status-carrying record keeps the original text.
     // #257: a promoted critic carries its reasoning-channel facts in `data.promoted`;
-    // the clause names them (R-X14). It reaches this branch and no other: a promoted leg
-    // has no `error`, so `data.reason` is null and `data.status` is 'complete'. The clause
-    // is the EMPTY STRING for every record without those facts, so this text is otherwise
-    // byte-identical. Named mutant "CRITICCLAUSEDROPPED" (tests/council/verdict-seat-loss.test.js).
+    // the clause names them (R-X14). BOTH arms append it (council r1, Minor — the status
+    // arm shipped with it and the null arm did not, which left the SL-2 record rendering
+    // the bare sentence while the facts sat in the very record it was built from):
+    //  - the status arm is reached by a still-dead promoted leg — it has no `error`, so
+    //    `data.reason` is null and `data.status` is 'complete';
+    //  - the null arm is the SL-2 reconciliation record (run-retry-notes.js's
+    //    missingLegStillDeadNote), whose `data.promoted` R-X14 restates from the FIRST
+    //    failure's facts precisely because there is no retry leg to read them off.
+    // The clause is the EMPTY STRING for every record without those facts, so both texts
+    // are otherwise byte-identical. Named mutants "CRITICCLAUSEDROPPED" (status arm) and
+    // "CRITICNULLARMDROPPED" (null arm), both in tests/council/verdict-seat-loss.test.js.
     reason: base.reason || (criticLeg
       ? (criticLeg.data.reason || (criticLeg.data.status
         ? `the critic leg ended '${criticLeg.data.status}' with no usable output${reasoningOnlyClause(criticLeg.data.promoted)}`
-        : 'the critic leg produced no usable output'))
+        : `the critic leg produced no usable output${reasoningOnlyClause(criticLeg.data.promoted)}`))
       : null),
     deadBenchSeats: [...base.deadBenchSeats,
       ...legs.filter(l => l.data.seat !== critic).map(l => l.data.seat)],

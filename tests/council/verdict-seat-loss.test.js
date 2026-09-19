@@ -200,6 +200,15 @@ describe('one implementation, re-exported (verdict-seat-loss extraction)', () =>
  * Named mutant CRITICCLAUSEDROPPED: delete
  * `${reasoningOnlyClause(criticLeg.data.promoted)}` from verdict-seat-loss.js's
  * status branch. Red set: the first test below.
+ *
+ * Council r1 (Minor): the sentence has TWO arms and only the status-carrying one
+ * learned the clause. The other is the SL-2 reconciliation record
+ * (`run-retry-notes.js :: missingLegStillDeadNote`), whose `data.status` is null
+ * because the retry produced no leg for the seat at all — and which R-X14 gave
+ * `data.promoted` from the FIRST failure's facts, so the facts were sitting in
+ * the record the bare sentence was rendered from. Named mutant
+ * CRITICNULLARMDROPPED: delete the clause call from the null-status branch. Red
+ * set: the third test below.
  */
 describe('#257 deriveSeatLoss names the reasoning channel for a promoted critic', () => {
   const { deriveSeatLoss } = require('../../src/council/verdict');
@@ -223,5 +232,22 @@ describe('#257 deriveSeatLoss names the reasoning channel for a promoted critic'
     const degrades = [rec({ seat: CRITIC_M, status: 'error', reason: null })];
     const s = deriveSeatLoss({ runId: 'r1', critic: CRITIC_M, degrades });
     expect(s.reason).toBe("the critic leg ended 'error' with no usable output");
+  });
+
+  test('the NULL-STATUS arm names the reasoning channel too (council r1)', () => {
+    // The exact shape `missingLegStillDeadNote` emits: no status to name, and
+    // `data.promoted` restating the first failure's facts (R-X14).
+    const degrades = [rec({ seat: CRITIC_M, status: null, reason: null, promoted: PROMOTED })];
+    const s = deriveSeatLoss({ runId: 'r1', critic: CRITIC_M, degrades });
+    expect(s.criticSeated).toBe(false);
+    expect(s.reason).toBe('the critic leg produced no usable output'
+      + ' — it answered only in its reasoning channel '
+      + "(40332 reasoning / 1 output tokens, finish 'stop'), which is not a review");
+  });
+
+  test('a NULL-STATUS record without promoted keeps the shipped sentence byte-identical', () => {
+    const degrades = [rec({ seat: CRITIC_M, status: null, reason: null })];
+    const s = deriveSeatLoss({ runId: 'r1', critic: CRITIC_M, degrades });
+    expect(s.reason).toBe('the critic leg produced no usable output');
   });
 });
