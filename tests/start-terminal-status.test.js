@@ -200,10 +200,30 @@ describe('start.js terminal state classification', () => {
 
   it('a completed result carrying variant reaches metadata through finalizeSession', async () => {
     const { metadata } = await runWith({
-      completed: true, timedOut: false, aborted: false, summary: 'done', taskId: 'test08', variant: 'low',
+      completed: true, timedOut: false, aborted: false, summary: 'done', taskId: 'test08', variant: 'low', promoted: true,
     });
     expect(metadata.status).toBe('complete');
     expect(metadata.variant).toBe('low');
     expect('variantUnverified' in metadata).toBe(false);
+    // #257: `promoted` rides the same opts passthrough as variant. Named mutant
+    // "STARTPROMOTEDDROPPED": drop `promoted` from start.js's finalizeSession opts.
+    expect(metadata.promoted).toBe(true);
+  });
+
+  // #257 / spec R12: a death never carries the fact. The engine's promoted-reasoning
+  // answer IS a usable deliverable, so the failed-with-no-usable-output return never
+  // emits it — and start.js's direct error-branch metadata writer therefore learns no
+  // key at all. That branch is a run of `meta.x = …` assignments, not an object literal,
+  // so the named mutant "ERRORPROMOTED" is: add
+  // `if (result && result.promoted === true) { meta.promoted = true; }` beside the
+  // `stampBackstop(meta, result)` line in start.js's error branch.
+  it('an ERROR result carrying promoted: true stamps NO promoted on metadata (spec R12)', async () => {
+    const { code, metadata } = await runWith({
+      completed: false, timedOut: false, aborted: false, summary: '', taskId: 'test09',
+      promoted: true, error: 'connection reset',
+    });
+    expect(code).toBe(1);
+    expect(metadata.status).toBe('error');
+    expect('promoted' in metadata).toBe(false);
   });
 });

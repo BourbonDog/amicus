@@ -148,6 +148,35 @@ describe('published result-family schemas validate real builder output (v4.0 §7
     }
   });
 
+  // #257: `promoted` is additive and emit-when-TRUE, declared beside `backstop`
+  // above. run.schema.json is OPEN at the top level (no additionalProperties:
+  // false), so an ajv pass alone proves nothing about a new key — the shape is
+  // pinned structurally AND shown to be enforced when the key is present, the
+  // same pairing the v4.9 W5.3 `intent` tests use further down this file.
+  test('run.schema.json accepts a recorded promoted: true, rejects promoted: false / "true"', () => {
+    const validate = compile('run');
+    const schema = JSON.parse(fs.readFileSync(path.join(SCHEMAS_DIR, 'run.schema.json'), 'utf-8'));
+    expect(schema.properties.promoted).toMatchObject({ type: 'boolean', enum: [true] });
+    expect(schema.required).not.toContain('promoted');
+
+    const doc = buildRunResult({
+      taskId: 'sch-run-2g',
+      metadata: { model: 'openrouter/deepseek/deepseek-v4', status: 'complete', promoted: true },
+      result: { completed: true }, summary: 'the model deliberated',
+    });
+    expect(doc.promoted).toBe(true);        // the builder really carried it
+    expectValid(validate, doc);
+    // Emit-when-true is the producer's rule; the schema enforces it for a document
+    // read back off disk or assembled by hand, where the builder's gate cannot.
+    expect(validate({ ...doc, promoted: false })).toBe(false);
+    expect(validate({ ...doc, promoted: 'true' })).toBe(false);
+    expect(validate({ ...doc, promoted: 1 })).toBe(false);
+    // …and a leg whose output was the model's answer carries no key at all.
+    const clean = buildRunResult({ taskId: 'sch-run-2h', metadata: { model: 'm', status: 'complete' } });
+    expect('promoted' in clean).toBe(false);
+    expectValid(validate, clean);
+  });
+
   test('wave.schema.json accepts buildWaveResult output', () => {
     const doc = buildWaveResult({
       waveId: 'sch-wave-1', legs: [runDoc],
@@ -275,6 +304,25 @@ describe('published council-family schemas validate real builder output (v4.0 §
 
   test('council-tally.schema.json accepts tally() output', () => {
     expectValid(compile('council-tally'), record);
+  });
+
+  // #257: a runStats row carries `promoted` verbatim from the leg document, beside
+  // `ttftMs`. That row has no `additionalProperties: false` (it never did), so ajv
+  // accepted the key before it was declared — the declaration is pinned
+  // structurally, and enforcement is shown on the values the producer never writes.
+  test('council-tally.schema.json accepts a runStats row carrying promoted: true, rejects false / "true"', () => {
+    const validate = compile('council-tally');
+    const schema = JSON.parse(fs.readFileSync(path.join(SCHEMAS_DIR, 'council-tally.schema.json'), 'utf-8'));
+    expect(schema.properties.runStats.items.properties.promoted).toMatchObject({ type: 'boolean', enum: [true] });
+
+    const withPromoted = (value) => ({
+      ...record,
+      runStats: record.runStats.map((row, i) => (i === 0 ? { ...row, promoted: value } : row)),
+    });
+    expectValid(validate, withPromoted(true));
+    expect(validate(withPromoted(false))).toBe(false);
+    expect(validate(withPromoted('true'))).toBe(false);
+    expectValid(validate, record); // …and a run with no promoted leg is untouched
   });
 
   test('council-verdict.schema.json accepts buildVerdict output (null and set overallVerdict)', () => {

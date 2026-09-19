@@ -129,6 +129,65 @@ describe('result-schema', () => {
       expect('variant' in bogus).toBe(false);
       expect('variantUnverified' in bogus).toBe(false);
     });
+
+    // #257: the rider block moved out to ./leg-riders.js (this file was 300/300,
+    // so `promoted` could not be a fourth field crammed onto the last rider line).
+    // An extraction is only safe if the DOCUMENT is unchanged, so this golden is
+    // the literal JSON.stringify of this exact call made BEFORE the move (run at
+    // 2826646d by `node .superpowers/sdd/golden-riders.js` — a scratch script under
+    // the ignored `.superpowers/` dir, NOT committed, so do not go looking for it;
+    // the golden was independently recomputed from `7e2fc83f:src/utils/result-schema.js`
+    // at the whole-branch review and matched). Both the
+    // key ORDER and every value are pinned; a reordered spread in leg-riders.js
+    // reds it even though `toEqual` would pass.
+    it('the rider extraction is byte-identical: the whole document, key order included (#257)', () => {
+      const doc = buildRunResult({
+        taskId: 'riders-golden',
+        metadata: {
+          model: 'openrouter/deepseek/deepseek-v4',
+          agent: 'plan',
+          createdAt: '2026-09-19T10:00:00.000Z',
+          completedAt: '2026-09-19T10:03:04.211Z',
+          status: 'complete',
+          opencodeSessionId: 'ses_257',
+          ttftMs: 1234,
+          finish: 'stop',
+          variant: 'low',
+          variantUnverified: true,
+          backstop: { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 },
+        },
+        result: { completed: true, timedOut: false, aborted: false },
+        summary: 'all good',
+        modelInput: 'deepseek',
+        sessionDir: '/sessions/riders-golden',
+      });
+      expect(JSON.stringify(doc)).toBe('{"schemaVersion":2,"type":"run","taskId":"riders-golden","waveId":null,"model":"openrouter/deepseek/deepseek-v4","modelInput":"deepseek","agent":"plan","status":"complete","summary":"all good","error":null,"createdAt":"2026-09-19T10:00:00.000Z","completedAt":"2026-09-19T10:03:04.211Z","durationMs":184211,"sessionDir":"/sessions/riders-golden","opencodeSessionId":"ses_257","ttftMs":1234,"finish":"stop","variant":"low","variantUnverified":true,"backstop":{"windowMs":480000,"firedAtMs":480722,"status":"busy","extended":true,"extendedToMs":912000},"usage":null}');
+    });
+
+    // #257: `promoted` rides the wave document's leg entry — emit-when-TRUE, placed
+    // after `backstop` and before `usage` (the rider block's tail). This literal is
+    // the projection that writes those leg entries, so a field not spelled here
+    // never reaches run.json. The coercion mutants live with ./leg-riders.js now
+    // (RIDERPROMOTEDCOERCED); this pins the WIRING through buildRunResult.
+    it('carries metadata.promoted emit-when-true, between backstop and usage (#257)', () => {
+      const REC = { windowMs: 480000, firedAtMs: 480722, status: 'busy', extended: true, extendedToMs: 912000 };
+      const doc = buildRunResult({
+        taskId: 'p1',
+        metadata: { ...baseMeta, backstop: REC, promoted: true },
+        result: { completed: true }, summary: 'the model deliberated',
+      });
+      expect(doc.promoted).toBe(true);
+      const keys = Object.keys(doc);
+      expect(keys.indexOf('promoted')).toBe(keys.indexOf('backstop') + 1);
+      expect(keys.indexOf('usage')).toBe(keys.indexOf('promoted') + 1);
+      // Emit-when-true: every leg that was not promoted stays byte-identical.
+      const without = buildRunResult({ taskId: 'p2', metadata: baseMeta, result: { completed: true }, summary: 'ok' });
+      expect('promoted' in without).toBe(false);
+      const bogus = buildRunResult({ taskId: 'p3', metadata: { ...baseMeta, promoted: 'true' }, result: { completed: true }, summary: 'ok' });
+      expect('promoted' in bogus).toBe(false);
+      const off = buildRunResult({ taskId: 'p4', metadata: { ...baseMeta, promoted: false }, result: { completed: true }, summary: 'ok' });
+      expect('promoted' in off).toBe(false);
+    });
   });
 
   describe('waveStatusFromLegs + waveExitCode', () => {

@@ -172,7 +172,13 @@ describe('W11 byte-order goldens — debateRunStatsRows (mk)', () => {
   // that already shipped — W13 sources it off the LEG inside buildRunStatsEntry, which
   // is exactly the "no caller change and none can be forgotten" shape that was supposed
   // to cover every call site. It does not cover this one, because `mk` builds its own
-  // five-field leg. If `mk` is ever widened, THIS is the pin that must be re-decided.
+  // five-field leg.
+  // ⚠️ #257 R-X26 WIDENED `mk` — by exactly ONE field, `promoted`, and this pin was
+  // re-decided rather than relaxed. `ttftMs` still does not reach a debate row and this
+  // assertion is unchanged; `promoted` is the deliberate, documented exception, because a
+  // reasoning-only leg is the CAUSE of that row's `no-response`/unstructured outcome and
+  // the row would otherwise hide it. G1f below is its pin. Any FURTHER widening is again a
+  // behaviour change needing its own decision — this test is still the one to re-decide.
   test('G1e — a leg-sourced entry field (`ttftMs`) does NOT reach a debate row', () => {
     const leg = { model: 'gemini', status: 'complete', durationMs: 50, usage: null,
       conformance: 'clean', waveId: 'r1-d1', resolvedModel: 'google/gemini-3.5-pro', ttftMs: 1234 };
@@ -186,6 +192,43 @@ describe('W11 byte-order goldens — debateRunStatsRows (mk)', () => {
         waveId: 'r1-d1', ttftMs: 1234 },
       model: 'gemini', role: 'rebuttal', conformance: 'clean' });
     expect(direct.ttftMs).toBe(1234);
+  });
+
+  // #257 R-X26: the ONE field G1e's rule is widened for. `promoted` is emit-when-TRUE (the
+  // literal), so a row built from a leg that is not promoted carries no key at all and stays
+  // byte-identical — which is why G1's golden above, whose census fixture has no promoted
+  // leg, did not move a byte when `mk` was widened.
+  // Named mutant DEBATEROWPROMOTEDDROPPED: delete the `...(l.promoted === true ? …)` spread
+  // from `mk`'s synthetic leg in src/council/debate.js. It reds this test and the three
+  // row assertions in tests/council/run-debate.test.js's two #257 R-X23 describes.
+  test('G1f — `promoted` is forwarded to every debate role, in buildRunStatsEntry\'s own slot', () => {
+    const promoted = (over) => ({ model: 'gemini', status: 'complete', durationMs: 50, usage: null,
+      conformance: 'unstructured', waveId: 'r1-d1', resolvedModel: 'google/gemini-3.5-pro',
+      promoted: true, ...over });
+    const rows = debateRunStatsRows({
+      defenseLegs: [promoted({})],
+      revoteLegs: [promoted({ model: 'gpt', waveId: 'r1-rv', resolvedModel: 'openai/gpt-5' })],
+      supersededLegs: [promoted({ waveId: 'r1-d1', conformance: 'unstructured' })],
+      repairLegs: [promoted({ model: 'qwen', waveId: 'r1-rv-qwenr' })],
+    });
+    expect(rows.map(r => r.role)).toEqual(['rebuttal', 'revote', 'superseded', 'repair']);
+    expect(rows.map(r => r.promoted)).toEqual([true, true, true, true]);
+    // The SLOT, not merely the presence: run-stats-entry.js emits `promoted` between
+    // `ttftMs` (absent on every debate row — G1e) and `usage`, so G7b's key-order
+    // invariant holds for a row that carries it.
+    for (const row of rows) {
+      const keys = Object.keys(row);
+      expect(keys.indexOf('promoted')).toBe(keys.indexOf('durationMs') + 1);
+      expect(keys.indexOf('usage')).toBe(keys.indexOf('promoted') + 1);
+    }
+    // Emit-when-TRUE: not `false`, not `null`, not a truthy non-literal.
+    for (const notTrue of [false, null, undefined, 'true', 1]) {
+      const [row] = debateRunStatsRows({ defenseLegs: [promoted({ promoted: notTrue })],
+        revoteLegs: [], supersededLegs: [], repairLegs: [] });
+      expect('promoted' in row).toBe(false);
+    }
+    // And the census's own rows — no promoted leg anywhere in it — carry no key.
+    expect(debateRunStatsRows(censusLists()).some(r => 'promoted' in r)).toBe(false);
   });
 });
 
@@ -298,6 +341,25 @@ describe('W11 byte-order goldens — buildRunStatsEntry (absence pins)', () => {
       + '"status":"complete","durationMs":12,"usage":{"input":3}}');
   });
 
+  // #257 — a NEW test, not an edit to G4b: the ruling keeps that golden
+  // byte-identical. Same shape as G4b, plus `ttftMs` and `promoted` on the leg,
+  // so the ordering of `promoted` against its immediate neighbors (`durationMs`
+  // before it, `usage` after it) is pinned byte-for-byte, not just asserted with
+  // `Object.keys`.
+  test('G4d — every optional field at once, INCLUDING ttftMs/promoted, byte-exact and order-exact (#257)', () => {
+    expect(JSON.stringify(buildRunStatsEntry({
+      leg: { model: 'google/gemini-3.5-pro', status: 'complete', durationMs: 12,
+        usage: { input: 3 }, waveId: 'r1-s1', summary: 'ignored', ttftMs: 4321, promoted: true },
+      model: 'gemini', role: 'seat', wasChair: true, conformance: 'repaired',
+      findingsUnverified: true, repairRefused: { code: 'X', detail: 'd' },
+      seat: { id: 'gemini#2', alias: 'gemini' },
+    }))).toBe(
+      '{"model":"gemini","role":"seat","wasChair":true,"conformance":"repaired",'
+      + '"findingsUnverified":true,"repairRefused":{"code":"X","detail":"d"},'
+      + '"waveId":"r1-s1","resolvedModel":"google/gemini-3.5-pro","seat":"gemini#2",'
+      + '"status":"complete","durationMs":12,"ttftMs":4321,"promoted":true,"usage":{"input":3}}');
+  });
+
   test('G4c — a leg\'s own `summary` is NEVER copied onto the row by the leg alone', () => {
     const row = buildRunStatsEntry({
       leg: { model: 'x/y', status: 'complete', durationMs: 1, usage: null, summary: 'prose' },
@@ -378,6 +440,18 @@ describe('W11 — the reach of fold diff #1 (consumer checks)', () => {
 
   test('G7b — tally-input rows now sit in the SAME key order tally.json already used', () => {
     const inputRow = debateRunStatsRows(legs)[0];
+    expect(Object.keys(inputRow)).toEqual(Object.keys(record([inputRow]).runStats[0]));
+  });
+
+  // #257 — G7b's invariant, a new case: a row that carries `promoted`. Built
+  // directly through buildRunStatsEntry rather than debateRunStatsRows, because
+  // `mk`'s own five-field leg does not copy leg-sourced fields at all — G1e
+  // already pins that boundary for `ttftMs`, and the same boundary holds here.
+  test('G7e — a promoted row also keeps its key order across tally\'s re-projection (#257)', () => {
+    const inputRow = buildRunStatsEntry({
+      leg: { model: 'openrouter/z-ai/glm-5.3', status: 'complete', durationMs: 5, usage: null,
+        promoted: true },
+      model: 'glm', role: 'seat', conformance: 'clean' });
     expect(Object.keys(inputRow)).toEqual(Object.keys(record([inputRow]).runStats[0]));
   });
 

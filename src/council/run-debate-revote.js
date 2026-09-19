@@ -23,7 +23,7 @@
  * `isAbortExit` comes from ./run-launch, NEVER from ./run-stages: run-stage2.js:12
  * records that taking it from run-launch.js "is what dissolved the old cycle
  * (v4.4.1 review F5)". Requiring ./run-stages from this new leaf would drag in
- * run-retry → run-retry-notes → briefings and re-open that cycle class.
+ * run-retry → run-retry-notes → briefings and re-open that cycle class. Every require below is a leaf, `./promoted` (#257 R-X23) included.
  */
 
 const fs = require('fs');
@@ -35,7 +35,7 @@ const { emitStageStarted } = require('../observe/events');
 const { isAbortExit } = require('./run-launch');
 // v4.8 PR3 Task 6: seat binding. ./seats requires NOTHING, so taking
 // sanitizeName straight from it (rather than run-launch's re-export) adds
-// zero cycle risk to this leaf — the same call run-stage2.js:30 makes.
+// zero cycle risk to this leaf — the same call run-stage2.js:27 makes.
 const { sanitizeName } = require('./seats');
 // v4.8 SI-27: the shared roster-padding core. ./stage1-bind requires only
 // ./seats, so this leaf stays cycle-free (see the module docblock's cycle-class
@@ -48,8 +48,8 @@ const { bindPaddedWave } = require('./stage1-bind');
 const { seatKey } = require('./run-retry-keys');
 // v4.9 W11 (PR1F-2): the ONE runStats row builder. ./run-stats-entry is REQUIRE-FREE
 // by design, so this leaf stays cycle-free — taking the same function off
-// ./run-assemble would drag that module's whole graph in.
-const { buildRunStatsEntry } = require('./run-stats-entry');
+// ./run-assemble would drag that module's whole graph in. #257 R-X23 shares the line below: ./promoted is REQUIRE-FREE too (its own docblock and pin), so the parse gate adds no cycle risk — and no LINE, to a file that is at 300/300.
+const { buildRunStatsEntry } = require('./run-stats-entry'); const { isPromotedLeg } = require('./promoted');
 
 /** Common launch options for every debate leg (judge-isolated `_scratch` cwd). */
 function legOpts(ctx, waveId) {
@@ -71,7 +71,7 @@ function legOpts(ctx, waveId) {
  * contract this argument already satisfies exactly (a raw leg doc: `.model` IS the
  * resolved id, `model` here IS the alias). `role` is deliberately not passed: which
  * role this is depends on which list the caller pushes it onto, and `debate.js :: mk`
- * stamps it. Its byte diff + the pin that all of it is invisible to `mk`: "FOLD DIFF #2" and G6, tests/council/runstats-byte-order.test.js.
+ * stamps it. Its byte diff + the pin that all of it is invisible to `mk`: "FOLD DIFF #2" and G6, tests/council/runstats-byte-order.test.js. #257 R-X26: this hands the REAL leg document straight to buildRunStatsEntry, so the row it returns ALREADY carries `promoted` — no spread is needed here, and `mk` forwarding the field (pin G1f) is what carries it on to the superseded/repair rows.
  */
 function legRow(model, leg, conformance) {
   return buildRunStatsEntry({ leg, model, conformance, summary: leg && leg.summary });
@@ -170,7 +170,7 @@ async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedI
   ctx.addWave(r2.wave);
   if (isAbortExit(r2.exitCode)) { return { aborted: r2.exitCode }; }
   const leg2 = r2.leg && r2.leg.status === 'complete' ? r2.leg : null;
-  parsed = leg2 ? parseRevote(leg2.summary, expectedIds) : parsed;
+  parsed = leg2 && !isPromotedLeg(leg2) ? parseRevote(leg2.summary, expectedIds) : parsed; // #257 R-X23 (named mutant "REVOTEREPAIRPROMOTEDUSED")
   const conformance = parsed.ok ? 'repaired' : 'unstructured';
   // Symmetric with runDefenseSolo's `if (leg2) { leg = leg2; }` — otherwise
   // revote-<model>.md and the runStats row keep the PRE-repair output.
@@ -239,9 +239,9 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     const key = seatKey(seat, judge);
     const alive = leg.status === 'complete' && leg.summary;
     let outLeg = leg;               // the leg actually recorded (post-repair when there is one)
-    let parsed = alive ? parseRevote(leg.summary, expectedIds)
-      : { ok: false, byId: {}, errors: [{ code: 'DEAD_LEG', detail: 'no summary' }] };
-    let conformance = alive ? 'clean' : 'unstructured';
+    let parsed = alive && !isPromotedLeg(leg) ? parseRevote(leg.summary, expectedIds)
+      : { ok: false, byId: {}, errors: [{ code: alive ? 'REASONING_ONLY' : 'DEAD_LEG', detail: alive ? 'answered only in its reasoning channel' : 'no summary' }] }; // #257 R-X23 (named mutant "REVOTEPROMOTEDUSED")
+    let conformance = alive && !isPromotedLeg(leg) ? 'clean' : 'unstructured';
     if (alive && !parsed.ok) {
       const rep = await repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedIds });
       if (rep.aborted) { return { aborted: rep.aborted }; }
@@ -292,7 +292,7 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     }
     legs.push({ model: judge, status: outLeg.status, durationMs: outLeg.durationMs, usage: outLeg.usage,
       conformance, summary: outLeg.summary || '', waveId: outLeg.waveId, seat,
-      ...(outLeg.model ? { resolvedModel: outLeg.model } : {}) });
+      ...(outLeg.model ? { resolvedModel: outLeg.model } : {}), ...(outLeg.promoted === true ? { promoted: true } : {}) }); // #257 R-X26 (named mutant "REVOTELITERALPROMOTEDDROPPED")
   }
   return { byJudge, legs, supersededLegs, repairLegs };
 }

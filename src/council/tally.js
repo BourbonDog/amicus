@@ -193,6 +193,8 @@ function tally(input) {
       // substantive tick was ever observed". The shared predicate is imported
       // rather than hand-spelled; this file has no require-free pin.
       ...(isMeasuredTtft(r.ttftMs) ? { ttftMs: r.ttftMs } : {}),
+      // #257: emit-when-true, in buildRunStatsEntry's own slot so G7b's key-order invariant holds.
+      ...(r.promoted === true ? { promoted: true } : {}),
       usage: r.usage || null,
     })),
     tierCounts: countTiers(outFindings),

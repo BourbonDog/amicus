@@ -109,6 +109,9 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     // every one of them forbidden by council-tally.schema.json's
     // `integer, minimum 0`.
     ...(Number.isInteger(ttftMs) && ttftMs >= 0 ? { ttftMs } : {}),
+    // #257: the engine answered only in its reasoning channel — carried off the leg document like
+    // ttftMs above, emit-when-TRUE (the literal), so every row without it is byte-identical.
+    ...(leg && leg.promoted === true ? { promoted: true } : {}),
     usage: (leg && leg.usage) || null,
   };
 }

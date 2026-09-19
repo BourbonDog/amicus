@@ -22,7 +22,10 @@
  * noise.
  */
 
-const { retryLegStillDeadNote } = require('../../src/council/run-retry-notes');
+// #257 added srcLegStillDeadNote and missingLegStillDeadNote — the other two
+// still-dead builders that name the reasoning channel.
+const { retryLegStillDeadNote, srcLegStillDeadNote, missingLegStillDeadNote }
+  = require('../../src/council/run-retry-notes');
 
 const COUNTS = { reviewed: 1, total: 3 };
 const UNIT = { waveId: 'r1-s1r1' };
@@ -148,5 +151,174 @@ describe('#256 retryLegStillDeadNote names the retry\'s own cause', () => {
     const n = note(undefined, { status: 'error', error: REFUSAL });
     expect(n.why).toBe('the leg ended \'unknown\' with no usable output; '
       + `its once-only retry also ended 'error': ${REFUSAL}`);
+  });
+});
+
+/**
+ * #257 — every still-dead announcement names the reasoning channel.
+ *
+ * A leg whose engine answer had no text part has its REASONING promoted to
+ * output (headless.js mints `promoted: true` off `mirror.promotedOutput`), so
+ * it arrives here `complete` with text and no error at all. The pre-#257
+ * sentence then read "the leg ended 'complete' with no usable output" and
+ * stopped — true, and useless: nothing said the model had in fact answered, in
+ * the wrong channel. One shared clause builder (`./promoted ::
+ * reasoningOnlyClause`) supplies the missing half, in the SAME position in all
+ * three builders: immediately after "with no usable output".
+ *
+ * ⚠️ BYTE-IDENTITY is the contract: the clause is the EMPTY STRING for any leg
+ * that is not promoted, so every pin above this block — and every pin in
+ * run-retry.test.js, run-stages.test.js and degrade-contract.test.js — is
+ * untouched. The non-promoted halves below are that guarantee stated as tests.
+ */
+describe('#257 the still-dead notes name the reasoning channel', () => {
+  const PROMOTED = { reasoning: 40332, output: 1, finish: 'stop' };
+  const CLAUSE = ' — it answered only in its reasoning channel '
+    + "(40332 reasoning / 1 output tokens, finish 'stop'), which is not a review";
+  // A real promoted leg document: `complete`, carrying its deliberation as text,
+  // with NO error — the shape `promotedFacts` reads its numbers off.
+  const promotedLeg = () => ({ modelInput: 'glm', status: 'complete',
+    summary: 'Let me carefully analyze the diff before I answer.',
+    promoted: true, finish: 'stop', usage: { tokens: { reasoning: 40332, output: 1 } } });
+  const plainLeg = () => ({ modelInput: 'glm', status: 'error', error: 'boom' });
+
+  describe('srcLegStillDeadNote (the retry WAVE produced no legs)', () => {
+    test('a promoted first leg gets the clause right after "with no usable output"', () => {
+      const n = srcLegStillDeadNote(promotedLeg(), UNIT, COUNTS);
+      expect(n.channel).toBe('dead-leg');
+      expect(n.why).toBe(`the leg ended 'complete' with no usable output${CLAUSE}; `
+        + 'its once-only retry wave produced no legs');
+    });
+
+    test('a leg that is NOT promoted is byte-identical to the pre-#257 wording', () => {
+      expect(srcLegStillDeadNote(plainLeg(), UNIT, COUNTS).why)
+        .toBe("the leg ended 'error': boom with no usable output; "
+          + 'its once-only retry wave produced no legs');
+    });
+  });
+
+  describe('retryLegStillDeadNote (the retry leg came back unusable)', () => {
+    const ffPromoted = { class: 'leg', status: 'complete', reason: null, promoted: PROMOTED };
+    const ffPlain = { class: 'leg', status: 'error', reason: BACKSTOP };
+
+    test('the FIRST leg was promoted: the clause rides the first half only', () => {
+      const n = note(ffPromoted, { status: 'timeout', error: null });
+      expect(n.why).toBe(`the leg ended 'complete' with no usable output${CLAUSE}; `
+        + "its once-only retry also ended 'timeout'");
+    });
+
+    test('the RETRY leg was promoted: the clause rides the second half only', () => {
+      const n = note(ffPlain, promotedLeg());
+      expect(n.why).toBe(`the leg ended 'error': ${BACKSTOP} with no usable output; `
+        + `its once-only retry also ended 'complete'${CLAUSE}`);
+    });
+
+    test('BOTH legs were promoted: the clause appears twice, once per attempt', () => {
+      const n = note(ffPromoted, promotedLeg());
+      expect(n.why).toBe(`the leg ended 'complete' with no usable output${CLAUSE}; `
+        + `its once-only retry also ended 'complete'${CLAUSE}`);
+      expect(n.why.split(CLAUSE)).toHaveLength(3);
+    });
+
+    test('the WAVE arm: a promoted retry leg is named there too', () => {
+      const n = note({ class: 'wave', waveId: 'r1-s1', reason: 'no legs produced' }, promotedLeg());
+      expect(n.why).toBe('its first wave r1-s1 produced no legs (no legs produced); '
+        + `its once-only retry leg ended 'complete' with no usable output${CLAUSE}`);
+    });
+
+    test('the MISSING arm: a promoted retry leg is named, and the channel stays seat-unbound', () => {
+      const n = note({ class: 'missing', waveId: 'r1-s1', reason: 'no leg returned' }, promotedLeg());
+      expect(n.channel).toBe('seat-unbound');
+      expect(n.why).toBe('no leg returned in wave r1-s1; its once-only retry leg ended '
+        + `'complete' with no usable output${CLAUSE}`);
+    });
+
+    test('neither leg promoted: byte-identical to the pre-#257 wording', () => {
+      expect(note(ffPlain, { status: 'timeout', error: null }).why)
+        .toBe(`the leg ended 'error': ${BACKSTOP} with no usable output; `
+          + "its once-only retry also ended 'timeout'");
+    });
+  });
+
+  describe('missingLegStillDeadNote (the retry returned no leg for this seat)', () => {
+    test('a promoted first failure gets the clause after "with no usable output"', () => {
+      const ff = { class: 'leg', status: 'complete', reason: null, promoted: PROMOTED };
+      const n = missingLegStillDeadNote('glm', ff, UNIT, COUNTS);
+      expect(n.channel).toBe('dead-leg');
+      expect(n.why).toBe(`the leg ended 'complete' with no usable output${CLAUSE}; `
+        + 'its once-only retry produced no leg for this seat');
+    });
+
+    test('a first failure that is NOT promoted is byte-identical to the pre-#257 wording', () => {
+      const ff = { class: 'leg', status: 'error', reason: BACKSTOP };
+      expect(missingLegStillDeadNote('glm', ff, UNIT, COUNTS).why)
+        .toBe(`the leg ended 'error': ${BACKSTOP} with no usable output; `
+          + 'its once-only retry produced no leg for this seat');
+    });
+  });
+});
+
+/**
+ * #257 R-X14 — the reasoning-channel facts ride `data` too, not just the prose.
+ *
+ * `verdict-seat-loss.js :: deriveSeatLoss` reads ONLY `record.data` (never the
+ * prose fields) and renders `seatLoss.reason` into verdict.json. On the srcLeg
+ * arm that surface was blind: a promoted leg has no `error`, so `data.reason` is
+ * null and `data.status` is 'complete', and that arm carries no `firstFailure`
+ * for a consumer to read the fact off. A promoted CRITIC therefore reached
+ * verdict.json as the bare, true and uninformative "ended 'complete' with no
+ * usable output". These pin the machine surface at the producer.
+ *
+ * Emit-when-promoted: a record for a leg that is not promoted carries NO
+ * `promoted` key at all — never `null`, never `false` — so every existing
+ * exact-shape assertion on these `data` objects is untouched.
+ *
+ * Named mutant DATAPROMOTEDDROPPED: delete `...(pf ? { promoted: pf } : {})`
+ * from `srcLegStillDeadNote`'s `data`. Red set: the first test below.
+ */
+describe('#257 R-X14 the still-dead notes carry the facts on data.promoted', () => {
+  const PROMOTED = { reasoning: 40332, output: 1, finish: 'stop' };
+  const promotedLeg = () => ({ modelInput: 'glm', status: 'complete',
+    summary: 'Let me carefully analyze the diff before I answer.',
+    promoted: true, finish: 'stop', usage: { tokens: { reasoning: 40332, output: 1 } } });
+  const plainLeg = () => ({ modelInput: 'glm', status: 'error', error: 'boom' });
+
+  test('srcLegStillDeadNote: a promoted leg puts its facts on data.promoted', () => {
+    const n = srcLegStillDeadNote(promotedLeg(), UNIT, COUNTS);
+    expect(n.data.promoted).toEqual(PROMOTED);
+    // The surface deriveSeatLoss actually reads, and why it was blind without it.
+    expect(n.data.reason).toBeNull();
+    expect(n.data.status).toBe('complete');
+  });
+
+  test('srcLegStillDeadNote: a leg that is NOT promoted carries no promoted key at all', () => {
+    const n = srcLegStillDeadNote(plainLeg(), UNIT, COUNTS);
+    expect('promoted' in n.data).toBe(false);
+    expect(n.data).toEqual({ seat: 'glm', seatId: null, status: 'error', reason: 'boom',
+      retryWaveId: 'r1-s1r1' });
+  });
+
+  test('retryLegStillDeadNote: data.promoted is the RETRY leg\'s facts (the first leg\'s ride on data.firstFailure.promoted)', () => {
+    const ff = { class: 'leg', status: 'complete', reason: null, promoted: PROMOTED };
+    const n = note(ff, promotedLeg());
+    expect(n.data.promoted).toEqual(PROMOTED);              // the retry leg's
+    expect(n.data.firstFailure.promoted).toEqual(PROMOTED); // the first leg's
+  });
+
+  test('retryLegStillDeadNote: a non-promoted retry leg carries no promoted key', () => {
+    const n = note({ class: 'leg', status: 'error', reason: BACKSTOP }, { status: 'timeout', error: null });
+    expect('promoted' in n.data).toBe(false);
+  });
+
+  test('missingLegStillDeadNote: data.promoted restates the FIRST failure\'s facts (there is no retry leg)', () => {
+    const ff = { class: 'leg', status: 'complete', reason: null, promoted: PROMOTED };
+    const n = missingLegStillDeadNote('glm', ff, UNIT, COUNTS);
+    expect(n.data.promoted).toEqual(PROMOTED);
+    expect(n.data.status).toBeNull();
+  });
+
+  test('missingLegStillDeadNote: a non-promoted first failure carries no promoted key', () => {
+    const ff = { class: 'leg', status: 'error', reason: BACKSTOP };
+    expect('promoted' in missingLegStillDeadNote('glm', ff, UNIT, COUNTS).data).toBe(false);
   });
 });

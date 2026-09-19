@@ -36,6 +36,7 @@ src/
 │   ├── parse-stage2.js
 │   ├── peer-split.js
 │   ├── presets-cli.js
+│   ├── promoted.js  # The ONE vocabulary for a leg that answered only in its reasoning channel (#257).
 │   ├── report-cost.js
 │   ├── report-html.js
 │   ├── report-lost-rows.js
@@ -261,6 +262,7 @@ src/
 │   ├── idle-watchdog.js  # IdleWatchdog - BUSY/IDLE state machine with self-terminating timer.
 │   ├── input-validators.js
 │   ├── known-flags.js
+│   ├── leg-riders.js  # The emit-when-set rider block every leg run document carries.
 │   ├── legacy-mcp-migration.js
 │   ├── lifecycle.js
 │   ├── live-probes.js  # The single gate on outbound AUTHENTICATED network probes made by diagnostics
@@ -558,6 +560,7 @@ evals/
 | `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()`, `parseChairAnswer()` |
 | `council/peer-split.js` |  | `peersOf()`, `unattributedPeerDrops()` |
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
+| `council/promoted.js` | The ONE vocabulary for a leg that answered only in its reasoning channel (#257). | `isPromotedLeg()`, `promotedFacts()`, `reasoningOnlyClause()` |
 | `council/report-cost.js` |  | `buildCostModel()` |
 | `council/report-html.js` |  | `renderHtml()` |
 | `council/report-lost-rows.js` |  | `lostRowsOf()` |
@@ -585,7 +588,7 @@ evals/
 | `council/run-stage1-launch.js` | Stage-1 launch pass for the council engine. | `launchStage1()` |
 | `council/run-stage1-rows.js` |  | `pushDeadSeatRows()`, `supersededRows()` |
 | `council/run-stage1-superseded.js` |  | `supersededRows()` |
-| `council/run-stage2-notes.js` |  | `thinCrossReviewNote()`, `thinCrossReviewWhy()`, `MIN_CROSS_REVIEW_JUDGES()` |
+| `council/run-stage2-notes.js` |  | `thinCrossReviewNote()`, `thinCrossReviewWhy()`, `MIN_CROSS_REVIEW_JUDGES()`, `judgeDeadNote()`, `promotedJudgeNote()` |
 | `council/run-stage2.js` |  | `runStage2()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `initCouncilRun()`, `checkpoint()` |
@@ -764,6 +767,7 @@ evals/
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
 | `utils/input-validators.js` |  | `validateStartInputs()`, `levenshteinDistance()`, `suggestCommand()` |
 | `utils/known-flags.js` |  | `getKnownFlags()`, `unknownFlags()`, `INTERNAL_FLAGS()` |
+| `utils/leg-riders.js` | The emit-when-set rider block every leg run document carries. | `legRiders()` |
 | `utils/legacy-mcp-migration.js` |  | `claudeCodeConfigPath()`, `claudeDesktopConfigPath()`, `inspectLegacySidecarEntry()`, `removeLegacySidecarEntry()`, `inspectAllLegacySidecarEntries()` |
 | `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `exitReaping()`, `ONE_SHOT_COMMANDS()` |
 | `utils/live-probes.js` | The single gate on outbound AUTHENTICATED network probes made by diagnostics | `enableLiveProbes()`, `liveProbesAllowed()`, `_resetLiveProbes()` |

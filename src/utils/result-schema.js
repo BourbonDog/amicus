@@ -8,8 +8,8 @@
  * split out so ./abort-result.js can depend on it without a circular require).
  */
 const { SCHEMA_VERSION } = require('./result-schema-version');
-// v4.9 W13 Task A (PR #207 round 3, B3): the shared ttftMs honesty predicate.
-const { isMeasuredTtft } = require('./ttft');
+// #257: the leg's emit-when-set rider block, extracted (this file sat at the 300 gate).
+const { legRiders } = require('./leg-riders');
 
 /** Leg/run statuses that count as terminal for wave aggregation. */
 const TERMINAL_STATUSES = ['complete', 'error', 'timeout', 'aborted', 'crashed', 'idle-timeout'];
@@ -50,7 +50,7 @@ function durationBetween(createdAt, completedAt) {
  *   metadata.pack was recorded (solo session launched via --pack), sourced straight off
  *   `metadata` like `usage`/`opencodeSessionId` already are (no new function parameter needed).
  *   `tag` (v4.7 F8/D13) is additive the same way — present only when metadata.tag was recorded.
- *   `finish` (#218 PR 3) likewise — the engine's finish reason for the leg's last assistant message. `variant` / `variantUnverified` (#218 PR 4) likewise — the effort level SENT, and whether the engine's catalogue knew the model when it was sent. `backstop` (#251 item 1, spec R5 amended) likewise — the no-output backstop's decision record, emit-when-VALID via isBackstopRecord (this literal is the projection that writes the wave document's leg entries, so a field not spelled here never reaches the wave document; a council run's `run.json` has no leg entries at all).
+ *   `finish` (#218 PR 3) likewise — the engine's finish reason for the leg's last assistant message. `variant` / `variantUnverified` (#218 PR 4) likewise — the effort level SENT, and whether the engine's catalogue knew the model when it was sent. `backstop` (#251 item 1, spec R5 amended) likewise — the no-output backstop's decision record, emit-when-VALID via isBackstopRecord. Those five riders, plus `promoted` (#257) — emit-when-true; the leg's output is the model's reasoning, promoted in place of an absent answer — are spelled ONE place, `src/utils/leg-riders.js :: legRiders`, spread into this literal (#257: this file was at the 300-line gate). This literal together with `leg-riders.js :: legRiders` is the projection that writes the wave document's leg entries — `pack` and `tag` are spelled here, the six riders there — so a field spelled in neither never reaches the wave document; a council run's `run.json` has no leg entries at all.
  */
 function buildRunResult({ taskId, metadata = {}, result = null, summary = null, modelInput = null, sessionDir = null, waveId = null, usage = null }) {
   const status = result ? statusFromResult(result) : (metadata.status || 'unknown');
@@ -73,16 +73,7 @@ function buildRunResult({ taskId, metadata = {}, result = null, summary = null, 
     durationMs,
     sessionDir,
     opencodeSessionId: metadata.opencodeSessionId || null,
-    // v4.9 W13 Task A (probe only, R12): time-to-first-token, sourced straight
-    // off `metadata` like `opencodeSessionId` above. ADDITIVE and emit-when-set
-    // (the pack/tag spread form below, not the `|| null` coercion above): an
-    // absent ttft means "no substantive tick was observed", which is neither
-    // zero nor null, so it must not be coerced into either. PR #207 round 3
-    // (B3): emit-when-VALID via the shared predicate — `metadata` is read off
-    // disk, so NaN/±Infinity/negatives/fractions all reach here. See ./ttft.js.
-    ...(isMeasuredTtft(metadata.ttftMs) ? { ttftMs: metadata.ttftMs } : {}),
-    ...(typeof metadata.finish === 'string' ? { finish: metadata.finish } : {}), // #218 PR 3: emit-when-set (named mutant FINISHCOERCED)
-    ...(typeof metadata.variant === 'string' ? { variant: metadata.variant } : {}), ...(metadata.variantUnverified === true ? { variantUnverified: true } : {}), ...(require('./no-output-backstop').isBackstopRecord(metadata.backstop) ? { backstop: metadata.backstop } : {}), // #218 PR 4: emit-when-sent (named mutants VARIANTCOERCED / UNVERIFIEDCOERCED); #251 item 1: the backstop record rides here too, lazily required and SHARING this line because the file is at the 300 gate (named mutant BACKSTOPCOERCED)
+    ...legRiders(metadata), // riders extracted to ./leg-riders (#257) — ttftMs, finish, variant, variantUnverified, backstop, promoted; the named mutants FINISHCOERCED / VARIANTCOERCED / UNVERIFIEDCOERCED / BACKSTOPCOERCED now live beside that module's tests
     usage: usage !== null ? usage : (metadata.usage || null),
     ...(metadata.pack ? { pack: metadata.pack } : {}),
     ...(metadata.tag ? { tag: metadata.tag } : {}),

@@ -20,6 +20,91 @@
  * problem, and the fixes are not the same (#202, #251 item 3).
  */
 
+// #219 (council, glm minor): `leg.error` is UNTRUSTED provider text. The house
+// sanitizer — one sanitizer, one dialect (utils/text-sanitize.js). It arrived
+// here with `judgeDeadNote` below (#257 headroom); `run-stage2.js` no longer
+// renders provider text itself, so the require moved with the only use.
+const { collapseExcerpt } = require('../utils/text-sanitize');
+// #257: ONE vocabulary for a promoted leg's facts. ./promoted is a LEAF (it
+// requires nothing), so this module stays cycle-free. Reading the token counts
+// through `promotedFacts` rather than off `leg.usage.tokens` by hand is what
+// keeps this module and ./promoted agreeing about the same field (R-X13).
+const { promotedFacts } = require('./promoted');
+
+/**
+ * #202's judge-death record, moved VERBATIM out of `run-stage2.js`'s leg loop
+ * (#257 headroom: that file stood at 298 of the 300-line gate). Zero behaviour —
+ * `tests/council/run-stage2-notes.test.js` pins it against the old inline object
+ * literal typed out by hand, and every `stage2-judge` assertion in
+ * `run-stages.test.js` is unchanged.
+ *
+ * ⚠️ No `kind`, deliberately: the record takes makeDegrade's default
+ * ('degrade'), so run-degrade.js's sink sets `degraded.value` and the run exits
+ * 2. That is the owner's call recorded at the call site — before it, a
+ * half-adjudicated verdict could exit 0.
+ * @param {{judge: string, seat: object|null, leg: object, judgesCount: number,
+ *   runId: string}} args
+ * @returns {{channel: string, what: string, why: string, effect: string, data: object}}
+ */
+function judgeDeadNote({ judge, seat, leg, judgesCount, runId }) {
+  return {
+    channel: 'stage2-judge',
+    what: `judge ${judge} did not adjudicate`,
+    // #219: `why` is PROSE — it renders into run.json, the report and the
+    // sticky PR comment — so the provider's text is collapsed to one bounded
+    // line. `data.reason` below stays VERBATIM on purpose: it is the machine
+    // surface, it is JSON (nothing to inject), and truncating it would cost
+    // exactly the fidelity a reader opens run.json for.
+    why: `its Stage-2 leg ended '${leg.status}'`
+      + (leg.error ? `: ${collapseExcerpt(leg.error, 200)}` : ''),
+    effect: `the cross-review was adjudicated by fewer than the ${judgesCount} judges the `
+      + 'bench implies; the run continues and will exit degraded (2)',
+    data: { judge, seat: seat ? seat.id : null, waveId: `${runId}-s2`,
+      status: leg.status, reason: leg.error || null },
+  };
+}
+
+/**
+ * #257 (spec R4/R11): a judge whose adjudication was USED although its leg
+ * answered only in its reasoning channel. Kind 'info' — nothing was lost and
+ * the exit code does not move; the only fact worth recording is that the
+ * deliberation the judge actually wrote was read by nobody. A judge has no
+ * retry, which is why this arm exists at all: Stage 1 can reject a promoted
+ * review and go get a real one, Stage 2 cannot.
+ *
+ * TWO ARMS, ruling R-X13. The spec (§3.5, R11) enumerated the promoted judge's
+ * outcomes as "block parses" / "block does not parse" and missed the third the
+ * runtime actually has: the leg produced no block and a bounded `-q<N>` REPAIR
+ * supplied the parseable one (`run-stage2.js:200-233`). The note fires on both
+ * success paths — a silent path is the failure this project treats as equal to
+ * a crash — so `why` names the TRUE cause per arm rather than asserting
+ * "its fenced block parsed and was used" about a leg whose block never parsed.
+ * `attempts` is the repair counter the caller already tracks; 0 means the leg's
+ * own block parsed on the first pass.
+ * @param {string} judge alias
+ * @param {object|null} seat
+ * @param {object} leg the judge's ORIGINAL Stage-2 wave leg (#83's convention)
+ * @param {number} [attempts=0] repair attempts that ran before it became usable
+ * @returns {{kind: string, channel: string, what: string, why: string, effect: string, data: object}}
+ */
+function promotedJudgeNote(judge, seat, leg, attempts = 0) {
+  // A non-promoted leg cannot reach here (the call site gates on isPromotedLeg),
+  // so the fallback is defensive only — it keeps the sentence renderable rather
+  // than throwing inside an announcement.
+  const { reasoning, output } = promotedFacts(leg) || { reasoning: 0, output: 0 };
+  const unread = `the deliberation itself was read by nobody (${reasoning} reasoning / ${output} output tokens)`;
+  return { kind: 'info', channel: 'judge-reasoning-only',
+    what: `judge ${judge} answered in its reasoning channel`,
+    why: attempts > 0
+      ? `its own answer carried no parseable block; the adjudication used came from the judge repair (attempt ${attempts}); ${unread}`
+      : `its fenced block parsed and was used; ${unread}`,
+    effect: 'the adjudication counts; nothing else changes',
+    // `repaired` is emit-when-true, house style: absent on the common arm, so a
+    // consumer reading the key is never reading a guess.
+    data: { judge, seat: seat ? seat.id : null, reasoningTokens: reasoning, outputTokens: output,
+      ...(attempts > 0 ? { repaired: true } : {}) } };
+}
+
 /** Thin-cross-review is announced below TWO usable judges: one judge is not a
  *  cross-review, it is a second opinion. Named so the threshold has one home. */
 const MIN_CROSS_REVIEW_JUDGES = 2;
@@ -28,26 +113,33 @@ const MIN_CROSS_REVIEW_JUDGES = 2;
  * Why fewer than two judges came back usable, in the judges' own terms.
  *
  * ⚠️ `died` and `emptyAnswer` are STAMPED by `run-stage2.js` beside its own
- * `legDied` predicate (`run-stage2.js:181`) and never re-derived here. That
+ * `legDied` predicate (`run-stage2.js:182`) and never re-derived here. That
  * predicate is `!(leg.status === 'complete' && leg.summary)` — died = NOT
  * (complete WITH a non-empty summary) — and it is the one this codebase already
  * shares between the DEAD_LEG classification and the `stage2-judge` degrade;
  * spelling it a third time is how the three would drift into disagreeing about
  * which judges died.
  *
- * FOUR buckets, not two (council #263 r1, D3 + A1):
+ * FIVE buckets, not two (council #263 r1, D3 + A1; #257 added `fromReasoning`):
  *   · died        — the leg never came back at all.
  *   · emptyAnswer — it ran to 'complete' and said NOTHING. `legDied` is true for
  *                   this too, but "died before answering" points a CI reader at
  *                   a dead process when the process finished (D3).
  *   · unparseable — it answered, unusably.
+ *   · fromReasoning — #257 (spec R4): its engine answer had no text part, so the
+ *                   leg came back `promoted: true` and run-stage2.js stamped
+ *                   `fromReasoning`. A SUBSET of unparseable, split out for the
+ *                   same reason the other three were: "returned no parseable
+ *                   Stage-2 block" names the output contract for what is a
+ *                   missing-text-part fact about the engine, and the fixes differ.
  *   · pre-marker  — `died` is ABSENT: a Stage-2 checkpoint written by a build
  *                   older than #251 and resumed by this one. Absent is not
  *                   false; counting it as "no parseable block" would be a claim
  *                   about a judge that may well have died — the same wrong-cause
  *                   defect this note exists to remove (A1). It gets a bucket
  *                   that says only what is known: nothing.
- * @param {Array<{ok: boolean, died?: boolean, emptyAnswer?: boolean}>} judgeResults
+ * @param {Array<{ok: boolean, died?: boolean, emptyAnswer?: boolean,
+ *   fromReasoning?: boolean}>} judgeResults
  * @returns {string}
  */
 function thinCrossReviewWhy(judgeResults) {
@@ -55,11 +147,15 @@ function thinCrossReviewWhy(judgeResults) {
   const preMarker = failed.filter(j => j.died === undefined).length;
   const empty = failed.filter(j => j.died === true && j.emptyAnswer === true).length;
   const died = failed.filter(j => j.died === true).length - empty;
-  const unparseable = failed.filter(j => j.died === false).length;
+  const fromReasoning = failed.filter(j => j.died === false && j.fromReasoning === true).length;
+  const unparseable = failed.filter(j => j.died === false).length - fromReasoning;
   const clauses = [];
   if (died > 0) { clauses.push(`${died} judge leg${died === 1 ? '' : 's'} died before answering`); }
   if (empty > 0) { clauses.push(`${empty} returned an empty answer`); }
   if (unparseable > 0) { clauses.push(`${unparseable} returned no parseable Stage-2 block`); }
+  if (fromReasoning > 0) {
+    clauses.push(`${fromReasoning} answered only in the reasoning channel with no parseable block`);
+  }
   if (preMarker > 0) {
     clauses.push(`${preMarker} judge result${preMarker === 1 ? '' : 's'} `
       + `predate${preMarker === 1 ? 's' : ''} the died marker (outcome unknown)`);
@@ -79,7 +175,8 @@ function thinCrossReviewWhy(judgeResults) {
  * The thin-cross-review degrade, or null when the cross-review was not thin.
  * Returning the record (rather than noting it) keeps this pure and keeps
  * `run-degrade.js` the only place a degrade is announced.
- * @param {Array<{ok: boolean, died?: boolean, emptyAnswer?: boolean}>} judgeResults
+ * @param {Array<{ok: boolean, died?: boolean, emptyAnswer?: boolean,
+ *   fromReasoning?: boolean}>} judgeResults
  * @returns {{channel: string, what: string, why: string, effect: string}|null}
  */
 function thinCrossReviewNote(judgeResults) {
@@ -94,4 +191,7 @@ function thinCrossReviewNote(judgeResults) {
   };
 }
 
-module.exports = { thinCrossReviewNote, thinCrossReviewWhy, MIN_CROSS_REVIEW_JUDGES };
+module.exports = {
+  thinCrossReviewNote, thinCrossReviewWhy, MIN_CROSS_REVIEW_JUDGES,
+  judgeDeadNote, promotedJudgeNote,
+};

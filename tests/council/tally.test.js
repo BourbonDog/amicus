@@ -850,3 +850,33 @@ describe('tally() — the TTFT probe reaches the published artifacts (#202)', ()
       .toEqual(['model', 'role', 'wasChair', 'conformance', 'status', 'durationMs', 'usage']);
   });
 });
+
+/**
+ * #257 — `promoted` rides tally's re-projection allowlist, in
+ * buildRunStatsEntry's own slot (between `ttftMs`/`durationMs` and `usage`; see
+ * G4d/G7e, tests/council/runstats-byte-order.test.js). Emit-when-true: the
+ * allowlist spread mirrors the producer's own `=== true` gate, so a truthy
+ * stand-in that somehow reached a row (a hand-edited artifact, an older
+ * producer) is dropped here too, not merely never produced.
+ *
+ * Named mutant TALLYPROMOTEDDROPPED — delete the allowlist line in tally.js.
+ */
+describe('tally() — promoted rides the allowlist (#257)', () => {
+  const baseInput = {
+    meta: { runId: 'r', runType: 'review', date: 'd', models: ['glm'], chair: 'gpt', claudeInCouncil: false },
+    findings: [], rankings: [], adjudications: [],
+  };
+  const seatRow = extra => ({ model: 'glm', role: 'seat', wasChair: false, conformance: 'clean',
+    status: 'complete', durationMs: 342229, usage: null, ...extra });
+
+  test('tally keeps promoted: true on a runStats row and drops promoted: false / "true"', () => {
+    const record = tally({ ...baseInput, runStats: [seatRow({ promoted: true })] });
+    expect(record.runStats[0].promoted).toBe(true);
+
+    for (const bad of [false, 'true']) {
+      const rec = tally({ ...baseInput, runStats: [seatRow({ promoted: bad })] });
+      expect(`promoted=${String(bad)} -> ${'promoted' in rec.runStats[0]}`)
+        .toBe(`promoted=${String(bad)} -> false`);
+    }
+  });
+});

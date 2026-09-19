@@ -122,7 +122,7 @@ describe('launchWave (DI over runFanout)', () => {
     const seen = [];
     const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
     // Real agents (not null): the agent NAME and the serverAgents CONFIG are
-    // two independent things in the code (run-launch.js:112-131) — `agent` is
+    // two independent things in the code (run-launch.js:120-134) — `agent` is
     // `opts.agent || agentOverride() || (agents ? … : 'Plan')`, so the override
     // wins the name regardless of `agents`; `serverAgents` is forwarded
     // whenever `agents` itself is truthy, with no dependency on how `agent`
@@ -135,7 +135,7 @@ describe('launchWave (DI over runFanout)', () => {
     expect(seen[0].agent).toBe('Build');
     // The launcher DOES still forward them under an override: `...(agents ? {
     // serverAgents: agents } : {})` is gated only on `agents`, never on how
-    // `agent` resolved (verified against run-launch.js:112-131, then here).
+    // `agent` resolved (verified against run-launch.js:120-134, then here).
     expect(seen[0].serverAgents).toBe(agents);
   });
 
@@ -239,6 +239,43 @@ describe('materializeReviews', () => {
   test('sanitizes provider/model ids in filenames', () => {
     const out = materializeReviews(tmp, [mkLeg('openrouter/deepseek/deepseek-chat', 'text')]);
     expect(path.basename(out[0].file)).toBe('review-openrouter-deepseek-deepseek-chat.md');
+  });
+
+  /**
+   * #257 — the council's decision, and the ONE gate that makes it.
+   *
+   * A promoted leg is `complete` and carries text, so every test before this one
+   * passes it: the text is the model's own deliberation, promoted to output by
+   * conversation-mirror.js because no answer text part ever arrived. Rejecting it
+   * HERE is the whole mechanism — run-stages.js's `deadLegs0` is "every leg
+   * materializeReviews rejected", so this skip is what routes the seat into the
+   * once-only retry, and run-retry.js:186's `usable` set is this same function
+   * over the retry wave, so it is also the retry's own heal test.
+   *
+   * Named mutant PROMOTEDKEPT: delete `if (isPromotedLeg(leg)) { continue; }`
+   * from src/council/run-launch.js :: materializeReviews. Red set: the first test
+   * below, plus the Stage-1 tripwire in tests/council/run-stages.test.js
+   * ('the reviews handed onward carry no promoted leg and no reasoning text').
+   */
+  test('a complete leg carrying promoted: true is SKIPPED and no review file is written — its text is not a review (#257)', () => {
+    const legs = [
+      mkLeg('gemini', 'gemini review text'),
+      { ...mkLeg('gpt', 'Let me carefully analyze the diff before I answer.'),
+        promoted: true, finish: 'stop', usage: { tokens: { reasoning: 40332, output: 1 } } },
+    ];
+    const out = materializeReviews(tmp, legs);
+    expect(out.map(m => m.model)).toEqual(['gemini']);
+    expect(out.some(m => m.leg.promoted === true)).toBe(false);
+    expect(fs.existsSync(path.join(tmp, 'review-gpt.md'))).toBe(false);
+  });
+
+  test('a leg with promoted: false, "true" or 1 is still materialized (the literal-true discipline, #257)', () => {
+    const legs = [
+      { ...mkLeg('gemini', 'gemini review text'), promoted: false },
+      { ...mkLeg('gpt', 'gpt review text'), promoted: 'true' },
+      { ...mkLeg('qwen', 'qwen review text'), promoted: 1 },
+    ];
+    expect(materializeReviews(tmp, legs).map(m => m.model)).toEqual(['gemini', 'gpt', 'qwen']);
   });
 });
 

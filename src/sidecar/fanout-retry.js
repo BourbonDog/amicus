@@ -149,7 +149,7 @@ async function retryFailedWave(origWaveId, project, opts = {}) {
   // and threads retryOfWaveId onto each leg so Task 1's append tags the rows.
   // `models` MUST be the comma-separated STRING runFanout's own validator
   // expects (parseModelsList/validateFanoutModels) — an array silently fails
-  // every leg pre-flight (BAD_ARGS), matching run-launch.js:41's precedent.
+  // every leg pre-flight (BAD_ARGS), matching run-launch.js:135's precedent.
   // Strip our own injection key so it is never forwarded.
   const fanoutOpts = {
     ...opts, models: models.join(','), prompt: briefing, project, waveId: newWaveId, retryContexts, retryOfWaveId: origWaveId,

@@ -364,6 +364,53 @@ describe('Session Utils', () => {
     });
   });
 
+  // #257: opts.promoted follows the same emit-when-true / delete-when-absent rule as
+  // finish, variant and backstop — the engine answered only in its reasoning channel and
+  // the mirror promoted it. This is the COMPLETE / timed-out / aborted path; a death never
+  // carries the fact (spec R12), so the four error branches learn no key.
+  describe('finalizeSession opts.promoted (#257)', () => {
+    let sessDir;
+
+    beforeEach(() => {
+      detectConflicts.mockReturnValue([]);
+      sessDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'finalize-promoted-'));
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
+    });
+
+    afterEach(() => {
+      fs.rmSync(sessDir, { recursive: true, force: true });
+    });
+
+    const readSaved = () => JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+
+    it('stamps metadata.promoted when opts.promoted is true', () => {
+      // Named mutant "SOLOPROMOTEDDROPPED": drop the stamp — a promoted answer records nothing.
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [] };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete', promoted: true });
+      expect(readSaved().promoted).toBe(true);
+    });
+
+    it('carries no promoted key when opts.promoted is absent', () => {
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [] };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete' });
+      expect('promoted' in readSaved()).toBe(false);
+    });
+
+    it('DELETES a stale promoted when opts carries none — a resumed run reuses the same metadata', () => {
+      // Named mutant "STALEPROMOTED": drop the `else { delete metadata.promoted; }` — the
+      // previous attempt's promotion rides this one (council #232 r1 B1, again).
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [], promoted: true };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete' });
+      expect('promoted' in readSaved()).toBe(false);
+    });
+
+    it('does not stamp a non-true promoted — emit-when-true, never false (spec R6)', () => {
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [] };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete', promoted: false });
+      expect('promoted' in readSaved()).toBe(false);
+    });
+  });
+
   describe('outputSummary', () => {
     it('wraps the summary in the untrusted_sidecar_output fence (B03)', () => {
       const spy = jest.spyOn(console, 'log').mockImplementation(() => {});

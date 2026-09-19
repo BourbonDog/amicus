@@ -22,7 +22,7 @@
 (function () {
   'use strict';
 
-  // ⚠️ DE-ROT (F61): keep this local mirror of the shipped sanitizeName (src/council/run-launch.js:92-94)
+  // ⚠️ DE-ROT (F61): keep this local mirror of the shipped sanitizeName (src/council/seats.js:20-22, re-exported from run-launch.js since v4.8 PR1)
   // — pinned with an equality assert in tests/electron/workspace-ui-static.test.js. Do NOT rebuild
   // the lists from Object.keys(state.detail.artifacts): filenames carry the SANITIZED id, which cannot be
   // inverted back to the model id that keys state.labelByModel, so blind labels would break.

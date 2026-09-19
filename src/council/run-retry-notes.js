@@ -9,7 +9,14 @@
  * `ctx.degrade.note(...)` (D5 final-failure granularity, spec §5). The heal
  * note is built inline in run-retry.js's orchestrator (it is the one place
  * that decides recovery, and stays small).
+ *
+ * #257: the ONE leaf require. `reasoningOnlyClause` is appended after "with no
+ * usable output" at every site below, and returns the EMPTY STRING for a leg
+ * that is not promoted — so every announcement for every other leg stays
+ * byte-identical. Both are re-exported so run-retry.js and run-stages.js, which
+ * already destructure this module, take the clause from one place.
  */
+const { promotedFacts, reasoningOnlyClause } = require('./promoted');
 
 /** D-effect parity: still-dead leg notes reuse today's count phrasing, with the
  *  FIRST attempt's counts — the why carries the retry story (spec §5). */
@@ -123,15 +130,25 @@ function skippedWaveNote(d) {
  * `o.critic`, an alias, so re-pointing it breaks critic-loss detection. Cited by SYMBOL, not
  * line: the old `verdict.js:72` had already slid one line off that comparison, and the
  * function has since left verdict.js entirely. Add a key; never repurpose that one.
+ *
+ * #257 R-X14: the reasoning-channel facts ride `data.promoted` as well as the prose. This
+ * is the ONE record class where the fact is otherwise unrecoverable — a promoted leg has no
+ * `error`, so `data.reason` is null and `data.status` is 'complete', and this arm carries no
+ * `firstFailure` for a consumer to read it off. `deriveSeatLoss` renders `data` and nothing
+ * else, so without this key a promoted CRITIC reaches verdict.json as the bare, true and
+ * uninformative "ended 'complete' with no usable output". Emit-when-promoted, so every
+ * non-promoted record is byte-identical. Named mutant "DATAPROMOTEDDROPPED"
+ * (tests/council/run-retry-notes.test.js).
  */
 function srcLegStillDeadNote(leg, unit, counts, seatId = null) {
   const seat = leg.modelInput || leg.model;
+  const pf = promotedFacts(leg); // named in the `why` AND carried in `data` — one read
   return { channel: 'dead-leg', what: `seat ${seat} did not review`,
-    why: `the leg ended '${leg.status}'${leg.error ? `: ${leg.error}` : ''} with no usable output; `
+    why: `the leg ended '${leg.status}'${leg.error ? `: ${leg.error}` : ''} with no usable output${reasoningOnlyClause(pf)}; `
       + 'its once-only retry wave produced no legs',
     effect: legEffect(counts),
     data: { seat, seatId: seatId || null, status: leg.status, reason: leg.error || null,
-      retryWaveId: unit.waveId } };
+      retryWaveId: unit.waveId, ...(pf ? { promoted: pf } : {}) } };
 }
 
 /**
@@ -166,18 +183,23 @@ function retryLegStillDeadNote(seat, ff, retryLeg, unit, counts) {
   const retryErr = retryRaw.trim();
   const firstReason = (ff && typeof ff.reason === 'string') ? ff.reason.trim() : '';
   const retryCause = (retryErr && retryErr !== firstReason) ? `: ${retryRaw}` : '';
+  // #257: each half names its OWN leg's reasoning channel — the first failure's facts ride
+  // `ff.promoted` (minted in run-retry-group.js), the retry leg's are read off the leg here.
+  // R-X14: `data.status`/`data.reason` describe the RETRY leg, so `data.promoted` does too —
+  // the first leg's facts are already on `data.firstFailure.promoted`. One read, both uses.
+  const retryPf = promotedFacts(retryLeg);
   const why = ff && ff.class === 'wave'
     ? `its first wave ${ff.waveId} produced no legs (${ff.reason}); `
-      + `its once-only retry leg ended '${retryLeg.status}'${retryCause} with no usable output`
+      + `its once-only retry leg ended '${retryLeg.status}'${retryCause} with no usable output${reasoningOnlyClause(retryPf)}`
     : missing
       ? `${ff.reason} in wave ${ff.waveId}; its once-only retry leg ended `
-        + `'${retryLeg.status}'${retryCause} with no usable output`
+        + `'${retryLeg.status}'${retryCause} with no usable output${reasoningOnlyClause(retryPf)}`
       : `the leg ended '${ff ? ff.status : 'unknown'}'${ff && ff.reason ? `: ${ff.reason}` : ''} `
-        + `with no usable output; its once-only retry also ended '${retryLeg.status}'${retryCause}`;
+        + `with no usable output${reasoningOnlyClause(ff && ff.promoted)}; its once-only retry also ended '${retryLeg.status}'${retryCause}${reasoningOnlyClause(retryPf)}`;
   return { channel: missing ? 'seat-unbound' : 'dead-leg', what: `seat ${seat} did not review`, why,
     effect: legEffect(counts),
     data: { seat, status: retryLeg.status, reason: retryLeg.error || null,
-      firstFailure: ff, retryWaveId: unit.waveId } };
+      firstFailure: ff, retryWaveId: unit.waveId, ...(retryPf ? { promoted: retryPf } : {}) } };
 }
 
 /**
@@ -195,11 +217,14 @@ function missingLegStillDeadNote(seat, ff, unit, counts) {
     ? `its first wave ${ff.waveId} produced no legs (${ff.reason})`
     : missing
       ? `${ff.reason} in wave ${ff.waveId}`
-      : `the leg ended '${ff ? ff.status : 'unknown'}'${ff && ff.reason ? `: ${ff.reason}` : ''} with no usable output`;
+      : `the leg ended '${ff ? ff.status : 'unknown'}'${ff && ff.reason ? `: ${ff.reason}` : ''} with no usable output${reasoningOnlyClause(ff && ff.promoted)}`;
   return { channel: missing ? 'seat-unbound' : 'dead-leg', what: `seat ${seat} did not review`,
     why: `${fact}; its once-only retry produced no leg for this seat`,
     effect: legEffect(counts),
-    data: { seat, status: null, reason: null, firstFailure: ff, retryWaveId: unit.waveId } };
+    // #257 R-X14: there IS no retry leg here, so `data.promoted` restates the FIRST failure's
+    // facts — the same ones `data.status`/`data.reason` describe (both null on this arm).
+    data: { seat, status: null, reason: null, firstFailure: ff, retryWaveId: unit.waveId,
+      ...(ff && ff.promoted ? { promoted: ff.promoted } : {}) } };
 }
 
 /**
@@ -223,4 +248,8 @@ function truncatedReviewNote(seat, leg) {
 }
 
 module.exports = { waveStillDeadNote, skippedWaveNote, srcLegStillDeadNote,
-  retryLegStillDeadNote, missingLegStillDeadNote, truncatedReviewNote };
+  retryLegStillDeadNote, missingLegStillDeadNote, truncatedReviewNote,
+  // #257: re-exported so the two files that already destructure this module —
+  // run-retry.js (the heal note) and run-stages.js (the skipped-leg note) —
+  // take the clause from ONE place rather than each requiring ./promoted.
+  reasoningOnlyClause, promotedFacts };

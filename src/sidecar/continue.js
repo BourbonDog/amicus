@@ -255,7 +255,7 @@ async function continueSidecar(options) {
     writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Continuation completed with error', { taskId: newTaskId, error: meta.reason });
   } else {
-    finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified, backstop: result && result.backstop }); // named mutant "CONTINUEVARIANTDROPPED" (tests/continue-resume-spend.test.js): drop the variant args
+    finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified, backstop: result && result.backstop, promoted: result && result.promoted }); // named mutants "CONTINUEVARIANTDROPPED" (tests/continue-resume-spend.test.js): drop the variant args; "CONTINUEPROMOTEDDROPPED" (#257, same file): drop the promoted arg
   }
   // v4.3: attribute continue spend (C9/E4). Reload meta, write usage + append a
   // ledger row (status: statusFromResult, matching start.js — not terminal.status).

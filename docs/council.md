@@ -1403,6 +1403,46 @@ status it saw. A retry whose next attempt lies beyond the leg deadline ends the 
 at once as `RETRY_BEYOND_DEADLINE` — unless the last message has already finalized (the
 leg completes normally) or a tool call is live (the bounded tool-settle ceiling governs).
 
+A leg can end `complete` and still deliver nothing a council can read. When the engine's last
+message carries reasoning and **no text part**, the mirror promotes that reasoning into the leg's
+output — the leg ends `status: complete`, no error, with a finish other than `'length'` (typically
+`'stop'`, sometimes absent) — and its document carries
+`promoted: true` (emit-when-true: a leg with real answer text has no such key). Since the next
+minor after 4.13.0 that is not a review (#257): Stage 1 skips the leg instead of materializing it,
+so the seat takes the same once-only retry an empty leg takes, and a retry that answers the same
+way loses the seat — a dead-seat row keeping the leg's true `status: complete`, a `reviewed` count
+that excludes it, a `Notice:`, exit 2, and `seatLoss` when `--critic` was requested. Every announcement names the cause
+(`… with no usable output — it answered only in its reasoning channel (40332 reasoning / 1 output
+tokens, finish 'stop'), which is not a review`). A Stage-2 judge has no retry, so its adjudication
+is used when its own fenced block parses or when the bounded judge repair supplies one, announced
+either way as a `Note:` on the `judge-reasoning-only` channel; otherwise the thin-cross-review
+reason says `answered only in the reasoning channel with no parseable block`.
+
+Every other council reader of that leg stands it down the same way (#257). A promoted Stage-1
+`-p<N>` or Stage-2 `-q<N>` repair solo is a failed repair attempt inside the existing bound: its
+reasoning is never validated as findings nor parsed as a judgement, nothing extra is announced,
+and its `role: 'repair'` row carries `promoted: true`. A promoted chair leg is no synthesis, so
+the chair-failure walk above runs exactly as for a chair that produced nothing — one retry of the
+same chair, then the street-cred promotion, then give up with `overallVerdict: null` and exit 2 —
+and that attempt is recorded with `outcome: 'no-output'` and a `chairAttempts[].reason` of
+`answered only in its reasoning channel (…); no synthesis to read`, which the `chair-failed`
+announcement prints per attempt when the whole walk gives up. The chair's own ch4 verdict-line
+repair is gated the same way: a promoted repair leg supplies no `VERDICT:` line, so the existing
+no-parseable-line arm of `chair-failed` fires instead —
+`the chair ran but its output carried no parseable VERDICT: line`, or `ANSWER:` on a task run —
+and that repair's row carries `promoted: true`. A promoted debate defence or re-vote is
+unparseable rather than applied: a defence leaves every one of its bundled findings' originals
+standing (`action: 'no-response'`), a re-vote leaves the judge's provisional verdict standing,
+both record `conformance: 'unstructured'`, and the one bounded repair is the retry (a promoted
+repair leg is unparseable the same way) — unless the repair parses, in which case it is `repaired`
+and applied. The promoted leg still gets its own row — `rebuttal`/`revote`, or `superseded` when
+the repair came back with a leg of its own — carrying `promoted: true`. The fallback-substitution
+chain is unchanged: a reasoning-only answer is not a capacity signal, so it earns no substitute —
+the council rejects the leg one layer up.
+
+A solo `amicus start` is unchanged — it still prints the promoted reasoning as the answer. See
+[Troubleshooting § A Seat Answered Only in Its Reasoning Channel](./troubleshooting.md#a-seat-answered-only-in-its-reasoning-channel).
+
 ---
 
 ## See also

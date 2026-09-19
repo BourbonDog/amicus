@@ -11,6 +11,10 @@
  * (run.js mid-walk, run-server.js pre-seed, the test suites) is unchanged.
  */
 
+// #257 R-X22: ./promoted is a LEAF (it requires nothing), so this require adds
+// no edge to the module graph beyond the vocabulary itself.
+const { isPromotedLeg, promotedFacts } = require('./promoted');
+
 /**
  * Chair fallback promotion (spec §4): the highest peers-only street-cred
  * model from `council stats` that is not a bench seat and not the failed
@@ -71,6 +75,12 @@ function pickFallbackChair(statsRows, bench, failedChair) {
  * VERDICT repair is deliberately NOT an attempt: its chair leg already
  * completed — only the verdict line is being re-prompted — and the outcome
  * enum has no honest value for it.
+ *
+ * #257 R-X22: 'no-output' also covers a leg that answered only in its reasoning
+ * channel. Such a leg is `complete` WITH text — but the text is the chair's
+ * deliberation, not a synthesis, so run-chair.js :: attemptChair nulls it and
+ * the walk continues; classifying it 'completed' here would contradict that
+ * inside one run.json. The reason names the token split and the finish.
  * @param {object|null} rawLeg the UNFILTERED leg (attemptChair nulls `leg` on
  *   failure; this is the one before that narrowing, so a failed leg document
  *   is still visible here)
@@ -85,6 +95,14 @@ function classifyChairAttempt(rawLeg, errorDoc) {
   }
   if (rawLeg.status === 'timeout') { return { outcome: 'timeout', reason: rawLeg.reason || null }; }
   if (rawLeg.status === 'complete') {
+    if (isPromotedLeg(rawLeg)) {
+      // #257 R-X22: the closed `outcome` enum is untouched; the cause rides `reason`, which the
+      // chair-failed `why` prints verbatim ("ch1 <model>: <reason>"). Named mutant "CHAIRREASONDROPPED".
+      const f = promotedFacts(rawLeg);
+      const finish = f.finish ? `, finish '${f.finish}'` : '';
+      return { outcome: 'no-output',
+        reason: `answered only in its reasoning channel (${f.reasoning} reasoning / ${f.output} output tokens${finish}); no synthesis to read` };
+    }
     const hasOutput = rawLeg.summary && String(rawLeg.summary).trim();
     return hasOutput ? { outcome: 'completed', reason: null }
       : { outcome: 'no-output', reason: rawLeg.reason || null };

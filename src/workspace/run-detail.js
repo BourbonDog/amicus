@@ -21,7 +21,7 @@ const { isRealpathContained } = require('../utils/path-fence');
  * ⚠️ DE-ROT (F26): deliberate HAND-COPY of src/observe/live-doc.js:18 `TERMINAL`,
  * names and order byte-identical. Do NOT require() it — Task 3 is Phase 1
  * ("zero v4.3") and live-doc.js is v4.3. Not to be confused with the shipped
- * src/utils/result-schema.js:13 TERMINAL_STATUSES, which is the LEG set (no 'partial').
+ * src/utils/result-schema.js:15 TERMINAL_STATUSES, which is the LEG set (no 'partial').
  */
 // ⚠️ v4.4.1 A1: 'timed-out' added alongside 'timeout' — see the long note at
 // src/observe/live-doc.js:18 for why both spellings are real and which producer writes each.

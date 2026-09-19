@@ -211,6 +211,35 @@ describe('#202 — every channel the runtime emits is registered', () => {
     expect(rec.kind).toBe('degrade');           // what flips degraded.value
   });
 
+  /**
+   * #257 (spec R4/R11) — a Stage-2 judge that answered only in its reasoning
+   * channel and whose fenced block STILL parsed. Its own channel, and kind
+   * 'info': the adjudication counts, nothing was lost, the exit code must not
+   * move. Without the registration below, run-degrade.js's sink rewrites the
+   * note as `internal` ("a degrade on channel 'judge-reasoning-only' could not
+   * be recorded") — which, being kind 'degrade', would take an untouched run
+   * from 0 to 2.
+   *
+   * NAMED MUTANT — CHANNELUNREGISTERED: remove `'judge-reasoning-only',` from
+   * DEGRADE_CHANNELS in src/utils/degrade.js. Reds both tests below.
+   */
+  test('DEGRADE_CHANNELS has judge-reasoning-only', () => {
+    expect(DEGRADE_CHANNELS.has('judge-reasoning-only')).toBe(true);
+  });
+
+  test('makeDegrade keeps a judge-reasoning-only note as info, not internal', () => {
+    const rec = makeDegrade({
+      kind: 'info',
+      channel: 'judge-reasoning-only',
+      what: 'judge gpt answered in its reasoning channel',
+      why: 'its fenced block parsed and was used',
+      effect: 'the adjudication counts; nothing else changes',
+    });
+    expect(rec.channel).toBe('judge-reasoning-only');
+    expect(rec.kind).toBe('info');              // never flips degraded.value
+    expect(formatDegrade(rec)).toMatch(/^Note: /);
+  });
+
   test('DRIFT PIN — no `channel:` literal in src/ escapes the registry', () => {
     const fs = require('fs');
     const path = require('path');

@@ -11,7 +11,9 @@
  * `ttftMs` is produced once — in `src/headless.js`'s poll loop, as a
  * `Date.now()` delta — and then passes five EMIT GATES on its way to a
  * document: `headless.js`'s three returns, `sidecar/fanout-leg.js`'s leg patch,
- * `utils/result-schema.js :: buildRunResult`,
+ * `utils/leg-riders.js :: legRiders` — #257: the rider block that
+ * `utils/result-schema.js :: buildRunResult` spreads, the gate having moved with
+ * the code while the document it writes did not change —
  * `council/run-stats-entry.js :: buildRunStatsEntry`, and
  * `council/tally.js :: tally`'s runStats re-projection. Every gate used to spell
  * its own `typeof x === 'number'` test, which is five chances to disagree and
