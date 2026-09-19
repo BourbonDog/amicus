@@ -36,6 +36,7 @@ src/
 │   ├── parse-stage2.js
 │   ├── peer-split.js
 │   ├── presets-cli.js
+│   ├── promoted.js
 │   ├── report-cost.js
 │   ├── report-html.js
 │   ├── report-lost-rows.js
@@ -558,6 +559,7 @@ evals/
 | `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()`, `parseChairAnswer()` |
 | `council/peer-split.js` |  | `peersOf()`, `unattributedPeerDrops()` |
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
+| `council/promoted.js` |  | `isPromotedLeg()`, `promotedFacts()`, `reasoningOnlyClause()` |
 | `council/report-cost.js` |  | `buildCostModel()` |
 | `council/report-html.js` |  | `renderHtml()` |
 | `council/report-lost-rows.js` |  | `lostRowsOf()` |
