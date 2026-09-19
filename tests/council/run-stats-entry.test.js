@@ -119,6 +119,45 @@ describe('run-stats-entry — the TTFT probe rides the row (v4.9 W13 Task A)', (
 });
 
 /**
+ * #257 — `promoted` rides the runStats row, in the ttftMs slot (between
+ * `ttftMs` and `usage`). Sourced off the LEG document, same shape as `ttftMs`
+ * above: no caller change, no forgotten call site, a dead seat (`leg: null`)
+ * carries no key.
+ *
+ * Emit-when-TRUE (the literal): a leg's `promoted` only ever reaches the row as
+ * `true`, never `false`/`null`/any other truthy stand-in. Named mutant
+ * ROWPROMOTEDCOERCED — `leg.promoted ? …` — would coerce a merely-truthy value
+ * (the string `'true'`, or `1`) into the literal; the ABSENCE test below is its
+ * proof.
+ */
+describe('run-stats-entry — promoted rides the row (#257)', () => {
+  const legWith = (extra) => ({ model: 'openrouter/x/y', status: 'complete', durationMs: 42, usage: null, ...extra });
+
+  test('a leg carrying promoted: true stamps it on the row, between ttftMs and usage', () => {
+    const row = rse.buildRunStatsEntry({
+      leg: legWith({ ttftMs: 1234, promoted: true }), model: 'alias', role: 'reviewer', wasChair: false,
+    });
+    expect(row.promoted).toBe(true);
+    expect(Object.keys(row)).toEqual([
+      'model', 'role', 'wasChair', 'conformance', 'resolvedModel', 'status', 'durationMs',
+      'ttftMs', 'promoted', 'usage',
+    ]);
+  });
+
+  // GREEN at HEAD: the key does not exist at HEAD at all, for any leg — this
+  // pins that a merely-truthy `promoted` still never stamps it, once the
+  // producer exists. ROWPROMOTEDCOERCED is what turns this red.
+  test('ABSENCE: a non-true promoted (false / \'true\' / 1) stamps no key', () => {
+    for (const bad of [false, 'true', 1]) {
+      const row = rse.buildRunStatsEntry({
+        leg: legWith({ promoted: bad }), model: 'alias', role: 'reviewer', wasChair: false,
+      });
+      expect('promoted' in row).toBe(false);
+    }
+  });
+});
+
+/**
  * PR #207 council round 3, B3 — ONE predicate, spelled once, at every gate.
  *
  * There are five `ttftMs` sites in src/: the probe that computes it
