@@ -73,7 +73,7 @@ function saveInitialContext(sessionDir, systemPrompt, userMessage) {
   fs.writeFileSync(SessionPaths.contextFile(sessionDir), content, { mode: 0o600 });
 }
 
-/** Finalize session - detect conflicts, save summary, update metadata. opts.finish (#218 PR 3) stamps metadata.finish when set and REMOVES a prior one otherwise; opts.variant / opts.variantUnverified (#218 PR 4) and opts.backstop (#251 item 1, validated by isBackstopRecord) follow the same rule — a resumed run reuses the same metadata and must not inherit the last attempt's finish (council #232 r1 B1). */
+/** Finalize session - detect conflicts, save summary, update metadata. opts.finish (#218 PR 3) stamps metadata.finish when set and REMOVES a prior one otherwise; opts.variant / opts.variantUnverified (#218 PR 4), opts.backstop (#251 item 1, validated by isBackstopRecord) and opts.promoted (#257 — the literal `true` stamps metadata.promoted, anything else deletes a prior one) follow the same rule — a resumed run reuses the same metadata and must not inherit the last attempt's finish (council #232 r1 B1). */
 function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   const metaPath = SessionPaths.metadataFile(sessionDir);
 

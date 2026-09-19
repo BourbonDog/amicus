@@ -228,7 +228,7 @@ list. Two findings drove it:
   solos *were* absent from `tally.json`'s `runStats` (observed: 5 rows for 11 real legs in
   `wsgate04`); `runStats` now carries one row per paid launch — one `judge` row per judge
   (`run-assemble.js:180-184`) and one `repair` row per `-q<N>` solo, failed ones included
-  (`run-stage2.js:122`).
+  (`run-stage2.js:230` — the `extraRows.push`; was `:122`, re-anchored 2026-09-19, #257).
   ⚠️ **Scope correction:** the failed-chair third of the original CA-4 is **closed** — v4.6.2's
   `chairAttempts[]` records every attempt on `run.json` (`run-chair.js:71` cites LC-5 by name), and
   failed-chair cost already reaches `runStats` too: a failed ch1–ch3 attempt gets its own

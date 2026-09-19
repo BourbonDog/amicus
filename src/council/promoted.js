@@ -1,20 +1,26 @@
-// src/council/promoted.js
-'use strict';
-
 /**
  * @module council/promoted
- * #257: the ONE vocabulary for a leg whose engine answer had no text part and
- * whose reasoning was promoted to output by conversation-mirror.js. A LEAF —
- * it requires nothing — so run-retry-group.js (leaf-only by header) and any
- * require-free consumer can import it.
+ * The ONE vocabulary for a leg that answered only in its reasoning channel (#257).
+ * The engine's last message carried no text part, so conversation-mirror.js
+ * promoted the accumulated reasoning into the leg's output.
+ *
+ * ⚠️ The JSDoc leads this file, ahead of `'use strict'` and with no `// <path>`
+ * line above it, matching `utils/ttft.js:1-9`: `scripts/generate-docs.js` reads
+ * only a block comment that starts at byte zero, so a path comment there would
+ * leave this module's `docs/architecture-map.md` row blank.
+ *
+ * A LEAF — it requires nothing — so run-retry-group.js (leaf-only by header)
+ * and any require-free consumer can import it.
  *
  * `promoted` is emit-when-true on every leg document (headless.js mints it from
  * `mirror.promotedOutput` at the normal terminal return; fanout-leg.js,
  * session-utils.js, leg-riders.js, run-stats-entry.js and tally.js carry it).
  * A promoted Stage-1 leg is NOT a review (run-launch.js :: materializeReviews
- * skips it, so the once-only retry fires); a promoted judge is used only when
- * its fenced block parses (run-stage2.js).
+ * skips it, so the once-only retry fires); a promoted judge is used when its
+ * fenced block parses, or when the judge repair supplies one, and a
+ * `judge-reasoning-only` note names which (run-stage2.js, run-stage2-notes.js).
  */
+'use strict';
 
 /** The literal `true`, nothing else — the same discipline as `variantUnverified`. */
 function isPromotedLeg(leg) {

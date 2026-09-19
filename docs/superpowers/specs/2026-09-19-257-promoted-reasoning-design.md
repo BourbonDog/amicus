@@ -68,7 +68,7 @@ L2/L4) and is not `promoted`.
 | document | site |
 |---|---|
 | council leg object | `src/sidecar/fanout-leg.js:235-238` beside `ttftMs`/`finish`; the fallback-substitution scrub at `:57` gains `'promoted'` (a substitute attempt starts clean) |
-| solo/leg `metadata.json` | `src/sidecar/session-utils.js:108-113` `finalizeSession` (emit/delete), and the four direct writers `session-finalize.js:63-79`, `start.js:200-210`, `continue.js:247-256`, `resume.js:252-261`; each `finalizeSession` caller passes it in `opts` |
+| solo/leg `metadata.json` | `src/sidecar/session-utils.js:108-113` `finalizeSession` (emit/delete), and the four direct writers `session-finalize.js:63-79`, `start.js:200-210`, `continue.js:247-256`, `resume.js:252-261`; each `finalizeSession` caller passes it in `opts`; the shared-server error branch deletes a stale one (R-X9) |
 | wave document leg entry | `src/utils/result-schema.js:83-85` `buildRunResult` — the file is 300/300, so the rider block is EXTRACTED first (a sibling module the plan names), never a fourth field crammed onto line 85 |
 | `schemas/run.schema.json` | `promoted` declared beside `finish`/`ttftMs`/`backstop`, boolean, emit-when-true; no schemaVersion bump (fields are only added within a version, header `:5`) |
 | runStats row → tally.json → verdict.json | `src/council/run-stats-entry.js:64-113` (hand-spelled: the file is require-free by a text pin) AND `src/council/tally.js:166-197` allowlist; a roster test like the `ttftMs` one (`tests/council/run-stats-entry.test.js:256`) so no site escapes |
@@ -94,8 +94,8 @@ once-only retry (`:87`) → healed (`Recovered:`) or `stillDeadLegs` (`:149`) �
   `status: complete` and carries `promoted: true`; **the census
   (`src/council/verdict-seats-reviewed.js:101-128`) counts `reviewed` as
   `status === 'complete' && promoted !== true`** so "3 of 4 seats reviewed" is true when one seat
-  stayed promoted. No new census key (the loss is already visible in `seatLoss`, the degrade
-  record and the row).
+  stayed promoted. No new census key (the loss is visible in the degrade record and the row, and
+  in `seatLoss` when `--critic` was requested — amended at build, R-X16, 2026-09-19).
 
 ### 3.5 Stage-2 judges — `src/council/run-stage2.js:180-189`, `src/council/run-stage2-notes.js:60-75`
 A third arm beside `legDied` / `legAnsweredEmpty`:
@@ -103,7 +103,14 @@ A third arm beside `legDied` / `legAnsweredEmpty`:
 - Parse proceeds unchanged (`parseJudgeOutput` over `leg.summary`; `lastJsonBlock` takes the last
   opener that parses). **If it parses, the adjudication is used** (the issue's ask 3) and an
   `info` note is raised: `Note: judge <seat> answered in its reasoning channel — its fenced block
-  parsed and was used; the deliberation itself was not read by anyone.` (no exit change).
+  parsed and was used; the deliberation itself was read by nobody.` (no exit change; the quoted
+  wording corrected to the shipped literal at build, R-X13, 2026-09-19).
+- Third arm the design missed (amended at build, R-X13, 2026-09-19): the judge repair loop
+  (`run-stage2.js`, the bounded 2-attempt `-q<N>` repair) can supply the parseable block for a
+  promoted judge whose own answer had none; the adjudication is used with
+  `conformance: 'repaired'`, and the same `info` note fires with a `why` that names the repair —
+  `its own answer carried no parseable block; the adjudication used came from the judge repair
+  (attempt <n>); the deliberation itself was read by nobody (…)` — and `data.repaired: true`.
 - If it does not parse, `thinCrossReviewWhy` gains the clause `<n> answered only in the reasoning
   channel with no parseable block` instead of the generic "no parseable Stage-2 block".
 - Judge prose is never embedded anywhere today (`buildChairPacket` takes rankings/adjudications
@@ -165,7 +172,13 @@ retry healed).
   output". For every leg that is not promoted the clause is the empty string, so every pinned
   string in `run-retry.test.js`, `run-retry-notes.test.js` and `degrade-contract.test.js` stays
   byte-identical. Cost if wrong: a promoted leg announced with a true-but-uninformative cause;
-  pinned by wording tests per site.
+  pinned by wording tests per site. (amended at build, R-X14, 2026-09-19) A sixth site the
+  enumeration missed: `verdict-seat-loss.js :: deriveSeatLoss` renders `the critic leg ended
+  '<status>' with no usable output` into verdict.json's `seatLoss.reason` for a still-dead
+  critic; it appends the same clause, fed by `data.promoted` — the reasoning-channel facts every
+  Stage-1 dead-leg record now carries emit-when-promoted (srcLegStillDeadNote,
+  retryLegStillDeadNote [the retry leg], missingLegStillDeadNote [the first failure's], the
+  skipped-leg note) so machine readers get the fact wherever prose names it.
 - R10 **Out of scope, filed in BACKLOG:** the other readers of a completed status that a
   promoted leg could fool — the chair (`chair-fallback.js:87`, `run-chair.js:61`), the debate
   defense/re-vote legs (`run-debate.js:61,84,267`, `run-debate-revote.js:172,240`) and the
@@ -176,13 +189,21 @@ retry healed).
 - R11 **The promoted-judge note has its own channel, `judge-reasoning-only`, kind `info`.**
   Registered in `degrade.js` (the drift pin in `degrade-contract.test.js:214-231` reads every
   `channel:` literal in src). Not `stage2-judge`: that channel means a judge DIED, and its
-  consumers gate on it.
+  consumers gate on it. Its `why` names which of the TWO success paths supplied the parseable
+  block: its own fenced block parsed and was used, or, when the judge repair supplied the block,
+  names the repair (amended at build, R-X13, 2026-09-19).
 - R12 **`promoted` never rides an `error` leg.** The failed-with-no-usable-output return never
-  emits it (an L2/L4 death has a non-empty stand-in and is a death, not a promoted leg), so the
-  four direct error-branch metadata writers need no new line; a hand-assembled result carrying
-  both `error` and `promoted: true` is pinned to stamp nothing. The reopen delete list in
-  `resume.js :: updateSessionStatus` (`:118`) gains `promoted`, the same way it holds
-  `finish`/`variant`/`backstop`.
+  emits it (an L2/L4 death has a non-empty stand-in and is a death, not a promoted leg), so
+  three of the four direct error-branch metadata writers need no new line (start.js and
+  continue.js write a fresh session's metadata; resume.js scrubs at
+  `updateSessionStatus('running')`); the shared-server path, `session-finalize.js`'s error
+  branch, deletes stale riders in place (council #232 r1 B1) and gains an unconditional
+  `delete metadata.promoted` (amended at build, R-X9, 2026-09-19); a hand-assembled result
+  carrying both `error` and `promoted: true` is pinned to stamp nothing. The reopen delete list
+  in `resume.js :: updateSessionStatus` (`:118`) gains `promoted`, the same way it holds
+  `finish`/`variant`/`backstop`. The council leg rider in fanout-leg.js is status-agnostic like
+  its finish/backstop siblings; R12 holds at the producer (headless never emits the key on the
+  failed or catch return — mutant PROMOTEDONDEATH) (amended at build, R-X12, 2026-09-19).
 
 ## 6. Data flow after the change
 ```

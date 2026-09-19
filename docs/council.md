@@ -1403,6 +1403,23 @@ status it saw. A retry whose next attempt lies beyond the leg deadline ends the 
 at once as `RETRY_BEYOND_DEADLINE` — unless the last message has already finalized (the
 leg completes normally) or a tool call is live (the bounded tool-settle ceiling governs).
 
+A leg can end `complete` and still deliver nothing a council can read. When the engine's last
+message carries reasoning and **no text part**, the mirror promotes that reasoning into the leg's
+output — the leg ends `status: complete`, no error, with a finish other than `'length'` (typically
+`'stop'`, sometimes absent) — and its document carries
+`promoted: true` (emit-when-true: a leg with real answer text has no such key). Since the next
+minor after 4.13.0 that is not a review (#257): Stage 1 skips the leg instead of materializing it,
+so the seat takes the same once-only retry an empty leg takes, and a retry that answers the same
+way loses the seat — a dead-seat row keeping the leg's true `status: complete`, a `reviewed` count
+that excludes it, a `Notice:`, exit 2, and `seatLoss` when `--critic` was requested. Every announcement names the cause
+(`… with no usable output — it answered only in its reasoning channel (40332 reasoning / 1 output
+tokens, finish 'stop'), which is not a review`). A Stage-2 judge has no retry, so its adjudication
+is used when its own fenced block parses or when the bounded judge repair supplies one, announced
+either way as a `Note:` on the `judge-reasoning-only` channel; otherwise the thin-cross-review
+reason says `answered only in the reasoning channel with no parseable block`. A solo `amicus start`
+is unchanged — it still prints the promoted reasoning as the answer. See
+[Troubleshooting § A Seat Answered Only in Its Reasoning Channel](./troubleshooting.md#a-seat-answered-only-in-its-reasoning-channel).
+
 ---
 
 ## See also

@@ -213,8 +213,10 @@ describe('start.js terminal state classification', () => {
   // #257 / spec R12: a death never carries the fact. The engine's promoted-reasoning
   // answer IS a usable deliverable, so the failed-with-no-usable-output return never
   // emits it — and start.js's direct error-branch metadata writer therefore learns no
-  // key at all. Named mutant "ERRORPROMOTED": add
-  // `...(result && result.promoted ? { promoted: true } : {})` to that literal.
+  // key at all. That branch is a run of `meta.x = …` assignments, not an object literal,
+  // so the named mutant "ERRORPROMOTED" is: add
+  // `if (result && result.promoted === true) { meta.promoted = true; }` beside the
+  // `stampBackstop(meta, result)` line in start.js's error branch.
   it('an ERROR result carrying promoted: true stamps NO promoted on metadata (spec R12)', async () => {
     const { code, metadata } = await runWith({
       completed: false, timedOut: false, aborted: false, summary: '', taskId: 'test09',

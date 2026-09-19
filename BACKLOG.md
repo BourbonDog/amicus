@@ -1504,7 +1504,9 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   drift, not a live defect; record it before something starts reading it. Found during the v4.7
   PR1 final-review consolidated wave, 2026-08-06.
   — recon 2026-08-07: filed as PR1F-3 for v4.7 PR5. **Five** engine-born sites take the `'clean'`
-  default, not two (add `run-stage2.js:122` and `run-stages.js:244`), and the item's proposed
+  default, not two (add `run-stage2.js:122` — re-anchored 2026-09-19, #257: that push is `:230`
+  today and now passes an EXPLICIT `conformance: parsed.ok ? 'clean' : 'unstructured'` (`:231`),
+  so it no longer takes the default — and `run-stages.js:244`), and the item's proposed
   `solo.leg && res.ok ? 'repaired' : 'unstructured'` expression is a **constant**: the push at
   `run-stages.js:181` precedes `res = validateFindings(...)` and sits inside a `while (!res.ok ...)`
   loop, so `res.ok` is always false there. Use a flat literal, or move the pushes below validation —
@@ -3097,7 +3099,8 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       cost was nowhere measured until now.** Both behaviours are now PINNED in
       `tests/council/seat-matrix.test.js` so neither can drift silently.
       ⚠️ **Reachability is the same class as every other shape this PR pins**:
-      `run-stage2.js:61-62` guarantees no engine run emits such a vote, but `council report
+      `run-stage2.js:129-130` (the ROSTER comment and `const judges = reviews.map(r => r.modelInput)`;
+      was `:61-62`, re-anchored 2026-09-19, #257) guarantees no engine run emits such a vote, but `council report
       <verdict.json>`, `council verdict --render` and `amicus_verdict` are all schema-free — which
       is exactly why `''`, a non-string `judge` and an orphan seat id are in scope.
       ⚠️ **This shape also forced a correction to the column's DOCUMENTED MEANING.** The prose
@@ -4557,7 +4560,8 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   bench pays for two judge legs and clobbers one `judge-<alias>.md`.**
   (⚠️ **2026-08-25, v4.9 W2: the roster line moved — `run-stage2.js :: runStage2`'s
   `const judges = reviews.map(r => r.modelInput)` is `:119` today; `:57` now sits inside the
-  extracted `bindStage2Seats`.**) Pre-existing, not
+  extracted `bindStage2Seats`.** Re-anchored again 2026-09-19, #257: that roster line is `:130`.)
+  Pre-existing, not
   introduced by PR2b, and PR2b did not change how many reviews reach Stage 2: `materializeReviews`
   already returned one in-memory entry per complete leg, so a twin bench already handed Stage 2
   two reviews — only the FILE on disk was clobbered. What PR2b changed is that those two reviews
@@ -4621,7 +4625,8 @@ warning still holds and is now sharper; the authoritative table is *Size gate �
 #### Seat identity — PR3 handoff (2026-08-13)
 
 PR3 carried the seat through Stage 2 and the debate round: `judge-<seat>.md`
-(`run-stage2.js:145`), `judgeResults[].seat`, a seat-keyed Stage-2 conformance merge
+(`run-stage2.js :: runStage2`'s `artifactName(seat, 'judge')` write, **was `:145`; re-anchored BY
+SYMBOL 2026-09-19 after #257 — `:172` today**), `judgeResults[].seat`, a seat-keyed Stage-2 conformance merge
 (`run.js:224-228`), additive **emit-when-different** `adjudications[].seat`
 (`run-assemble.js:166`) and `findings[].raiserSeat` (`anonymize.js:60`), and a debate round that
 joins on the seat at every hop — `debate.js :: debateTargets` (**was `:201`**),
@@ -5046,6 +5051,11 @@ deliberately left alone:
     one alone would make it the odd one out. (`run-stage1-superseded.js:61`'s guard is a different
     case — it takes `degrade` as an OPTIONAL PARAMETER, not off `ctx`.) **A1** (qwen) — the
     file-size headroom — was already filed above. Recorded so neither is re-adjudicated.
+    ⚠️ **Re-measured 2026-09-19 (#257).** The counts and line numbers above are the record of
+    2026-08-22, not of HEAD: the same grep now returns **15** matches, 14 of them call sites
+    (`run-stage2.js:110`/`:122` are `:66`/`:78` today, and that file has two more at `:252`/`:279`;
+    `run-retry.js:216` is `:217`; `run-stages.js` has six). The RULING is unchanged and re-verified
+    — no `ctx.degrade.note(` call site in `src/council/` is guarded.
     **The §3.4 roster hole is NOT regressed.** A hole's own alias IS one of `judgeKeys`
     (`run-debate.js` builds `judgeSeats` as `judgeKeys.map(k => seatById.get(k) || null)`, so a hole
     keeps its `judgeKeys` slot and loses only its seat), so it still publishes and still emits no
@@ -9110,3 +9120,17 @@ Deferred — one line each, none blocks anything:
   session clause records exactly this case (`window extended once … (session: idle)`); if the corpus
   shows it, re-read status every ~60 s during an extension and kill early on idle (never on unknown).
   (#251 item 1, council #269 r2 D2)
+
+## #257 — filed at the PR (2026-09-19)
+
+- [ ] #257 R1 — a solo `amicus start` still prints promoted reasoning as the answer with no stderr
+  line; `metadata.json` says `promoted: true`. Candidate: one `Note:` on stderr.
+- [ ] #257 R10 — readers of a completed status this PR did not change: chair-fallback.js:87,
+  run-chair.js:61, run-debate.js:61/84/267, run-debate-revote.js:172/240,
+  src/sidecar/fanout-leg-fallback.js:203 (the other seven are `src/council/`). A promoted chair
+  verdict or debate defense is the same disease on
+  another surface; the `promoted` fact is on those legs already.
+- [ ] #257 (build) — the ttftMs roster test in tests/council/run-stats-entry.test.js cannot catch a
+  stale IMPORTERS entry on its own: its set-union test passes whether result-schema.js is listed as
+  an importer or a mention. Candidate: assert the importer regex per IMPORTERS entry inside the
+  union test too.

@@ -22,7 +22,12 @@
  *   PROMOTEDONDEATH  copy the spread into the failed return above it
  *                    -> reds "an L2/L4 death ... dies WITHOUT a promoted key".
  *   PROMOTEDCOERCED  `promoted: !!mirror.promotedOutput` instead of the spread
- *                    -> reds "a leg with answer text carries NO promoted key".
+ *                    (`promotedOutput` is a string, so this emits the literal
+ *                    `promoted: false` on every leg that promoted nothing)
+ *                    -> reds TWO tests, not one: "a leg with answer text carries
+ *                    NO promoted key" and "finish 'stop' rides out as finish,
+ *                    and a leg with no finish carries no key", whose two
+ *                    `'promoted' in r` pins are the #257 additions to it.
  */
 
 const mockCreateSession = jest.fn();

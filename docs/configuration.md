@@ -177,6 +177,9 @@ P1, PR 2, PR 3 and PR 4).
   for the leg and the budget in force (or the ambient `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` the
   engine was started with, when no budget is set); it used to end `complete` with an empty summary
   or, when the provider streamed the reasoning, with its *thinking* promoted to the review (L2/L4).
+  A `finish: 'stop'` message with reasoning and no text is a different shape — it completes with its
+  reasoning promoted to output, and since the next minor after 4.13.0 a council treats that leg as
+  no deliverable (#257): the once-only retry fires and the leg document carries `promoted: true`.
   A leg whose finalized message carries answer text keeps its review — the answer text (a tool
   loop's earlier answer text included; reasoning an earlier message promoted as a stand-in is
   dropped the moment real answer text arrives) — and a council prints a `Note:` on the
