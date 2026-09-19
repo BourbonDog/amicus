@@ -11,8 +11,10 @@
  * emit-when-set rule and the role filter cannot drift apart. `of` is every
  * `role:'seat'` row — one per bench seat POST-retry, so a healed seat counts
  * once while its first attempt is `role:'superseded'`; judges, chair and
- * repairs are not bench seats. `reviewed` is those whose leg completed: a
- * `timeout` is not a review any more than an `error` is.
+ * repairs are not bench seats. `reviewed` is those whose leg completed and
+ * delivered a review — a `promoted: true` row (#257) completed with its
+ * reasoning as output and is not counted: a `timeout` is not a review any
+ * more than an `error` is.
  *
  * `unverified` (#242 / spec §5, v4.9.8) is those bench seats whose findings came from a
  * repair of a response with no parseable findings block — the LC-11 flag
@@ -113,7 +115,9 @@ function seatsReviewedOf(runStats) {
     .filter(r => !!r && typeof r === 'object' && !Array.isArray(r) && isBenchRole(r.role));
   if (seats.length === 0) { return {}; }
   return { seatsReviewed: {
-    reviewed: seats.filter(r => r.status === 'complete').length,
+    // #257 (decision B): a promoted leg completed but delivered no review — the seat is a LOSS
+    // (dead-seat row, seatLoss, exit 2), never a reviewer. Named mutant CENSUSPROMOTED (verdict.test.js).
+    reviewed: seats.filter(r => r.status === 'complete' && r.promoted !== true).length,
     // The shared predicate (isUnverifiedSeat above): `=== true` matching tally.js's
     // emit-when-true (V14), a completed leg (V15/V16). Named mutants: CENSUSZERO
     // (`unverified: 0`) and SUBSETBLIND — tests/council/verdict.test.js.

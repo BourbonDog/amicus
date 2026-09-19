@@ -442,4 +442,21 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
         seatRow('gpt', 'complete')] });
     expect(v.seatsReviewed).toEqual({ reviewed: 1, unverified: 0, refused: 0, of: 2 });
   });
+
+  // V19/V20 hand-assemble runStats and call buildVerdict directly (the V14-V18 pattern), not
+  // `build()`/`tally()`: `promoted` is not yet in tally.js's allowlist in this worktree — that
+  // ride-along lands via #257 Task 5 in a separate worktree — so nothing here depends on it.
+  test('V19 a completed bench seat carrying promoted: true is NOT reviewed — it delivered no review (#257, decision B)', () => {
+    const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
+      runStats: [seatRow('glm', 'complete'), { ...seatRow('qwen', 'complete'), promoted: true }, seatRow('gpt', 'complete')] });
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, unverified: 0, refused: 0, of: 3 });
+  });
+  // Named mutant CENSUSPROMOTED: delete `&& r.promoted !== true` — the test above reads 3.
+
+  test('V20 only the literal true excludes a row (a hand-assembled "true" string is not a promotion)', () => {
+    const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
+      runStats: [{ ...seatRow('qwen', 'complete'), promoted: 'true' }] });
+    expect(v.seatsReviewed).toEqual({ reviewed: 1, unverified: 0, refused: 0, of: 1 });
+  });
+  // Named mutant CENSUSCOERCED: `&& r.promoted !== true` → `&& !r.promoted` — the test above reads 0.
 });
