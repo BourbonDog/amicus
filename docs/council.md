@@ -1413,12 +1413,18 @@ so the seat takes the same once-only retry an empty leg takes, and a retry that 
 way loses the seat — a dead-seat row keeping the leg's true `status: complete`, a `reviewed` count
 that excludes it, a `Notice:`, exit 2, and `seatLoss` when `--critic` was requested. Every announcement names the cause
 (`… with no usable output — it answered only in its reasoning channel (40332 reasoning / 1 output
-tokens, finish 'stop'), which is not a review`). A Stage-2 judge has no retry, so its adjudication
-is used when its own fenced block parses or when the bounded judge repair supplies one, announced
-either way as a `Note:` on the `judge-reasoning-only` channel; otherwise the thin-cross-review
-reason says `answered only in the reasoning channel with no parseable block`.
+tokens, finish 'stop'), which is not a review`). A Stage-2 judge's retry is a relaunch: a promoted
+judge is never used as it stands — its first `-q<N>` attempt re-asks the original bundle, a
+relaunch that answers with real but unparseable text gets the one remaining repair, and a relaunch
+that answers in its reasoning channel again (or dies) stands the judge down; a `Note:` on the
+`judge-reasoning-only` channel records which, and when fewer than two judges remain usable the
+thin-cross-review reason says `answered only in the reasoning channel and was not rescued`. No
+`judge-<seat>.md` is written from a promoted leg; the relaunch's real text is the judge artifact.
+That relaunch is recorded as the judge's first repair attempt — a `-q<N>` wave, a `role: 'repair'`
+row, and `conformance: 'repaired'` when it is used — so only the `Note:`'s prose tells a relaunch
+from a repair.
 
-Every other council reader of that leg stands it down the same way (#257). A promoted Stage-1
+Every council reader of that leg stands it down the same way (#257). A promoted Stage-1
 `-p<N>` or Stage-2 `-q<N>` repair solo is a failed repair attempt inside the existing bound: its
 reasoning is never validated as findings nor parsed as a judgement, nothing extra is announced,
 and its `role: 'repair'` row carries `promoted: true`. A promoted chair leg is no synthesis, so
@@ -1433,11 +1439,11 @@ no-parseable-line arm of `chair-failed` fires instead —
 and that repair's row carries `promoted: true`. A promoted debate defence or re-vote is
 unparseable rather than applied: a defence leaves every one of its bundled findings' originals
 standing (`action: 'no-response'`), a re-vote leaves the judge's provisional verdict standing,
-both record `conformance: 'unstructured'`, and the one bounded repair is the retry (a promoted
-repair leg is unparseable the same way) — unless the repair parses, in which case it is `repaired`
-and applied. That repair's briefing carries no prior text: a promoted leg's reasoning is never fed
-back to be corrected — the briefing says the previous defence (or re-vote; or, for a promoted
-`-q<N>` judge repair, response) was written in the reasoning channel and asks for a fresh answer.
+both record `conformance: 'unstructured'`, and the one bounded repair — for a promoted leg, a
+relaunch with its original briefing — is the retry (a relaunch that is promoted again is
+unparseable the same way) — unless the repair parses, in which case it is `repaired` and applied.
+A promoted leg's reasoning is never fed back to be corrected: the relaunch re-asks the original
+defence brief or the shared re-vote bundle, and only a relaunch's real text is ever repaired.
 The promoted leg still gets its own row — `rebuttal`/`revote`, or `superseded` when the repair came
 back with a leg of its own — carrying `promoted: true`, but no `rebuttal-<seat>.md` or
 `revote-<seat>.md` of its own: `materializeDebate` skips a promoted leg as `materializeReviews`

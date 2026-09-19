@@ -9155,7 +9155,14 @@ Deferred — one line each, none blocks anything:
   Task 15 docs review and gated under R-X27. Council round 2 (2026-09-19) closed the three leaks
   the C build left: the repair prompts no longer carry promoted text (R-X29), no debate artifact is
   written for a promoted leg (R-X30), and the `finish` bound is an identifier allowlist with one
-  shared token fragment (R-X31).
+  shared token fragment (R-X31). The owner then withdrew the Stage-2 judge exception (A′, R-X32):
+  a promoted judge, defence or re-vote is relaunched with its original briefing, never used as it
+  stands and never repaired against its deliberation.
+- [ ] #257 (build, E1 review M6) — src/council/run-stage2.js is at 298/300 with two ~250-char
+  lines (`:202` at 275 chars, `:261` at 249) carrying the R-X32 conjuncts; extract the judge
+  leg-loop body (parse → bounded repair/relaunch → result row) into its own module so the next
+  edit is not paid for in line length. Out of #257: the split would break the byte-parity posture
+  this round depends on.
 - [ ] #257 (build) — the ttftMs roster test in tests/council/run-stats-entry.test.js cannot catch a
   stale IMPORTERS entry on its own: its set-union test passes whether result-schema.js is listed as
   an importer or a mention. Candidate: assert the importer regex per IMPORTERS entry inside the

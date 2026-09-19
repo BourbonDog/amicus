@@ -15,39 +15,45 @@ All notable changes to Amicus are documented here. Format follows
   fires, and a seat whose retry repeats it is a lost seat — dead-seat row, a `Notice:`, exit 2, and
   `seatLoss` when `--critic` was requested — and the census counts it as not reviewed. Every announcement names the cause: `… with
   no usable output — it answered only in its reasoning channel (40332 reasoning / 1 output tokens,
-  finish 'stop'), which is not a review`. A Stage-2 judge that answers this way is used when its
-  fenced block parses, or when the judge repair supplies one — announced either way as a `Note:`
-  on `judge-reasoning-only` whose text names which; otherwise, when fewer than two judges remain
-  usable, the thin-cross-review reason says `answered only in the reasoning channel with no
-  parseable block`.
-  Every other reader of a leg in the council now treats a promoted leg as no deliverable: Stage-1
+  finish 'stop'), which is not a review`. A Stage-2 judge that answers this way is never used as
+  it stands, however well its deliberation happens to parse: it is relaunched once with the
+  original bundle briefing (its first `-q<N>` attempt), a relaunch that answers with real but
+  unparseable text gets the one remaining repair, and a relaunch that answers in its reasoning
+  channel again — or dies — stands the judge down; a `Note:` on `judge-reasoning-only` records
+  which, and when fewer than two judges remain usable the thin-cross-review reason says `answered
+  only in the reasoning channel and was not rescued`. No `judge-<seat>.md` is written from a
+  promoted leg; the relaunch's real text is the judge artifact. That relaunch is recorded as the
+  judge's first repair attempt — a `-q<N>` wave, a `role: 'repair'` row, and
+  `conformance: 'repaired'` when it is used — so only that `Note:`'s prose tells a relaunch from a
+  repair.
+  Every reader of a leg in the council now treats a promoted leg as no deliverable: Stage-1
   reviews (not materialized; the once-only retry fires); the Stage-1 `-p<N>` and Stage-2 `-q<N>`
   repair solos (a promoted repair is a failed repair attempt inside the existing bound); the chair
   (its walk retries and falls back exactly as for a chair with no output, its verdict-line repair
   reads no `VERDICT:` line from reasoning, and `chairAttempts[]` records `no-output` with the
   reason `answered only in its reasoning channel (…); no synthesis to read`); debate defences and
   re-votes (unparseable: the original stands (a defence as `no-response`; a re-vote leaves the
-  judge's provisional verdict), the one bounded repair is the retry, and the row keeps the real leg
-  with `promoted: true`). No repair prompt carries a promoted leg's reasoning: the defence, re-vote
-  and `-q<N>` judge repairs ship no prior text and say why — `Your previous defense was written in
-  the reasoning channel and is not a defense — there is no prior text to correct; answer afresh. …`
-  (the re-vote and judge arms read the same way for their own kind) — so a promoted deliberation
-  (149 KB in the measured case) is never fed back to be corrected. No `rebuttal-<seat>.md` or
-  `revote-<seat>.md` is written for a promoted defence or re-vote itself (a repair leg that answers
-  with real text is materialized as before): `materializeDebate` skips it as `materializeReviews`
-  does; the reasoning stays in the leg's session `summary.md` and in `wave.json`, and the row is the
-  record. The fallback-substitution chain is unchanged: a reasoning-only answer is not a capacity
-  signal and earns no substitute. The engine's `finish` string is reduced to identifier characters
-  (`A-Z a-z 0-9 _ . : -`, at most 40) before any announcement interpolates it, so a
-  provider-controlled finish cannot carry Markdown into a sticky PR comment; the token parenthetical
-  every announcement shares has one home (`promoted.js :: tokenSplit`).
+  judge's provisional verdict), the one bounded repair is a relaunch with the original briefing,
+  and the row keeps the real leg with `promoted: true`). A promoted defence, re-vote or judge is
+  never repaired against its deliberation: its one retry is a relaunch with its original briefing —
+  the defence brief, the shared re-vote bundle, the Stage-2 bundle — so no repair prompt anywhere
+  carries a promoted deliberation (149 KB in the measured case) as "the text to correct". No
+  `rebuttal-<seat>.md` or `revote-<seat>.md` is written for a promoted defence or re-vote itself (a
+  repair leg that answers with real text is materialized as before): `materializeDebate` skips it as
+  `materializeReviews` does; the reasoning stays in the leg's session `summary.md` and in
+  `wave.json`, and the row is the record. The fallback-substitution chain is unchanged: a
+  reasoning-only answer is not a capacity signal and earns no substitute. The engine's `finish`
+  string is reduced to identifier characters (`A-Z a-z 0-9 _ . : -`, at most 40) before any
+  announcement interpolates it, so a provider-controlled finish cannot carry Markdown into a sticky
+  PR comment; the token parenthetical every announcement shares has one home
+  (`promoted.js :: tokenSplit`).
   The fact rides every leg document (`promoted: true`, emit-when-true, declared in
   `run.schema.json`, the tally schema and, on its open leg objects, `wave.schema.json`).
   Measured motive: PR #254 round 1, where 40,332 reasoning
   tokens and 1 output token became a 149 KB "review", 92 % of the Stage-2 bundle; three of four
   judges died on it. **Upgrade note:** a seat that 4.13.0 counted as reviewed on a promoted answer
-  is now retried and, if it repeats, counted lost, and the run exits 2; a chair, defence or
-  re-vote that 4.13.0 accepted on a promoted answer is now retried or stands down;
+  is now retried and, if it repeats, counted lost, and the run exits 2; a Stage-2 judge, chair,
+  defence or re-vote that 4.13.0 accepted on a promoted answer is now relaunched once or stands down;
   `finish: 'length'` with no text is still the `OUTPUT_LENGTH` death it was. (#257; closes the write-back half of #242's item 1
   by removing its worst input)
 

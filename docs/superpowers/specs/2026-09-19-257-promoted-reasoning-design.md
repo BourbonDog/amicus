@@ -53,6 +53,10 @@ citation below is on `7e2fc83f`, and the plan re-measures each at writing time.
    `Notice:` degrade, exit 2 — the same class as a leg that died, not a refused/unverified seat
    under the Wave 4 Cluster B half rule. "Reviewed" means "delivered a review".
 4. **Rulings R1–R8 in §5 stand** as written.
+5. **A′ (council round 2, 2026-09-19): the Stage-2 judge exception (R4) is withdrawn.** A promoted
+   judge is never used as it stands; its retry is one relaunch with the original bundle, then one
+   repair of real text, then it stands down and says so. The same relaunch for a promoted defence
+   or re-vote. R-X32–R-X34 in §11.
 
 ## 3. The mechanism
 
@@ -119,6 +123,10 @@ once-only retry (`:87`) → healed (`Recovered:`) or `stillDeadLegs` (`:149`) �
   in `seatLoss` when `--critic` was requested — amended at build, R-X16, 2026-09-19).
 
 ### 3.5 Stage-2 judges — `src/council/run-stage2.js:180-189`, `src/council/run-stage2-notes.js:60-75`
+> Superseded by §11 R-X32 (owner decision A′, council round 2): the accept-if-parses rule below no
+> longer applies — a promoted judge is relaunched, never used as it stands. Kept as the round-0
+> record.
+
 A third arm beside `legDied` / `legAnsweredEmpty`:
 `legAnsweredFromReasoning = !legDied && leg.promoted === true`.
 - Parse proceeds unchanged (`parseJudgeOutput` over `leg.summary`; `lastJsonBlock` takes the last
@@ -168,7 +176,7 @@ retry healed).
   root cause: a guard for two readers with a third left outside).
 - R4 **Judge: accept-if-parses plus an info note, no retry.** Judges have no retry today; this PR
   does not add one. Cost if wrong: a promoted judge with no parseable block is still a lost judge
-  — the clause names why, nothing recovers it.
+  — the clause names why, nothing recovers it — superseded by R-X32 (§11).
 - R5 **Extract the wave-doc rider block** rather than join lines in `result-schema.js`. Cost if
   wrong: an extraction touches a 300/300 file with byte-order pins — the plan classifies each as
   GREEN-at-HEAD with a mutant, not RED.
@@ -212,7 +220,9 @@ retry healed).
   `channel:` literal in src). Not `stage2-judge`: that channel means a judge DIED, and its
   consumers gate on it. Its `why` names which of the TWO success paths supplied the parseable
   block: its own fenced block parsed and was used, or, when the judge repair supplied the block,
-  names the repair (amended at build, R-X13, 2026-09-19).
+  names the repair (amended at build, R-X13, 2026-09-19) — superseded by R-X32 (§11): the channel
+  and its `info` kind stand, but there is no "own fenced block" path any more and the note fires on
+  every ending the relaunch can have.
 - R12 **`promoted` never rides an `error` leg.** The failed-with-no-usable-output return never
   emits it (an L2/L4 death has a non-empty stand-in and is a death, not a promoted leg), so
   three of the four direct error-branch metadata writers need no new line (start.js and
@@ -319,7 +329,7 @@ Council round 2 on PR #270 (run `35444701260`, 4/4 seats, "Fix these first") con
 findings and contested one (its adjudicated sticky comment: 12 / 1 / 0 / 0). Five clusters bear on
 the design: A2 → R-X29; D2 → R-X30; A4 + B2 + C1 → R-X31, with A3 (the wave schema) refuted a second
 time and made moot inside it; B1 (`leg.error` raw) filed inside R-X31; and A1 + D1 — the Stage-2
-judge exception R4 — the owner's decision, recorded here when ruled. The remaining four are ruled
+judge exception R4 — ruled A′ by the owner: withdrawn (R-X32–R-X34 below). The remaining four are ruled
 without a code change. D3 (contested): `promotedOutput` is initialised to `''` in the mirror's state
 (`src/sidecar/conversation-mirror.js:47`) and its only assignments are `''` (`:164`) and the
 accumulated `reasoningOutput` string (`:276`), so the `.length` read at the mint
@@ -338,17 +348,23 @@ directly (`src/council/chair-fallback.js:104`, `src/council/run-retry-notes.js:1
 
 Every `file:line` in this section is measured on `a028e12d`, the head carrying all three fixes: the
 table's middle column names the behaviour at `ba1b47d7`, the citations name where that code lives
-now.
+now. The last three rows (R-X32–R-X34) are the A′ round and are measured differently, as each says:
+their citations are on `77aa18d5` — the head carrying fixes E1 and E2 — and their middle column
+names the behaviour at `5e624ef8`, the head those two fixes branched from, not at `ba1b47d7`.
 
 | finding | at `ba1b47d7` | rule |
 |---|---|---|
 | R-X29 — the bounded repairs fed a promoted leg's reasoning back verbatim | all three repair solos read the promoted `summary` and shipped it inside LC-12's `--- YOUR PREVIOUS <KIND> (verbatim — this is the text to correct) ---` block, unbounded: the defence (`run-debate.js:85`), the re-vote (`run-debate-revote.js:169`) and the Stage-2 `-q<N>` judge repair (`run-stage2.js:200`) | each call site ships `''` and the briefing grows a THIRD arm that says why and asks afresh — `Your previous defense was written in the reasoning channel and is not a defense — there is no prior text to correct; answer afresh. Do not invent a position to satisfy the schema: say so in your output.` (`briefings-debate.js:205-208`); the re-vote arm reads the same way for a re-vote, and the judge arm the same for a judgement, with its own do-not-invent clause (`briefings-stage2.js:183-186`). The judge repair's flag is `judging === '' && isPromotedLeg(leg)` (`run-stage2.js:214`), so a real `-q1` answer returns the verbatim arm to `-q2`. Named mutants DEFENSEREPAIRCARRIESREASONING, REVOTEREPAIRCARRIESREASONING, JUDGEREPAIRCARRIESREASONING. |
 | R-X30 — a kept promoted defence or re-vote was still materialized | `materializeDebate` (`run-launch.js:280`) wrote `leg.summary` for every entry that had one, so a promoted defence or re-vote — KEPT under R-X23 so its row could carry the fact — reached `rebuttal-<seat>.md` / `revote-<seat>.md`: an artifact that reads as a rebuttal and is none | the skip `materializeReviews` already had, `if (isPromotedLeg(leg)) { continue; }` (`run-launch.js:287`, its twin at `:250`). The `rebuttal` literal forwards `promoted` emit-when-true so the materializer can see it (`run-debate.js:138-141`); the `revote` literals already did under R-X26 (`run-debate-revote.js:293-295`). Named mutants DEBATEPROMOTEDMATERIALIZED, DEBATELITERALPROMOTEDDROPPED. |
 | R-X31 — the `finish` bound, the forked token fragment, the silent wave schema | the bound was a printable-ASCII strip (`[^\x20-\x7e]`) that kept every Markdown character, so a provider-controlled finish reached the sticky PR comment CI renders `verdict.json :: seatLoss.reason` into; the token parenthetical was hand-spelled a second time in `chair-fallback.js`; `wave.schema.json` said nothing about `promoted` (refuted as a defect — a wave's leg object is open — then made moot by declaring it) | the strip is an allowlist, `[^A-Za-z0-9_.:-]`, applied before the 40-char ceiling (`promoted.js:73`; `MAX_FINISH_CHARS` at `:37`); `tokenSplit(facts)` (`promoted.js:89`) is the one home — `reasoningOnlyClause` composes from it (`:104`) and `chair-fallback.js` imports it (`:16`, used at `:104`), both announcements byte-identical, pinned by string AND by source; `wave.schema.json:30-34` declares `promoted` as `{type: boolean, enum: [true]}` on its leg objects, which stay OPEN. Named mutants FINISHMARKDOWN, SPLITFORKED, SPLITINLINED. |
+| R-X32 — the Stage-2 judge exception (R4): a promoted judge's deliberation was adjudicated as its judgement | (at `5e624ef8`, not the header's `ba1b47d7`) a promoted judge's `summary` went straight to `parseJudgeOutput` and an accept-if-parses hit was USED (`run-stage2.js@5e624ef8:188-190`); the same deliberation was written to `judge-<seat>.md` for any leg that came back `complete` with a summary (`run-stage2.js@5e624ef8:169-173`); and the bounded `-q<N>` repair that followed was a repair solo in a fresh session with no bundle to judge from, so it could not succeed | never used as it stands, however well the deliberation parses. A promoted leg is unparseable BY RULE — `{ ok: false, errors: [{ code: 'REASONING_ONLY', detail: 'answered only in its reasoning channel' }] }` (`run-stage2.js:189`) — so attempt 1 of the SAME bounded loop is a RELAUNCH with the original `bundle` (`run-stage2.js:215-216`; `bundle` at `:124`), keeping the `-q<N>` waveId (`:205`), the `role: 'repair'` row (`:238-239`) and `conformance: 'repaired'` when it is used (`:240`) — only the note's prose tells a relaunch from a repair. A relaunch with real but unparseable text gets the one remaining LC-12 repair carrying the RELAUNCH's text (`:230`); a relaunch that is promoted again or dies stands the judge down (the `while` conjunct at `:202`; the outcome is recorded at `:231-234`). No `judge-<seat>.md` from a promoted leg — the relaunch's real text is the artifact (`:173` and `:233`). `promotedJudgeNote` (`run-stage2-notes.js:97`) announces BOTH outcomes on the existing info channel `judge-reasoning-only` (`degrade.js:51`; no new literal, so the drift pin holds), called at `run-stage2.js:284` (rescued) and `:261` (stood down). Its `why` is `its own answer was its deliberation, not a judgement; <cause>; the deliberation itself was read by nobody (<r> reasoning / <o> output tokens)`, and `<cause>` is one of seven, byte-exact (six causes, the `answered` cause carrying two arms — `run-stage2-notes.js:103-120`): rescued by the relaunch itself — `relaunched once with the original briefing, and that relaunch's adjudication is the one used`; rescued by its repair — `relaunched once with the original briefing, and the relaunch's answer needed one repair — the adjudication used came from that repair (attempt 2)`; stood down, promoted again — `relaunched once with the original briefing, and the relaunch answered in its reasoning channel again`; stood down, died — `relaunched once with the original briefing, and the relaunch produced no usable text`; stood down, answered unparseably, with TWO arms forked on `attempts` (review I1, because `ctx.overBudget()` is re-checked between the relaunch and its repair) — `relaunched once with the original briefing, and the relaunch's answer did not parse after its one repair` when `attempts === 2`, and `relaunched once with the original briefing, and the relaunch's answer did not parse — the cost ceiling was reached before its repair` when `attempts === 1`; and never relaunched — `not relaunched — the cost ceiling was reached first`. A user abort during the relaunch returns at `run-stage2.js:224-228` before the judge's row or its note is written, exactly as an abort during a repair always has (aborted runs never reach tally). The thin-cross-review clause becomes `<n> answered only in the reasoning channel and was not rescued` (`run-stage2-notes.js:187`, review M1): under A′ such a judge HAS been relaunched, and that relaunch may have answered in the OUTPUT channel unparseably, so "with no parseable block" was no longer true of all four stand-down causes. Named mutants JUDGEOWNBLOCKUSED, RELAUNCHISREPAIR, STANDDOWNDROPPED, STANDDOWNSILENT, JUDGEARTIFACTPROMOTED, RELAUNCHARTIFACTDROPPED, ARMREADDED-STAGE2. |
+| R-X33 — the same defect on the debate's two surfaces: a promoted defence or re-vote was repaired against its deliberation | (at `5e624ef8`, not the header's `ba1b47d7`) the one bounded repair of a promoted defence (`run-debate.js@5e624ef8:85`) and of a promoted re-vote (`run-debate-revote.js@5e624ef8:169`) shipped R-X29's third arm — a repair frame, with no prior text, for a seat that had produced no answer to repair | the one bounded retry of a promoted defence is a RELAUNCH with its ORIGINAL brief (`run-debate.js:85`; `brief` at `:53`, the same `const` the `-d<N>` defence wave was launched with — the id is built at `:54`, so a second raiser's defence is `-d2`), and of a promoted re-vote a RELAUNCH with the SHARED re-vote bundle (`run-debate-revote.js:169`; `bundle` at `:203`, the string also written to `revote-bundle.md` at `:207` and launched at `:220`, threaded through `repairRevoteLeg`'s signature at `:156` and its call at `:246`). Everything downstream is unchanged: the `leg2` gate, `conformance`, the `superseded`/`repair` rows and the emit-when-true `promoted` spreads, so a relaunch that comes back promoted again is unparseable and the original still stands (a defence as `no-response`, a re-vote leaving the judge's provisional verdict) — today's stand-down. Named mutants DEFENSERELAUNCHISREPAIR, REVOTERELAUNCHISREPAIR. |
+| R-X34 — R-X29's third briefing arm is unreachable under A′ | (at `5e624ef8`, not the header's `ba1b47d7`) `briefings-stage2.js :: judgeRepairPromptWith` and `briefings-debate.js :: repair` each took a `promoted` flag and returned a third `absent` arm saying the previous answer "was written in the reasoning channel … answer afresh" — reachable only from the call sites R-X32 and R-X33 have now removed | the arm is WITHDRAWN from both files rather than left unreachable: `judgeRepairPromptWith(contract, { errors, judgement })` takes no `promoted` key and `absent` is the single empty-arm string again, byte-identical to the old empty arm (`briefings-stage2.js:179-188`, the withdrawal recorded in its docblock at `:167-175`); the same for `repair(kind, contract, errors, prior)` (`briefings-debate.js:200-203`, docblock `:186-194`). A dead prompt string is unreachable through the builders' return values, so behaviour cannot guard it — SOURCE pins do: each test file reads its own `src/council/briefings-*.js` and asserts it does not contain `written in the reasoning channel`, beside a positive control on the surviving empty arm (`tests/council/briefings-stage2.test.js:252-260` with `:272-276`; `tests/council/briefings-debate.test.js:130-136` with `:104-112`). A stale caller's `promoted` key is pinned to change nothing on the Stage-2 surface ONLY (`tests/council/briefings-stage2.test.js:262-270`), because the Stage-2 dispatchers forward the whole args object; `briefings-debate.js :: repair(kind, contract, errors, prior)` is positional (`:200`), so no `promoted` key can reach it and no such pin exists there. R-X29's principle stands by construction (there is no repair prompt for a promoted leg at all); only its mechanism is superseded. Named mutants ARMREADDED-STAGE2, ARMREADDED-DEBATE. |
 
 Rulings, each with its cost if wrong:
 - R-X29 **No repair prompt carries a promoted leg's text.** Cost: a repair that could have used the
-  reasoning as context loses it — that is the thesis.
+  reasoning as context loses it — that is the thesis. Mechanism superseded by R-X34; the principle
+  holds by construction.
 - R-X30 **`materializeDebate` skips a promoted leg like `materializeReviews` does.** Cost: one fewer
   artifact; the reasoning stays in the leg's session `summary.md` and `wave.json`.
 - R-X31 **The finish bound is an identifier allowlist; the token fragment has one home; the wave
@@ -358,3 +374,14 @@ Rulings, each with its cost if wrong:
   since bounded it (`run-stage2-notes.js:59`, `collapseExcerpt(leg.error, 200)`). It is filed, not
   fixed here: bounding the Stage-1 and retry templates changes pinned strings for every error over
   the bound and belongs to its own PR.
+- R-X32 **A promoted Stage-2 judge is never used as it stands: it is relaunched once with the
+  original bundle, then repaired only if that relaunch produced real text, then stood down — and
+  the note says which.** The R4 exception is withdrawn. Cost: one paid relaunch per promoted judge,
+  replacing a paid repair solo in a fresh session with no bundle to judge from, so it could not
+  succeed.
+- R-X33 **A promoted debate defence or re-vote is relaunched with its original briefing — the
+  defence brief, the shared re-vote bundle — never repaired against its deliberation.** Cost: none
+  beyond the relaunch; the bound is still exactly one retry, and the stand-down is unchanged.
+- R-X34 **R-X29's third briefing arm is withdrawn from both briefing files, not left
+  unreachable.** Cost: none — dead code removed. R-X29's principle is unaffected: with no repair
+  prompt built for a promoted leg at all, no promoted text can ride one.
