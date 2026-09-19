@@ -10,13 +10,50 @@
  * note is built inline in run-retry.js's orchestrator (it is the one place
  * that decides recovery, and stays small).
  *
- * #257: the ONE leaf require. `reasoningOnlyClause` is appended after "with no
+ * #257: `./promoted` is a LEAF require. `reasoningOnlyClause` is appended after "with no
  * usable output" at every site below, and returns the EMPTY STRING for a leg
  * that is not promoted — so every announcement for every other leg stays
  * byte-identical. Both are re-exported so run-retry.js and run-stages.js, which
  * already destructure this module, take the clause from one place.
+ *
+ * #257 R-X38: the second require is the house sanitizer, itself a leaf. Every `why` below
+ * quotes a PROVIDER-controlled error into prose that reaches stderr, run.json and report.md,
+ * so each is bounded to one sanitized line as `run-stage2-notes.js :: judgeDeadNote` already
+ * bounds its own (#219). The `data` fields keep RAW bytes — machine surface, not a sentence.
  */
 const { promotedFacts, reasoningOnlyClause } = require('./promoted');
+const { collapseExcerpt } = require('../utils/text-sanitize');
+
+/**
+ * #257 R-X38 fix round 1 — the cap on a leg error QUOTED INTO PROSE.
+ *
+ * THE RULING (owner, round 3): this cap bounds PROVIDER noise — control characters, ANSI,
+ * bidi, whitespace runs, unbounded length — and must be wide enough that every reason AMICUS
+ * ITSELF mints passes through WHOLE. A minted reason is the product's own self-diagnosis:
+ * `utils/output-length.js :: formatOutputLengthReason` ends in "raise outputBudget in
+ * config.json (docs/configuration.md, Output budget)", and a cap that eats that remedy turns
+ * a self-diagnosing failure into a silent one.
+ *
+ * MEASURED 2026-09-19, real formatters, the pin's exact inputs, longest FIRST (400 REFUTED):
+ *   518  headless.js :: formatNoOutputBackstopReason — caller-set, extended, every clause
+ *   517  formatOutputLengthReason — budget unset, a non-plain ambient flag
+ *   438  formatOutputLengthReason — budget unset, a plain ambient flag
+ *   398  formatNoOutputBackstopReason — engine log + skew + session, NOT extended
+ * 800 clears the longest by 282 — more than the 200-char engine-log excerpt that same
+ * backstop format already embeds, so one further excerpt-sized clause still passes whole.
+ * Pinned against the REAL formatters, never a copied literal, in
+ * tests/council/run-retry-notes.test.js. Named mutant "MINTEDREASONTRUNCATED".
+ *
+ * ⚠️ `formatOutputLengthReason` interpolates the ambient OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX
+ * verbatim, so its length is OPERATOR-controlled: no finite cap is a proof, and the pin (which
+ * measures the realistic forms) is a tripwire on drift, not a bound.
+ *
+ * Shared with run-stages.js through this module's exports: it already destructures this one,
+ * so a single definition costs no new require edge and no cycle. Deliberately NOT in
+ * `utils/text-sanitize.js` — "leg error" is council vocabulary, and that module's own header
+ * keeps each caller's cap with the caller (alias-shadow.js holds its own 64-char cap).
+ */
+const MAX_LEG_ERROR_CHARS = 800;
 
 /** D-effect parity: still-dead leg notes reuse today's count phrasing, with the
  *  FIRST attempt's counts — the why carries the retry story (spec §5). */
@@ -144,7 +181,8 @@ function srcLegStillDeadNote(leg, unit, counts, seatId = null) {
   const seat = leg.modelInput || leg.model;
   const pf = promotedFacts(leg); // named in the `why` AND carried in `data` — one read
   return { channel: 'dead-leg', what: `seat ${seat} did not review`,
-    why: `the leg ended '${leg.status}'${leg.error ? `: ${leg.error}` : ''} with no usable output${reasoningOnlyClause(pf)}; `
+    // #257 R-X38: the prose is bounded, `data.reason` below is not. Named mutant "RETRYPROSERAW".
+    why: `the leg ended '${leg.status}'${leg.error ? `: ${collapseExcerpt(leg.error, MAX_LEG_ERROR_CHARS)}` : ''} with no usable output${reasoningOnlyClause(pf)}; `
       + 'its once-only retry wave produced no legs',
     effect: legEffect(counts),
     data: { seat, seatId: seatId || null, status: leg.status, reason: leg.error || null,
@@ -173,16 +211,18 @@ function retryLegStillDeadNote(seat, ff, retryLeg, unit, counts) {
   // Trimming only the retry made the same reason with different whitespace
   // compare unequal, so the note printed one reason twice — the byte-identity
   // guarantee broken by the very comparison meant to uphold it.
-  // Council #264 r2 (A4 + C1 + D2, three seats independently): the RENDERED text
-  // uses each side's own ORIGINAL bytes, and now actually does. It rendered the
-  // trimmed retry string while `data.reason` carried the raw one, so the note's
-  // prose and its machine-readable field disagreed about the same error — and
-  // the comment claiming otherwise made the discrepancy harder to find, not
-  // easier. Normalising a comparison is not licence to rewrite the evidence.
+  // Council #264 r2 (A4 + C1 + D2, three seats independently): the RENDERED text uses each
+  // side's OWN bytes, not the other side's and not the comparison's scratch value. It used to
+  // render the TRIMMED retry string while `data.reason` carried the raw one, so the note's
+  // prose and its machine-readable field disagreed about the same error.
+  // #257 R-X38 SUPERSEDES the "original bytes, padding and all" half of that: the rendered
+  // cause is each side's own bytes through the house sanitizer at MAX_LEG_ERROR_CHARS.
+  // `data.reason` still carries the RAW string, and the prose still names the SAME error the
+  // data does — a bounded quotation of it, never a different one. The COMPARISON is untouched.
   const retryRaw = typeof retryLeg.error === 'string' ? retryLeg.error : '';
   const retryErr = retryRaw.trim();
   const firstReason = (ff && typeof ff.reason === 'string') ? ff.reason.trim() : '';
-  const retryCause = (retryErr && retryErr !== firstReason) ? `: ${retryRaw}` : '';
+  const retryCause = (retryErr && retryErr !== firstReason) ? `: ${collapseExcerpt(retryRaw, MAX_LEG_ERROR_CHARS)}` : '';
   // #257: each half names its OWN leg's reasoning channel — the first failure's facts ride
   // `ff.promoted` (minted in run-retry-group.js), the retry leg's are read off the leg here.
   // R-X14: `data.status`/`data.reason` describe the RETRY leg, so `data.promoted` does too —
@@ -194,7 +234,9 @@ function retryLegStillDeadNote(seat, ff, retryLeg, unit, counts) {
     : missing
       ? `${ff.reason} in wave ${ff.waveId}; its once-only retry leg ended `
         + `'${retryLeg.status}'${retryCause} with no usable output${reasoningOnlyClause(retryPf)}`
-      : `the leg ended '${ff ? ff.status : 'unknown'}'${ff && ff.reason ? `: ${ff.reason}` : ''} `
+      // #257 R-X38: `ff.reason` on the LEG arm is minted from the first leg's own `leg.error`
+      // (`run-retry-group.js :: recordFailure`), so it is provider text too and is bounded here.
+      : `the leg ended '${ff ? ff.status : 'unknown'}'${ff && ff.reason ? `: ${collapseExcerpt(ff.reason, MAX_LEG_ERROR_CHARS)}` : ''} `
         + `with no usable output${reasoningOnlyClause(ff && ff.promoted)}; its once-only retry also ended '${retryLeg.status}'${retryCause}${reasoningOnlyClause(retryPf)}`;
   return { channel: missing ? 'seat-unbound' : 'dead-leg', what: `seat ${seat} did not review`, why,
     effect: legEffect(counts),
@@ -217,7 +259,8 @@ function missingLegStillDeadNote(seat, ff, unit, counts) {
     ? `its first wave ${ff.waveId} produced no legs (${ff.reason})`
     : missing
       ? `${ff.reason} in wave ${ff.waveId}`
-      : `the leg ended '${ff ? ff.status : 'unknown'}'${ff && ff.reason ? `: ${ff.reason}` : ''} with no usable output${reasoningOnlyClause(ff && ff.promoted)}`;
+      // #257 R-X38: same bound, same reason — `ff.reason` here is the first leg's `leg.error`.
+      : `the leg ended '${ff ? ff.status : 'unknown'}'${ff && ff.reason ? `: ${collapseExcerpt(ff.reason, MAX_LEG_ERROR_CHARS)}` : ''} with no usable output${reasoningOnlyClause(ff && ff.promoted)}`;
   return { channel: missing ? 'seat-unbound' : 'dead-leg', what: `seat ${seat} did not review`,
     why: `${fact}; its once-only retry produced no leg for this seat`,
     effect: legEffect(counts),
@@ -249,7 +292,7 @@ function truncatedReviewNote(seat, leg) {
 
 module.exports = { waveStillDeadNote, skippedWaveNote, srcLegStillDeadNote,
   retryLegStillDeadNote, missingLegStillDeadNote, truncatedReviewNote,
-  // #257: re-exported so the two files that already destructure this module —
-  // run-retry.js (the heal note) and run-stages.js (the skipped-leg note) —
-  // take the clause from ONE place rather than each requiring ./promoted.
-  reasoningOnlyClause, promotedFacts };
+  // #257 (+ R-X38 fix 1 for the cap): re-exported so the two files that already destructure
+  // this module — run-retry.js (the heal note) and run-stages.js (the skipped-leg note) —
+  // take the clause and the prose cap from ONE place rather than each keeping a copy.
+  reasoningOnlyClause, promotedFacts, MAX_LEG_ERROR_CHARS };

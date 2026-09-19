@@ -444,8 +444,9 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
   });
 
   // V19/V20 hand-assemble runStats and call buildVerdict directly (the V14-V18 pattern), not
-  // `build()`/`tally()`: `promoted` is not yet in tally.js's allowlist in this worktree — that
-  // ride-along lands via #257 Task 5 in a separate worktree — so nothing here depends on it.
+  // `build()`/`tally()` — by choice, so the census is pinned at its own producer. `promoted` IS
+  // in tally.js's re-projection allowlist on this branch (tests/council/tally.test.js pins it
+  // both ways), so these tests stay INDEPENDENT of the tally rather than blind to it.
   test('V19 a completed bench seat carrying promoted: true is NOT reviewed — it delivered no review (#257, decision B)', () => {
     const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
       runStats: [seatRow('glm', 'complete'), { ...seatRow('qwen', 'complete'), promoted: true }, seatRow('gpt', 'complete')] });

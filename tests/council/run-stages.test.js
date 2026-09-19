@@ -839,8 +839,15 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     expect(res.degraded).toBe(false);
   });
 
-  test('an OUTPUT_LENGTH death is a dead leg whose note carries the reason verbatim, and gets NO truncation note', async () => {
-    const dead = { ...deadLeg('b', 'error', "OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — 32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — raise outputBudget in config.json (docs/configuration.md, Output budget)", 'abc123-s1', 2), finish: 'length' };
+  // #257 R-X38 fix round 1: retitled. The `why` bounds PROVIDER noise, but an AMICUS-MINTED
+  // reason must arrive whole (owner ruling, round 3) — so this is now an EXACT pin on the
+  // real formatter's output, not a `.*` regex that would tolerate the remedy being cut.
+  // Minted here rather than pasted: a copied literal is how a cap and a format drift apart.
+  test('an OUTPUT_LENGTH death is a dead leg whose note carries an amicus-minted reason verbatim (provider noise is bounded), and gets NO truncation note', async () => {
+    const { formatOutputLengthReason } = require('../../src/utils/output-length');
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+      budget: null, reasoningOnly: false, ambientFlag: null });
+    const dead = { ...deadLeg('b', 'error', MINTED, 'abc123-s1', 2), finish: 'length' };
     // Same harness as 'retry also dies': roster (-s1) ['a', 'b'], retry roster (-s1r1) ['b'] alone.
     const ctx = makeCtx({ models: ['a', 'b'] });
     ctx.launchers.launchWave
@@ -852,7 +859,17 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     // Named mutant "DEADNOTED": iterate `legs` instead of `materialized` in run-stages — a note appears here.
     expect(ctx._notes.filter((n) => n.channel === 'output-truncated')).toHaveLength(0);
     const n = ctx._notes.find((x) => x.channel === 'dead-leg');
-    expect(n.why).toMatch(/^the leg ended 'error': OUTPUT_LENGTH: the provider stopped at the max_tokens reservation \(finish 'length'\) and no answer text arrived — 32000 reasoning \/ 0 output tokens; .* with no usable output/);
+    expect(MINTED.length).toBeGreaterThan(200);          // it was truncated under the old cap
+    // The retry dies too, so this is `retryLegStillDeadNote`'s leg arm: first reason in full,
+    // then the retry tail. Exact, so a cap that ate the remedy could not hide behind a `.*`.
+    expect(n.why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
+      + "its once-only retry also ended 'timeout'");
+    // The clause the ruling exists for, named so a future cap change reds HERE and not only
+    // in tests/council/run-retry-notes.test.js's minted-reason corpus.
+    expect(n.why).toContain('raise outputBudget in config.json (docs/configuration.md, Output budget)');
+    // `data.reason` describes the RETRY leg (null here); the FIRST leg's raw bytes ride
+    // `data.firstFailure` — the machine surface, verbatim, as ever.
+    expect(n.data.firstFailure.reason).toBe(MINTED);
   });
 
   test('legs with no finish produce no output-truncated note', async () => {
@@ -994,6 +1011,45 @@ describe('#257: a promoted Stage-1 leg is no deliverable — it is retried, and 
     expect(n.why).toBe("the leg ended 'error': boom with no usable output");
     // R-X14 emit-when-promoted: no key at all, so the record's exact shape is unmoved.
     expect(n.data).toEqual({ seat: 'b', status: 'error', reason: 'boom' });
+  });
+});
+
+// ---- #257 R-X38: the skipped-leg prose bounds the provider's error ----
+//
+// run-stages.js's OWN dead-leg note (the overBudget / no-retry-attempted arm) is the
+// fifth prose site that interpolates a provider-controlled `leg.error`; the other four
+// live in run-retry-notes.js and are pinned in tests/council/run-retry-notes.test.js.
+// The `why` reaches stderr, run.json and report.md, so it runs through the same SANITIZER
+// the Stage-2 judge-death prose has used since #219 (`run-stage2-notes.js ::
+// judgeDeadNote`) — at a different cap: the council's own `run-retry-notes.js ::
+// MAX_LEG_ERROR_CHARS`, where Stage 2 still carries a bare literal 200 (filed, not fixed
+// here). `data.reason` stays VERBATIM: machine surface, not a sentence.
+//
+// The expected text is written out in full rather than computed with the sanitizer — a
+// test that builds its expectation from the function under test pins nothing.
+//
+// Named mutant "DEADLEGPROSERAW": drop `collapseExcerpt(...)` from that `why`.
+describe('#257 R-X38: the Stage-1 skipped-leg note bounds the provider error in its prose', () => {
+  const { MAX_LEG_ERROR_CHARS } = require('../../src/council/run-retry-notes');
+  // One `\n`, an ANSI sequence, and well past MAX_LEG_ERROR_CHARS.
+  const ESC = String.fromCharCode(27);   // a real escape byte, without a raw control char in this source
+  const HOSTILE = `${ESC}[31mPROVIDER_ERROR: upstream refused${ESC}[0m\nsecond line\n${'y'.repeat(900)}`;
+  // What a reader must see: one line, no escapes, MAX_LEG_ERROR_CHARS ending in an ellipsis.
+  const BOUND = `PROVIDER_ERROR: upstream refused second line ${'y'.repeat(754)}…`;
+
+  test('the why carries one sanitized, capped line; data.reason carries the raw bytes', async () => {
+    expect(HOSTILE.length).toBeGreaterThan(900);                    // the fixture is hostile
+    expect(BOUND).toHaveLength(MAX_LEG_ERROR_CHARS);                // the cap, stated
+    const ctx = makeCtx({ overBudget: () => true, models: ['a', 'b'] });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1), deadLeg('b', 'error', HOSTILE, 'abc123-s1', 2)] }, exitCode: 0 });
+    await runStage1(ctx);
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    expect(n.why).toBe(`the leg ended 'error': ${BOUND} with no usable output`);
+    expect(n.why).not.toContain('\n');
+    expect(n.why).not.toContain(ESC);
+    // The machine surface is untouched — verbatim, exactly as judgeDeadNote's data.reason is.
+    expect(n.data).toEqual({ seat: 'b', status: 'error', reason: HOSTILE });
   });
 });
 
@@ -2142,8 +2198,10 @@ describe('runStage2', () => {
     // glm (minor) on PR #219: the stage-2 degrade embedded `leg.error` verbatim
     // while this same PR institutes sanitization for untrusted provider text one
     // hop upstream (utils/session-status.js). `why` is PROSE — it renders into
-    // run.json, the report and the sticky comment — so an unbounded multi-line
-    // provider error would wreck the line it lands in.
+    // run.json, the stderr Notice and the Markdown `amicus council report` prints —
+    // so an unbounded multi-line provider error would wreck the line it lands in.
+    // (NOT the sticky PR comment: MEASURED — the workflow's comment step interpolates
+    // neither `seatLoss` nor `degrades`, so no degrade prose ever reaches it.)
     const nasty = `Provider exploded
 SECOND LINE
 	TABS   ${'x'.repeat(400)}`;

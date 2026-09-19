@@ -63,7 +63,10 @@ describe('#256 retryLegStillDeadNote names the retry\'s own cause', () => {
       for (const padded of [`  ${BACKSTOP}`, `${BACKSTOP}  `, `\n${BACKSTOP}\t`]) {
         const n = note({ class: 'leg', status: 'error', reason: padded },
           { status: 'error', error: BACKSTOP });
-        expect(n.why).toBe(`the leg ended 'error': ${padded} with no usable output; `
+        // #257 R-X38: the SUPPRESSION is what this test is about and it is unchanged. The
+        // first failure's reason now renders through the house sanitizer, so the padding
+        // that used to ride into the sentence (and the `\n` that broke it in two) is gone.
+        expect(n.why).toBe(`the leg ended 'error': ${BACKSTOP} with no usable output; `
           + 'its once-only retry also ended \'error\'');
         expect(n.why).not.toContain(`'error': ${BACKSTOP}`.replace("'error': ", "also ended 'error': "));
       }
@@ -72,19 +75,31 @@ describe('#256 retryLegStillDeadNote names the retry\'s own cause', () => {
     /**
      * Council #264 r2 / A4 + C1 + D2 (three seats, independently). The comment
      * promised "each side's own original bytes; only the comparison is
-     * normalised" while the retry cause was RENDERED from the trimmed string.
-     * The promise was the right design — it is the code that was wrong.
+     * normalised" while the retry cause was RENDERED from the trimmed string —
+     * the prose and `data.reason` then disagreed about the same error.
+     *
+     * #257 R-X38 SUPERSEDES the "padding and all" half: the rendered cause is the
+     * retry leg's OWN error run through the house sanitizer (`collapseExcerpt` at
+     * `run-retry-notes.js :: MAX_LEG_ERROR_CHARS`) — the same SANITIZER the Stage-2
+     * judge-death prose runs its own leg error through, at a different cap (that one
+     * still carries a bare literal 200; the divergence is filed, not fixed here). What
+     * survives whole is the substance of r2 — the prose names the RETRY's error,
+     * never the first failure's, and `data.reason` still carries the raw bytes.
      */
-    test('a DIFFERING retry reason renders its ORIGINAL bytes, padding and all', () => {
+    test('a DIFFERING retry reason is rendered from its OWN error, bounded, while data.reason stays raw', () => {
       const padded = `\n  ${REFUSAL}  `;
       const n = note({ class: 'leg', status: 'error', reason: BACKSTOP },
         { status: 'error', error: padded });
       expect(n.why).toBe(`the leg ended 'error': ${BACKSTOP} with no usable output; `
-        + `its once-only retry also ended 'error': ${padded}`);
-      // The note's `why` and its machine-readable `data.reason` now carry the
-      // same bytes — they used to disagree.
+        + `its once-only retry also ended 'error': ${REFUSAL}`);
+      // The machine surface is untouched by the bound: raw bytes, padding and all.
       expect(n.data.reason).toBe(padded);
-      expect(n.why).toContain(n.data.reason);
+      // Prose and data still name the SAME error — a bounded quotation of it.
+      expect(n.data.reason).toContain(REFUSAL);
+      // The #264 r1 guarantee, stated as a COUNT: the first failure's reason appears
+      // exactly once. (The old negative — the two strings adjacent — could never fire:
+      // they are always separated by " with no usable output; its once-only retry…".)
+      expect(n.why.split(BACKSTOP).length - 1).toBe(1);
     });
 
     test('a padded retry error matched against a padded first reason is still suppressed', () => {
@@ -320,5 +335,184 @@ describe('#257 R-X14 the still-dead notes carry the facts on data.promoted', () 
   test('missingLegStillDeadNote: a non-promoted first failure carries no promoted key', () => {
     const ff = { class: 'leg', status: 'error', reason: BACKSTOP };
     expect('promoted' in missingLegStillDeadNote('glm', ff, UNIT, COUNTS).data).toBe(false);
+  });
+});
+
+/**
+ * #257 R-X38 — the still-dead PROSE bounds the provider's error; the machine fields do not.
+ *
+ * Every `why` in this module quotes a PROVIDER-controlled string into a sentence that
+ * reaches stderr (`Notice:` lines), run.json and report.md (`utils/degrade.js ::
+ * formatDegrade` renders each record as a Markdown list item). The Stage-2 judge-death
+ * prose has carried `collapseExcerpt(leg.error, …)` since #219; these sites carried the
+ * raw string, so one provider could put ANSI colour, a bidi override or 900 characters of
+ * stack into a council announcement. Same function, one dialect — at the council's own
+ * cap, `run-retry-notes.js :: MAX_LEG_ERROR_CHARS`, whose ruling the next block pins.
+ *
+ * `collapseExcerpt` is the IDENTITY on a short, single-line, clean string, so every pin
+ * above this block whose fixture is an ordinary error string is byte-identical.
+ *
+ * The expected text is written out in full rather than computed with the sanitizer — a
+ * test that builds its expectation from the function under test pins nothing.
+ *
+ * Named mutant "RETRYPROSERAW": drop `collapseExcerpt(...)` from `srcLegStillDeadNote`'s
+ * `why`. Red set: the srcLeg test below. Its run-stages.js twin is "DEADLEGPROSERAW"
+ * (tests/council/run-stages.test.js).
+ */
+describe('#257 R-X38 the still-dead prose bounds the provider error; data stays raw', () => {
+  const { MAX_LEG_ERROR_CHARS } = require('../../src/council/run-retry-notes');
+  // One `\n`, an ANSI sequence, and well past MAX_LEG_ERROR_CHARS.
+  const ESC = String.fromCharCode(27);   // a real escape byte, without a raw control char in this source
+  const HOSTILE = `${ESC}[31mPROVIDER_ERROR: upstream refused${ESC}[0m\nsecond line\n${'y'.repeat(900)}`;
+  // What a reader must see: one line, no escapes, MAX_LEG_ERROR_CHARS ending in an ellipsis.
+  const BOUND = `PROVIDER_ERROR: upstream refused second line ${'y'.repeat(754)}…`;
+
+  test('the fixture is hostile and the expectation is bounded (non-vacuity)', () => {
+    expect(HOSTILE).toContain('\n');
+    expect(HOSTILE).toContain(`${ESC}[`);
+    expect(HOSTILE.length).toBeGreaterThan(900);
+    expect(BOUND).toHaveLength(MAX_LEG_ERROR_CHARS);
+    expect(BOUND).not.toContain('\n');
+    expect(BOUND).not.toContain(ESC);
+  });
+
+  test('srcLegStillDeadNote: the why is bounded, data.reason is the raw string', () => {
+    const n = srcLegStillDeadNote({ modelInput: 'glm', status: 'error', error: HOSTILE },
+      UNIT, COUNTS);
+    expect(n.why).toBe(`the leg ended 'error': ${BOUND} with no usable output; `
+      + 'its once-only retry wave produced no legs');
+    expect(n.data.reason).toBe(HOSTILE);
+  });
+
+  test('retryLegStillDeadNote, the RETRY leg\'s error: bounded in the why, raw on data.reason', () => {
+    const n = note({ class: 'leg', status: 'error', reason: BACKSTOP },
+      { status: 'error', error: HOSTILE });
+    expect(n.why).toBe(`the leg ended 'error': ${BACKSTOP} with no usable output; `
+      + `its once-only retry also ended 'error': ${BOUND}`);
+    expect(n.data.reason).toBe(HOSTILE);
+  });
+
+  test('retryLegStillDeadNote, the FIRST failure\'s reason: bounded in the why, raw on data.firstFailure', () => {
+    // `ff.reason` on the LEG arm is minted from the first leg's own `leg.error`
+    // (run-retry-group.js :: recordFailure), so it is provider text too.
+    const ff = { class: 'leg', status: 'error', reason: HOSTILE };
+    const n = note(ff, { status: 'timeout', error: null });
+    expect(n.why).toBe(`the leg ended 'error': ${BOUND} with no usable output; `
+      + "its once-only retry also ended 'timeout'");
+    expect(n.data.firstFailure.reason).toBe(HOSTILE);
+  });
+
+  test('missingLegStillDeadNote, the FIRST failure\'s reason: bounded in the why, raw on data.firstFailure', () => {
+    const ff = { class: 'leg', status: 'error', reason: HOSTILE };
+    const n = missingLegStillDeadNote('glm', ff, UNIT, COUNTS);
+    expect(n.why).toBe(`the leg ended 'error': ${BOUND} with no usable output; `
+      + 'its once-only retry produced no leg for this seat');
+    expect(n.data.firstFailure.reason).toBe(HOSTILE);
+  });
+});
+
+/**
+ * #257 R-X38 fix round 1 — THE CAP NEVER TRUNCATES A REASON AMICUS ITSELF MINTED.
+ *
+ * THE RULING (owner, round 3): the cap exists to bound PROVIDER noise. A reason amicus
+ * mints is the product's own self-diagnosis and must arrive WHOLE — the round-3 review
+ * caught the 200-char cap eating `formatOutputLengthReason`'s remedy ("raise outputBudget
+ * in config.json (docs/configuration.md, Output budget)"), which is the sentence the
+ * whole `OUTPUT_LENGTH:` death exists to deliver.
+ *
+ * This pin mints through the REAL formatters — never a copied literal, which is how a cap
+ * and a format drift apart in the first place — and asserts the cap is the IDENTITY on
+ * each: nothing truncated, and nothing altered either (a minted reason is already one
+ * clean line, so any change at all would be the sanitizer rewriting our own words).
+ *
+ * `utils/no-output-backstop.js` exports the window/extension machinery but NOT the message
+ * — the NO_OUTPUT_BACKSTOP reason is minted by `headless.js :: formatNoOutputBackstopReason`
+ * (exported for exactly this kind of assertion), so that is what is called here.
+ *
+ * MEASURED 2026-09-19 with the exact inputs below, longest first: 518 (the backstop,
+ * caller-set + extended + every clause — the same shape reads 505 with a `sessionStatus`
+ * of `idle`, which is the row ABOVE it plus an extension, not this one), 517
+ * (`formatOutputLengthReason`, budget unset + a non-plain ambient flag), 438 (the plain
+ * ambient flag). The fix brief proposed a 400 cap; this corpus REFUTES it, and the
+ * non-vacuity test below states that refutation as an assertion rather than as a comment.
+ *
+ * Named mutant "MINTEDREASONTRUNCATED": set `MAX_LEG_ERROR_CHARS` to 200 (or to 400) —
+ * the identity cases red.
+ */
+describe('#257 R-X38 the cap never truncates a reason amicus itself minted', () => {
+  const { collapseExcerpt } = require('../../src/utils/text-sanitize');
+  const { MAX_LEG_ERROR_CHARS } = require('../../src/council/run-retry-notes');
+  const { formatOutputLengthReason } = require('../../src/utils/output-length');
+  const { formatNoOutputBackstopReason } = require('../../src/headless');
+
+  const TOKENS = { reasoning: 32000, output: 0 };
+  const SKEW = { server: '1.17.3', installed: '1.18.15' };
+  // The engine-log clause is ITSELF already bounded to 200 by the house sanitizer before it
+  // reaches the reason (utils/engine-log.js), so this is the longest a real kill can carry.
+  const LOG = collapseExcerpt('E'.repeat(400), 200);
+  const EXTENSION = { extended: true, windowMs: 480000, extendedToMs: 912000,
+    firedAtMs: 480000, status: 'busy' };
+
+  const corpus = () => [
+    ['OUTPUT_LENGTH: budget unreadable',
+      formatOutputLengthReason({ tokens: TOKENS, budget: undefined, reasoningOnly: true, ambientFlag: null })],
+    ['OUTPUT_LENGTH: a budget is set',
+      formatOutputLengthReason({ tokens: TOKENS, budget: 64000, reasoningOnly: true, ambientFlag: null })],
+    ['OUTPUT_LENGTH: unset, no ambient flag',
+      formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: false, ambientFlag: null })],
+    ['OUTPUT_LENGTH: unset, no ambient flag, reasoning-only',
+      formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: true, ambientFlag: null })],
+    ['OUTPUT_LENGTH: unset + a PLAIN ambient flag',
+      formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: true, ambientFlag: '64000' })],
+    ['OUTPUT_LENGTH: unset + a NON-PLAIN ambient flag (the longest OUTPUT_LENGTH format, 517)',
+      formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: true, ambientFlag: '64000abc' })],
+    ['NO_OUTPUT_BACKSTOP: the plain env-window kill',
+      formatNoOutputBackstopReason({ ms: 480000, fromEnv: true })],
+    ['NO_OUTPUT_BACKSTOP: + engine log + skew + session status',
+      formatNoOutputBackstopReason({ ms: 480000, fromEnv: true, engineLogExcerpt: LOG,
+        engineSkew: SKEW, sessionStatus: { type: 'idle' } })],
+    ['NO_OUTPUT_BACKSTOP: caller-set, extended, every clause (the longest minted reason today, 518)',
+      formatNoOutputBackstopReason({ ms: 912000, fromEnv: false, engineLogExcerpt: LOG,
+        engineSkew: SKEW, sessionStatus: { type: 'retry_after_error' }, extension: EXTENSION })],
+  ];
+
+  test.each(corpus())('%s passes the cap WHOLE', (_name, reason) => {
+    expect(typeof reason).toBe('string');
+    expect(collapseExcerpt(reason, MAX_LEG_ERROR_CHARS)).toBe(reason);
+  });
+
+  test('the corpus is NOT vacuous: it exceeds 400, and the cap still clears it', () => {
+    const lengths = corpus().map(([, r]) => r.length);
+    // If every minted reason were short, the identity assertions above would hold under any
+    // cap and would pin nothing. They do not: three of them are longer than 400.
+    expect(lengths.filter((n) => n > 400).length).toBeGreaterThanOrEqual(3);
+    expect(Math.max(...lengths)).toBeLessThanOrEqual(MAX_LEG_ERROR_CHARS);
+  });
+
+  test('the REMEDY — the sentence the ruling exists for — survives the cap in the prose', () => {
+    const REMEDY = 'raise outputBudget in config.json (docs/configuration.md, Output budget)';
+    const reason = formatOutputLengthReason({ tokens: TOKENS, budget: null,
+      reasoningOnly: true, ambientFlag: '64000abc' });
+    expect(reason).toContain(REMEDY);                        // the formatter really ends in it
+    // Not just the constant — the note a user actually reads.
+    const n = srcLegStillDeadNote({ modelInput: 'glm', status: 'error', error: reason },
+      UNIT, COUNTS);
+    expect(n.why).toContain(REMEDY);
+    expect(n.why).toBe(`the leg ended 'error': ${reason} with no usable output; `
+      + 'its once-only retry wave produced no legs');
+  });
+
+  test('the real-world 2026-09-16 backstop reason rides whole through every builder', () => {
+    // Run 35143585179's shape, rebuilt by the real minter rather than pasted.
+    const reason = formatNoOutputBackstopReason({ ms: 480000, fromEnv: true,
+      engineSkew: SKEW, sessionStatus: { type: 'idle' } });
+    expect(srcLegStillDeadNote({ modelInput: 'glm', status: 'error', error: reason }, UNIT, COUNTS).why)
+      .toContain(reason);
+    expect(note({ class: 'leg', status: 'error', reason }, { status: 'timeout', error: null }).why)
+      .toContain(reason);
+    expect(note({ class: 'leg', status: 'error', reason: 'boom' }, { status: 'error', error: reason }).why)
+      .toContain(reason);
+    expect(missingLegStillDeadNote('glm', { class: 'leg', status: 'error', reason }, UNIT, COUNTS).why)
+      .toContain(reason);
   });
 });

@@ -69,11 +69,11 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
   let parsed = usable ? parseDebateDefense(leg.summary, expectedIds)
     : { ok: false, byId: allNoResponse(expectedIds), errors: [{ code: leg ? 'REASONING_ONLY' : 'DEAD_LEG', detail: leg ? 'answered only in its reasoning channel' : 'no summary' }] };
   let conformance = usable ? 'clean' : 'unstructured';
-  // v4.7 D2/E4: the repair's loser leg — the ORIGINAL when the repair produced a
-  // usable (complete) leg (today's leg-swap below is unchanged), or the failed
-  // repair attempt itself when it did not — retained so runDebate can turn it
-  // into an extra debate-defense runStats row. Both stay null when no repair is
-  // attempted at all (today's single-row shape, byte-identical).
+  // v4.7 D2/E4: the repair's loser leg — the ORIGINAL when the repair produced a COMPLETE leg
+  // (usable or not: a promoted repair leg is complete but UNPARSEABLE, and `leg = leg2` below
+  // still makes it the recorded leg, carrying `promoted: true` — #257 R-X26), or the failed
+  // repair attempt itself when the repair did not complete — retained so runDebate can turn it
+  // into an extra debate-defense runStats row. Both null when no repair is attempted at all.
   let supersededLeg = null, repairLeg = null;
   if (leg && !parsed.ok) {
     const repairId = `${waveId}r`;
