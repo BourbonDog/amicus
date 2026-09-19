@@ -16,9 +16,11 @@
  * `mirror.promotedOutput` at the normal terminal return; fanout-leg.js,
  * session-utils.js, leg-riders.js, run-stats-entry.js and tally.js carry it).
  * A promoted Stage-1 leg is NOT a review (run-launch.js :: materializeReviews
- * skips it, so the once-only retry fires); a promoted judge is used when its
- * fenced block parses, or when the judge repair supplies one, and a
- * `judge-reasoning-only` note names which (run-stage2.js, run-stage2-notes.js).
+ * skips it, so the once-only retry fires). A promoted Stage-2 judge is never
+ * used as it stands — it is relaunched once with the ORIGINAL bundle (R-X32),
+ * and a `judge-reasoning-only` note names how that ended (run-stage2.js,
+ * run-stage2-notes.js); a promoted debate defence or re-vote is likewise
+ * relaunched with its original briefing (R-X33).
  */
 'use strict';
 

@@ -1,5 +1,9 @@
 // tests/council/briefings-stage2.test.js
 'use strict';
+// #257 R-X34: the withdrawn arm is pinned by READING the source (below) — an
+// unreachable branch has no behaviour left to assert against.
+const fs = require('fs');
+const path = require('path');
 const s2 = require('../../src/council/briefings-stage2');
 const { parseJudgeOutput } = require('../../src/council/parse-stage2');
 
@@ -234,32 +238,34 @@ describe('repair prompts', () => {
     expect(text).toContain('VERDICT: Ship it');
   });
 
-  // ---- #257 R-X29: THE THIRD ARM ----
-  // A promoted judge's `summary` is its REASONING, not its judgement, and the
-  // docblock's "embedded verbatim and uncapped" is exactly why that mattered:
-  // the motivating case handed ~165,000 characters of deliberation back under
-  // "this is the text to correct". run-stage2.js now passes `''` + `promoted`.
+  // ---- #257 R-X34: THE THIRD ARM IS WITHDRAWN ----
+  // R-X29 added a third `absent` arm for a PROMOTED judge repair ('your previous
+  // response was written in the reasoning channel…'). Under R-X32 a promoted
+  // judge is RELAUNCHED with the original bundle instead of repaired, so no
+  // caller can reach that arm again: run-stage2.js passes no `promoted` key at
+  // all, and an unreachable branch whose whole job was to phrase a doomed ask is
+  // worse than no branch. The two OLDER arms below are untouched, byte for byte.
   const ERRORS = [{ code: 'NO_BLOCK', detail: 'no fenced json block' }];
   const JUDGE_TAIL = 'Do not invent rankings or adjudications to satisfy the schema: '
     + 'say so in your output.';
-  const PROMOTED_JUDGE_ARM = 'Your previous response was written in the reasoning channel '
-    + 'and is not a judgement — there is no prior text to correct; answer afresh. ' + JUDGE_TAIL;
 
-  test('#257 R-X29: a promoted judge repair carries the reasoning-channel arm and NO prior-text block', () => {
-    const text = s2.buildJudgeRepairPrompt({ errors: ERRORS, judgement: '', promoted: true });
-    expect(text).toContain(PROMOTED_JUDGE_ARM);
-    expect(text).not.toContain('YOUR PREVIOUS JUDGEMENT');
-    expect(text).not.toContain('Your previous response was empty');
-    expect(text).toContain('NO_BLOCK: no fenced json block');
-    expect(text).toContain(s2.JUDGE_OUTPUT_CONTRACT);
+  test('#257 R-X34: the reasoning-channel arm is GONE from the source, not merely unused', () => {
+    // A SOURCE pin, not a behaviour pin: with no caller left, a re-added arm
+    // would sit there green forever and the next reader would believe it runs.
+    // NAMED MUTANT — ARMREADDED-STAGE2: paste the R-X29 `promoted === true` arm
+    // back into judgeRepairPromptWith. Reds this test.
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'src', 'council', 'briefings-stage2.js'), 'utf-8');
+    expect(src).not.toContain('written in the reasoning channel');
   });
 
-  test('#257 R-X29: both Stage-2 repair surfaces carry the arm — the task twin delegates', () => {
-    // judgeRepairPromptFor forks on intent (v4.9 W7 F1); the arm must reach a
-    // task judge too, or a task run keeps the defect the review run lost.
+  test('#257 R-X34: a `promoted` key from a stale caller changes nothing', () => {
+    // The dispatchers forward the WHOLE args object (v4.9 W7 F1), so the
+    // withdrawal has to be a no-op on every Stage-2 repair surface rather than
+    // a fork that quietly survives in the task twin.
     for (const intent of ['task', undefined]) {
       expect(s2.judgeRepairPromptFor(intent, { errors: ERRORS, judgement: '', promoted: true }))
-        .toContain(PROMOTED_JUDGE_ARM);
+        .toBe(s2.judgeRepairPromptFor(intent, { errors: ERRORS, judgement: '' }));
     }
   });
 

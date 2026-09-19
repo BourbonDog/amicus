@@ -274,19 +274,19 @@ describe('thin cross-review channel', () => {
 
   test('#257 a judge that answered only in its reasoning channel says THAT', () => {
     expect(thinCrossReviewNote([{ ok: true }, fromReasoning]).why)
-      .toBe('1 answered only in the reasoning channel with no parseable block');
+      .toBe('1 answered only in the reasoning channel and was not rescued');
     expect(thinCrossReviewNote([{ ok: true }, fromReasoning, fromReasoning]).why)
-      .toBe('2 answered only in the reasoning channel with no parseable block');
+      .toBe('2 answered only in the reasoning channel and was not rescued');
   });
 
   test('#257 the fifth bucket is disjoint, and the five sum to the failures', () => {
     expect(thinCrossReviewNote([{ ok: true }, unparseable, fromReasoning]).why)
       .toBe('1 returned no parseable Stage-2 block; '
-        + '1 answered only in the reasoning channel with no parseable block');
+        + '1 answered only in the reasoning channel and was not rescued');
     expect(thinCrossReviewNote([died, emptyAnswer, unparseable, fromReasoning, preMarker]).why)
       .toBe('1 judge leg died before answering; 1 returned an empty answer; '
         + '1 returned no parseable Stage-2 block; '
-        + '1 answered only in the reasoning channel with no parseable block; '
+        + '1 answered only in the reasoning channel and was not rescued; '
         + '1 judge result predates the died marker (outcome unknown)');
   });
 

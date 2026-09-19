@@ -89,83 +89,152 @@ describe('judgeDeadNote — #202’s record, moved verbatim (#257 headroom)', ()
 });
 
 /**
- * #257 (spec R4/R11). A judge has NO retry, so a promoted judge leg — one whose
- * engine answer carried no text part and whose reasoning was promoted to output
- * — is parsed exactly as any other. When its fenced block parses, the
- * adjudication is USED and this note says so on its own channel, as kind 'info':
- * nothing was lost, the exit code does not move, and the only fact worth
- * recording is that the deliberation the judge actually wrote was read by nobody.
+ * #257 R-X32 (owner decision A′). A promoted judge leg — one whose engine answer
+ * carried no text part, so its reasoning was promoted to output — is never used
+ * as it stands. It is RELAUNCHED once with the original bundle briefing; a
+ * relaunch with real but unparseable text gets the one remaining repair; a
+ * relaunch that is promoted again, or dies, stands the judge down. This note is
+ * how each of those endings is said out loud, and it fires on EVERY one of them:
+ * a silent path fails the amicus bar as hard as a crash.
  *
- * TWO ARMS (ruling R-X13). The spec enumerated "block parses" / "block does not
- * parse" and missed the third path the runtime has: the promoted leg produced NO
- * block and a bounded `-q<N>` repair supplied the parseable one. The note fires
- * there too — a silent success path fails the amicus bar as hard as a crash —
- * so `why` must name the TRUE cause per arm instead of asserting "its fenced
- * block parsed and was used" about a leg whose block never parsed.
+ * SIX ARMS, all pinned byte-exact below — `rescued` × {attempt 1, attempt 2},
+ * and not-rescued × the four `relaunch` outcomes ('promoted', 'died',
+ * 'answered', null = never relaunched, the cost ceiling arrived first). `kind`
+ * stays 'info' on all six: a stood-down judge is already counted by
+ * thin-cross-review, and this channel has never moved the exit code.
  *
- * NAMED MUTANT — REPAIRARMDROPPED: make `why` unconditional in
- * src/council/run-stage2-notes.js (the attempts === 0 wording on both arms).
- * Reds `the REPAIR arm names the repair, not a parse that never happened` below
- * and `#257 (b2)` in tests/council/run-stages.test.js.
+ * NAMED MUTANT — STANDDOWNSILENT is recorded in tests/council/run-stages.test.js,
+ * where the call site it removes is driven.
  */
-describe('promotedJudgeNote — the info note for a judge that answered in reasoning', () => {
+describe('promotedJudgeNote — the note for a judge that answered in reasoning', () => {
   const promotedLeg = (tokens) => ({ status: 'complete', summary: 'judged', promoted: true,
     usage: { tokens } });
+  const SEAT = { id: 'gpt-1', alias: 'gpt' };
+  const HEAD = 'its own answer was its deliberation, not a judgement; ';
+  const RELAUNCHED = 'relaunched once with the original briefing, and ';
+  const unread = (r, o) => `the deliberation itself was read by nobody (${r} reasoning / ${o} output tokens)`;
+  const COUNTS = 'the adjudication counts; nothing else changes';
+  const LOST = 'the judge is not counted; the cross-review proceeds with the judges that '
+    + 'answered, and thin-cross-review fires below two';
 
-  test('the record carries the token split and the seat id', () => {
-    expect(promotedJudgeNote('gpt', { id: 'gpt-1', alias: 'gpt' },
-      promotedLeg({ reasoning: 1200, output: 0 }))).toEqual({
+  test('RESCUED by the relaunch itself (attempt 1): the relaunch\'s adjudication is the one used', () => {
+    expect(promotedJudgeNote('gpt', SEAT, promotedLeg({ reasoning: 1200, output: 0 }),
+      { attempts: 1, rescued: true, relaunch: 'answered' })).toEqual({
       kind: 'info',
       channel: 'judge-reasoning-only',
       what: 'judge gpt answered in its reasoning channel',
-      why: 'its fenced block parsed and was used; the deliberation itself was read by '
-        + 'nobody (1200 reasoning / 0 output tokens)',
-      effect: 'the adjudication counts; nothing else changes',
-      data: { judge: 'gpt', seat: 'gpt-1', reasoningTokens: 1200, outputTokens: 0 },
+      why: HEAD + RELAUNCHED + "that relaunch's adjudication is the one used; " + unread(1200, 0),
+      effect: COUNTS,
+      data: { judge: 'gpt', seat: 'gpt-1', reasoningTokens: 1200, outputTokens: 0,
+        attempts: 1, relaunched: true, rescued: true },
     });
   });
 
-  test('attempts defaults to 0, and the parse arm carries NO `repaired` key', () => {
-    // emit-when-true: a consumer that reads `data.repaired` must never be
-    // reading a `false` this module invented for shape's sake.
-    const note = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 5, output: 0 }), 0);
-    expect(note.why.startsWith('its fenced block parsed and was used;')).toBe(true);
-    expect('repaired' in note.data).toBe(false);
-    // The 3-argument call (the pre-R-X13 signature) must behave as attempts 0.
-    expect(promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 5, output: 0 }))).toEqual(note);
-  });
-
-  test('the REPAIR arm names the repair, not a parse that never happened', () => {
-    expect(promotedJudgeNote('gpt', { id: 'gpt-1', alias: 'gpt' },
-      promotedLeg({ reasoning: 90, output: 0 }), 2)).toEqual({
+  test('RESCUED by the relaunch\'s one repair (attempt 2): the note names the repair', () => {
+    expect(promotedJudgeNote('gpt', SEAT, promotedLeg({ reasoning: 90, output: 0 }),
+      { attempts: 2, rescued: true, relaunch: 'answered' })).toEqual({
       kind: 'info',
       channel: 'judge-reasoning-only',
-      // `what` and `effect` are the SAME on both arms — the judge did answer in
-      // its reasoning channel either way, and the adjudication counts either way.
+      // `what` does not fork — the judge did answer in its reasoning channel
+      // whichever ending followed.
       what: 'judge gpt answered in its reasoning channel',
-      why: 'its own answer carried no parseable block; the adjudication used came from '
-        + 'the judge repair (attempt 2); the deliberation itself was read by nobody '
-        + '(90 reasoning / 0 output tokens)',
-      effect: 'the adjudication counts; nothing else changes',
-      data: { judge: 'gpt', seat: 'gpt-1', reasoningTokens: 90, outputTokens: 0, repaired: true },
+      why: HEAD + RELAUNCHED + "the relaunch's answer needed one repair — the adjudication "
+        + 'used came from that repair (attempt 2); ' + unread(90, 0),
+      effect: COUNTS,
+      data: { judge: 'gpt', seat: 'gpt-1', reasoningTokens: 90, outputTokens: 0,
+        attempts: 2, relaunched: true, rescued: true },
     });
   });
 
-  test('the repair arm reports the attempt it actually took', () => {
-    const one = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 7, output: 1 }), 1);
-    expect(one.why).toContain('the judge repair (attempt 1)');
-    expect(one.data.repaired).toBe(true);
+  test('STOOD DOWN — the relaunch was promoted again', () => {
+    expect(promotedJudgeNote('gpt', SEAT, promotedLeg({ reasoning: 1500, output: 0 }),
+      { attempts: 1, rescued: false, relaunch: 'promoted' })).toEqual({
+      kind: 'info',
+      channel: 'judge-reasoning-only',
+      what: 'judge gpt answered in its reasoning channel',
+      why: HEAD + RELAUNCHED + 'the relaunch answered in its reasoning channel again; '
+        + unread(1500, 0),
+      effect: LOST,
+      data: { judge: 'gpt', seat: 'gpt-1', reasoningTokens: 1500, outputTokens: 0,
+        attempts: 1, relaunched: true },
+    });
   });
 
-  test('a leg with no usage counts reads zero rather than undefined, and an unbound seat is null', () => {
-    const note = promotedJudgeNote('qwen', null, { status: 'complete', promoted: true });
-    expect(note.why).toBe('its fenced block parsed and was used; the deliberation itself was '
-      + 'read by nobody (0 reasoning / 0 output tokens)');
-    expect(note.data).toEqual({ judge: 'qwen', seat: null, reasoningTokens: 0, outputTokens: 0 });
+  test('STOOD DOWN — the relaunch died', () => {
+    const note = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 700, output: 0 }),
+      { attempts: 1, rescued: false, relaunch: 'died' });
+    expect(note.why).toBe(HEAD + RELAUNCHED + 'the relaunch produced no usable text; '
+      + unread(700, 0));
+    expect(note.effect).toBe(LOST);
+    expect(note.data).toEqual({ judge: 'gpt', seat: null, reasoningTokens: 700, outputTokens: 0,
+      attempts: 1, relaunched: true });
   });
 
-  test('kind is `info` — it must never flip degraded, and so never the exit code', () => {
+  test('STOOD DOWN — the relaunch answered for real and its one repair still did not parse', () => {
+    const note = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 5, output: 2 }),
+      { attempts: 2, rescued: false, relaunch: 'answered' });
+    expect(note.why).toBe(HEAD + RELAUNCHED + "the relaunch's answer did not parse after its "
+      + 'one repair; ' + unread(5, 2));
+    expect(note.effect).toBe(LOST);
+    expect(note.data).toEqual({ judge: 'gpt', seat: null, reasoningTokens: 5, outputTokens: 2,
+      attempts: 2, relaunched: true });
+  });
+
+  test('STOOD DOWN — the relaunch answered for real and the ceiling arrived BEFORE its repair', () => {
+    // Review I1. `ctx.overBudget()` is re-checked between the relaunch and the
+    // repair, so `relaunch: 'answered'` with `attempts: 1` is reachable and NO
+    // -q2 ever launched. The sentence must not name a repair that `data.attempts`
+    // denies in the same record — the defect class R-X13 was raised to remove.
+    const note = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 40000, output: 0 }),
+      { attempts: 1, rescued: false, relaunch: 'answered' });
+    expect(note.why).toBe(HEAD + RELAUNCHED + "the relaunch's answer did not parse — the cost "
+      + 'ceiling was reached before its repair; ' + unread(40000, 0));
+    expect(note.why).not.toContain('after its one repair');
+    expect(note.effect).toBe(LOST);
+    expect(note.data).toEqual({ judge: 'gpt', seat: null, reasoningTokens: 40000, outputTokens: 0,
+      attempts: 1, relaunched: true });
+  });
+
+  test('STOOD DOWN — never relaunched at all, because the cost ceiling arrived first', () => {
+    const note = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 11, output: 0 }),
+      { attempts: 0, rescued: false, relaunch: null });
+    expect(note.why).toBe(HEAD + 'not relaunched — the cost ceiling was reached first; '
+      + unread(11, 0));
+    expect(note.effect).toBe(LOST);
+    // No `relaunched` key: emit-when-true, so a consumer reading it is never
+    // reading a guess about a solo that never launched.
+    expect(note.data).toEqual({ judge: 'gpt', seat: null, reasoningTokens: 11, outputTokens: 0,
+      attempts: 0 });
+  });
+
+  test('`rescued` and `relaunched` are emit-when-true — absent, never false', () => {
+    const stoodDown = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 5, output: 0 }),
+      { attempts: 1, rescued: false, relaunch: 'promoted' });
+    expect('rescued' in stoodDown.data).toBe(false);
+    const never = promotedJudgeNote('gpt', null, promotedLeg({ reasoning: 5, output: 0 }),
+      { attempts: 0, rescued: false, relaunch: null });
+    expect('relaunched' in never.data).toBe(false);
+    expect('rescued' in never.data).toBe(false);
+    // The old R-X13 key is gone with the arm that minted it.
+    expect('repaired' in never.data).toBe(false);
+  });
+
+  test('the options object defaults to the never-relaunched arm', () => {
+    const bare = promotedJudgeNote('qwen', null, { status: 'complete', promoted: true });
+    expect(bare.why).toBe(HEAD + 'not relaunched — the cost ceiling was reached first; '
+      + unread(0, 0));
+    expect(bare.data).toEqual({ judge: 'qwen', seat: null, reasoningTokens: 0, outputTokens: 0,
+      attempts: 0 });
+    // A leg with no usage counts reads zero rather than undefined, and an
+    // unbound seat is null — both unchanged by R-X32.
+    expect(bare).toEqual(promotedJudgeNote('qwen', null,
+      { status: 'complete', promoted: true }, {}));
+  });
+
+  test('kind is `info` on both endings — it must never flip degraded, and so never the exit code', () => {
     expect(promotedJudgeNote('gpt', null, {}).kind).toBe('info');
+    expect(promotedJudgeNote('gpt', null, {}, { attempts: 1, rescued: true, relaunch: 'answered' })
+      .kind).toBe('info');
   });
 });
 
@@ -181,17 +250,20 @@ describe('thinCrossReviewWhy — the fromReasoning bucket', () => {
   const unparseable = { ok: false, died: false, emptyAnswer: false };
   const fromReasoning = { ok: false, died: false, emptyAnswer: false, fromReasoning: true };
 
-  test('a promoted judge with no parseable block gets its OWN clause', () => {
+  // Review M1: 'and was not rescued' — a stood-down promoted judge's relaunch
+  // may have answered in the OUTPUT channel unparseably, so the old 'with no
+  // parseable block' tail was false for one of the four stand-down causes.
+  test('a promoted judge that was not rescued gets its OWN clause', () => {
     expect(thinCrossReviewWhy([{ ok: true }, fromReasoning]))
-      .toBe('1 answered only in the reasoning channel with no parseable block');
+      .toBe('1 answered only in the reasoning channel and was not rescued');
   });
 
   test('it is NOT also counted as unparseable — the buckets are disjoint', () => {
     expect(thinCrossReviewWhy([{ ok: true }, fromReasoning, fromReasoning]))
-      .toBe('2 answered only in the reasoning channel with no parseable block');
+      .toBe('2 answered only in the reasoning channel and was not rescued');
     expect(thinCrossReviewWhy([{ ok: true }, unparseable, fromReasoning]))
       .toBe('1 returned no parseable Stage-2 block; '
-        + '1 answered only in the reasoning channel with no parseable block');
+        + '1 answered only in the reasoning channel and was not rescued');
   });
 
   test('BYTE-IDENTITY: with no promoted judge the sentence is unchanged', () => {

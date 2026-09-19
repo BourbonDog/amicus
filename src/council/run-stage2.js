@@ -166,12 +166,11 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
   for (const leg of (wave && wave.legs) || []) {
     const judge = leg.modelInput || leg.model;
     const seat = judgeSeatOf.get(leg) || null;
-    if (leg.status === 'complete' && leg.summary) {
-      // Mirrors the shape run-launch.js :: materializeReviews ships exactly:
-      // seat filename when bound, alias filename (today's behaviour) otherwise.
-      const name = seat ? artifactName(seat, 'judge') : `judge-${sanitizeName(judge)}.md`;
-      fs.writeFileSync(path.join(o.runDir, name), leg.summary, { mode: 0o600 });
-    }
+    // Mirrors the shape run-launch.js :: materializeReviews ships exactly:
+    // seat filename when bound, alias filename (today's behaviour) otherwise.
+    const name = seat ? artifactName(seat, 'judge') : `judge-${sanitizeName(judge)}.md`;
+    // #257 R-X32: a promoted leg's deliberation is not an artifact — its relaunch's real text is (below; named mutants "JUDGEARTIFACTPROMOTED", "RELAUNCHARTIFACTDROPPED").
+    if (leg.status === 'complete' && leg.summary && !isPromotedLeg(leg)) { fs.writeFileSync(path.join(o.runDir, name), leg.summary, { mode: 0o600 }); }
     let conformance = 'clean';
     // #202: ONE predicate for "this judge never answered at all", shared by the
     // DEAD_LEG classification below and by the degrade it now raises. Spelling it
@@ -187,7 +186,8 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     const legAnsweredEmpty = legDied && leg.status === 'complete';
     let parsed = legDied
       ? { ok: false, errors: [{ code: 'DEAD_LEG', detail: leg.error || leg.status }] }
-      : parseJudgeOutput(leg.summary, parseCtx);
+      : isPromotedLeg(leg) ? { ok: false, errors: [{ code: 'REASONING_ONLY', detail: 'answered only in its reasoning channel' }] } // #257 R-X32: never parsed, relaunched (named mutant "JUDGEOWNBLOCKUSED")
+        : parseJudgeOutput(leg.summary, parseCtx);
     let attempts = 0;
     // ⚠️ LC-12: the judging text the repair prompt must carry, tracked exactly like
     // Stage-1's `repairing` so `judging` and `parsed.errors` always describe the SAME
@@ -196,9 +196,10 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     // artifact to name). Stage 2 is the worse place for this omission than Stage 1:
     // a judge that refuses has no `conformance` column, so the tally silently shows
     // fewer votes and a finding's basis counts can flip its tier.
-    // #257 R-X29: a PROMOTED summary is unbounded REASONING, not a judgement, so it never becomes `judging` and never rides a repair prompt (named mutant "JUDGEREPAIRCARRIESREASONING", tests/council/run-stages.test.js).
+    // #257 R-X32: a promoted summary is deliberation — it never becomes `judging` and never rides a repair prompt (named mutant "JUDGEREPAIRCARRIESREASONING").
     let judging = isPromotedLeg(leg) ? '' : (leg.summary || '');
-    while (!parsed.ok && leg.status === 'complete' && leg.summary && attempts < 2 && !ctx.overBudget()) {
+    let relaunch = null; // #257 R-X32: the promoted judge's relaunch outcome — 'answered' | 'promoted' | 'died' | null (not relaunched: cost ceiling)
+    while (!parsed.ok && leg.status === 'complete' && leg.summary && attempts < 2 && !ctx.overBudget() && !(isPromotedLeg(leg) && attempts === 1 && judging === '')) { // #257 R-X32: a relaunch that produced no real text stands the judge down (named mutant "STANDDOWNDROPPED")
       attempts += 1;
       repairSeq += 1;
       const waveId = `${o.runId}-q${repairSeq}`;
@@ -209,9 +210,10 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         // above rides. A judge briefed on the task contract must be repaired
         // against the task contract — a repair solo is a fresh session, so the
         // contract embedded here is the only output shape it ever sees.
-        // #257 R-X29: `promoted` is true only while no real text exists — once a non-promoted repair produces some, `judging` holds it (below) and the verbatim arm is truthful again.
-        prompt: stage2.judgeRepairPromptFor(o.intent,
-          { errors: parsed.errors, judgement: judging, promoted: judging === '' && isPromotedLeg(leg) }),
+        // #257 R-X32: attempt 1 of a promoted judge is a RELAUNCH with the original bundle (named mutant "RELAUNCHISREPAIR");
+        // attempt 2, if any, is the LC-12 repair of the relaunch's real text — the verbatim arm.
+        prompt: isPromotedLeg(leg) && attempts === 1 ? bundle
+          : stage2.judgeRepairPromptFor(o.intent, { errors: parsed.errors, judgement: judging }),
         project: ctx.scratchDir, waveId, timeout: o.timeout,
         gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
         councilRunId: o.runId, councilName: o.councilName,
@@ -226,6 +228,10 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
       }
       const out = (solo.leg && !isPromotedLeg(solo.leg) && solo.leg.summary) || ''; // #257 R-X21: a promoted repair supplies no block (named mutant "JUDGEREPAIRPROMOTEDUSED")
       if (out.trim()) { judging = out; }
+      if (isPromotedLeg(leg) && attempts === 1) { // #257 R-X32: remember the relaunch's outcome for the note, and keep its real text as the judge artifact
+        relaunch = !out.trim() ? (solo.leg && isPromotedLeg(solo.leg) ? 'promoted' : 'died') : 'answered';
+        if (out.trim()) { fs.writeFileSync(path.join(o.runDir, name), out, { mode: 0o600 }); }
+      }
       parsed = parseJudgeOutput(out, parseCtx);
       // Every -q<N> launch gets a row — INCLUDING a failed repair (null/'error' leg ⇒ never-invent
       // defaults); pushed AFTER the re-parse to stamp the repair LEG's own measured outcome (PR 199 D1, v4.9 V18 refined).
@@ -251,7 +257,8 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
       // cost-accounting degrade. An unparseable-but-ANSWERED judge is a
       // different fact and is deliberately excluded — it already darkens the
       // seat's row via `conformance: 'unstructured'`, and it is repairable.
-      if (legDied) { ctx.degrade.note(judgeDeadNote({ judge, seat, leg, judgesCount: judges.length, runId: o.runId })); }
+      // #257 R-X32: a stood-down promoted judge is announced too (named mutant "STANDDOWNSILENT") — the rescued arm is below.
+      if (legDied) { ctx.degrade.note(judgeDeadNote({ judge, seat, leg, judgesCount: judges.length, runId: o.runId })); } else if (isPromotedLeg(leg)) { ctx.degrade.note(promotedJudgeNote(judge, seat, leg, { attempts, rescued: false, relaunch })); }
       judgeResults.push({ judge, seat, ok: false, order: null, orderSeats: null, adjudications: null,
         // #251 item 3: the ONE `legDied` predicate above, carried forward rather
         // than re-derived downstream. run.js's thin-cross-review note needs to
@@ -273,14 +280,8 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         leg: leg || null });
       continue;
     }
-    // #257 (spec R4/R11): a parseable adjudication COUNTS — a judge has no retry,
-    // and rejecting a paid-for verdict would thin the cross-review for a reason
-    // that is not about what the judge decided. Kind 'info'; the exit code holds.
-    // `attempts` rides along: TWO paths reach here (R-X13), and the note must not claim the
-    // leg's own block parsed when the repair loop above supplied it. Since R-X21 gated that
-    // read, the repair arm describes ONE shape — a promoted ORIGINAL rescued by a NON-promoted
-    // repair — because a promoted repair can never supply the block.
-    if (isPromotedLeg(leg)) { ctx.degrade.note(promotedJudgeNote(judge, seat, leg, attempts)); }
+    // #257 R-X32: a promoted judge reaches here only through its relaunch (attempt 1) or the relaunch's one repair (attempt 2) — never through its own block. Kind 'info'; the exit code holds.
+    if (isPromotedLeg(leg)) { ctx.degrade.note(promotedJudgeNote(judge, seat, leg, { attempts, rescued: true, relaunch })); }
     // v4.8 T3.2: labels.seatMap (anonymize.js :: assignLabels) threads through
     // so orderSeats can disambiguate a twin bench's `order`, which stays
     // alias-only. T3.3 wired it into street-cred.js :: rankPositions, via

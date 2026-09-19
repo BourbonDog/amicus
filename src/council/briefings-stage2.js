@@ -164,28 +164,23 @@ function buildJudgeBundle({ reviews, findings, date }) {
  * would be told to re-rank on the wrong axis — on the paid path the run reaches
  * precisely because that judge already got its output wrong once.
  *
- * ⚠️ #257 R-X29, the THIRD arm: a PROMOTED judge's `summary` is its reasoning,
- * not its judgement, and "uncapped" above is exactly why that matters — the
- * motivating case was ~165,000 characters of deliberation handed back under
- * "this is the text to correct". A promoted judgement therefore ships NO prior
- * text (run-stage2.js passes `''`), and this arm says truthfully why and asks
- * for a fresh judgement. A THIRD arm, not a reuse of the empty one: "you said
- * nothing" and "you said it in the wrong channel" are different facts, and the
- * empty arm stays byte-identical (pinned in tests/council/briefings-stage2.test.js).
+ * ⚠️ #257 R-X34: TWO arms, not three. R-X29 added a third for a PROMOTED judge
+ * ("there is no prior text to correct; answer afresh"), because such a judge's
+ * `summary` is its reasoning and "uncapped" above is exactly why that mattered —
+ * the motivating case was ~165,000 characters of deliberation handed back under
+ * "this is the text to correct". R-X32 removed the caller: a promoted judge is
+ * RELAUNCHED with the original bundle, never repaired, because a repair solo is
+ * a fresh session with no bundle to judge from. The arm is therefore withdrawn
+ * rather than left unreachable, and a stray `promoted` key changes nothing
+ * (both pinned in tests/council/briefings-stage2.test.js).
  * @param {string} contract the intent's judge output contract
- * @param {{errors?: Array<{code:string,detail:string}>, judgement?: string,
- *   promoted?: boolean}} args `promoted` — the previous response came back in
- *   the reasoning channel
+ * @param {{errors?: Array<{code:string,detail:string}>, judgement?: string}} args
  */
-function judgeRepairPromptWith(contract, { errors, judgement, promoted }) {
+function judgeRepairPromptWith(contract, { errors, judgement }) {
   const lines = (errors || []).map(e => `- ${e.code}: ${e.detail}`).join('\n');
   const text = typeof judgement === 'string' ? judgement.trim() : '';
-  const absent = promoted === true
-    ? 'Your previous response was written in the reasoning channel and is not a judgement — '
-      + 'there is no prior text to correct; answer afresh. '
-      + 'Do not invent rankings or adjudications to satisfy the schema: say so in your output.'
-    : 'Your previous response was empty — there is no prior judgement to correct. '
-      + 'Do not invent rankings or adjudications to satisfy the schema: say so in your output.';
+  const absent = 'Your previous response was empty — there is no prior judgement to correct. '
+    + 'Do not invent rankings or adjudications to satisfy the schema: say so in your output.';
   const prior = text
     ? ['--- YOUR PREVIOUS JUDGEMENT (verbatim — this is the text to correct) ---',
       text,

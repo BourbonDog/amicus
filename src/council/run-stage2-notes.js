@@ -65,44 +65,68 @@ function judgeDeadNote({ judge, seat, leg, judgesCount, runId }) {
 }
 
 /**
- * #257 (spec R4/R11): a judge whose adjudication was USED although its leg
- * answered only in its reasoning channel. Kind 'info' — nothing was lost and
- * the exit code does not move; the only fact worth recording is that the
- * deliberation the judge actually wrote was read by nobody. A judge has no
- * retry, which is why this arm exists at all: Stage 1 can reject a promoted
- * review and go get a real one, Stage 2 cannot.
+ * #257 (spec R4/R11, ruling R-X32 — owner decision A′): a judge whose leg
+ * answered only in its reasoning channel. Kind 'info' on every arm: the exit
+ * code does not move here, and a lost judge is already counted by
+ * thin-cross-review below.
  *
- * TWO ARMS, ruling R-X13. The spec (§3.5, R11) enumerated the promoted judge's
- * outcomes as "block parses" / "block does not parse" and missed the third the
- * runtime actually has: the leg produced no block and a bounded `-q<N>` REPAIR
- * supplied the parseable one (`run-stage2.js:200-233`). The note fires on both
- * success paths — a silent path is the failure this project treats as equal to
- * a crash — so `why` names the TRUE cause per arm rather than asserting
- * "its fenced block parsed and was used" about a leg whose block never parsed.
- * `attempts` is the repair counter the caller already tracks; 0 means the leg's
- * own block parsed on the first pass.
+ * A JUDGE'S RETRY IS THE RELAUNCH. The earlier note said "a judge has no
+ * retry", and used that to justify reading the deliberation as a judgement. It
+ * is not one — it is the thinking that precedes one — so a promoted judge is
+ * now relaunched once with the ORIGINAL bundle briefing (Stage 1's pattern:
+ * retry, not repair, because a repair solo is a fresh session with no bundle
+ * and so cannot succeed). `relaunch` records how that ended:
+ *   · 'answered' — it produced real text; either it parsed (rescued, attempt 1)
+ *                  or its one LC-12 repair followed (rescued or not, attempt 2).
+ *   · 'promoted' — it answered in its reasoning channel AGAIN.
+ *   · 'died'     — it came back with no usable text at all.
+ *   · null       — no relaunch ran: the cost ceiling arrived first.
+ * EVERY one of those is announced, rescued or not: a silent path fails the
+ * product bar as hard as a crash, and a stood-down judge changes the verdict's
+ * basis. `rescued` and `relaunched` are emit-when-true, house style, so a
+ * consumer reading either key is never reading a guess.
  * @param {string} judge alias
  * @param {object|null} seat
  * @param {object} leg the judge's ORIGINAL Stage-2 wave leg (#83's convention)
- * @param {number} [attempts=0] repair attempts that ran before it became usable
+ * @param {{attempts?: number, rescued?: boolean, relaunch?: ?string}} [opts]
+ *   `attempts` is the `-q<N>` counter the caller already tracks (1 = the
+ *   relaunch, 2 = its one repair); `rescued` says whether an adjudication was
+ *   used in the end.
  * @returns {{kind: string, channel: string, what: string, why: string, effect: string, data: object}}
  */
-function promotedJudgeNote(judge, seat, leg, attempts = 0) {
+function promotedJudgeNote(judge, seat, leg, { attempts = 0, rescued = false, relaunch = null } = {}) {
   // A non-promoted leg cannot reach here (the call site gates on isPromotedLeg),
   // so the fallback is defensive only — it keeps the sentence renderable rather
   // than throwing inside an announcement.
   const { reasoning, output } = promotedFacts(leg) || { reasoning: 0, output: 0 };
   const unread = `the deliberation itself was read by nobody (${reasoning} reasoning / ${output} output tokens)`;
+  const relaunched = 'relaunched once with the original briefing, and ';
+  // One sentence per ENDING, naming what actually happened rather than the one
+  // outcome the spec first imagined.
+  const cause = rescued
+    ? (attempts === 2
+      ? `${relaunched}the relaunch's answer needed one repair — the adjudication used came from that repair (attempt 2)`
+      : `${relaunched}that relaunch's adjudication is the one used`)
+    : ({ promoted: `${relaunched}the relaunch answered in its reasoning channel again`,
+      died: `${relaunched}the relaunch produced no usable text`,
+      // Review I1: the repair is NOT guaranteed to have run — `ctx.overBudget()`
+      // is re-checked between the relaunch and it (run-stage2.js's `while`), so
+      // `attempts` decides which sentence is true. Naming a repair that never
+      // launched is the same defect R-X13 was raised to remove, and `data.attempts`
+      // would contradict the prose in the same record.
+      answered: attempts === 2
+        ? `${relaunched}the relaunch's answer did not parse after its one repair`
+        : `${relaunched}the relaunch's answer did not parse — the cost ceiling was reached before its repair`,
+    }[relaunch] || 'not relaunched — the cost ceiling was reached first');
   return { kind: 'info', channel: 'judge-reasoning-only',
     what: `judge ${judge} answered in its reasoning channel`,
-    why: attempts > 0
-      ? `its own answer carried no parseable block; the adjudication used came from the judge repair (attempt ${attempts}); ${unread}`
-      : `its fenced block parsed and was used; ${unread}`,
-    effect: 'the adjudication counts; nothing else changes',
-    // `repaired` is emit-when-true, house style: absent on the common arm, so a
-    // consumer reading the key is never reading a guess.
+    why: `its own answer was its deliberation, not a judgement; ${cause}; ${unread}`,
+    effect: rescued
+      ? 'the adjudication counts; nothing else changes'
+      : 'the judge is not counted; the cross-review proceeds with the judges that answered, '
+        + 'and thin-cross-review fires below two',
     data: { judge, seat: seat ? seat.id : null, reasoningTokens: reasoning, outputTokens: output,
-      ...(attempts > 0 ? { repaired: true } : {}) } };
+      attempts, ...(relaunch ? { relaunched: true } : {}), ...(rescued ? { rescued: true } : {}) } };
 }
 
 /** Thin-cross-review is announced below TWO usable judges: one judge is not a
@@ -132,6 +156,12 @@ const MIN_CROSS_REVIEW_JUDGES = 2;
  *                   same reason the other three were: "returned no parseable
  *                   Stage-2 block" names the output contract for what is a
  *                   missing-text-part fact about the engine, and the fixes differ.
+ *                   Review M1: the clause says "and was not rescued" rather than
+ *                   "with no parseable block" because under R-X32 such a judge
+ *                   HAS been relaunched, and that relaunch may have answered in
+ *                   the OUTPUT channel unparseably — true of all four stand-down
+ *                   causes, while the per-judge `judge-reasoning-only` Note
+ *                   carries the exact one.
  *   · pre-marker  — `died` is ABSENT: a Stage-2 checkpoint written by a build
  *                   older than #251 and resumed by this one. Absent is not
  *                   false; counting it as "no parseable block" would be a claim
@@ -154,7 +184,7 @@ function thinCrossReviewWhy(judgeResults) {
   if (empty > 0) { clauses.push(`${empty} returned an empty answer`); }
   if (unparseable > 0) { clauses.push(`${unparseable} returned no parseable Stage-2 block`); }
   if (fromReasoning > 0) {
-    clauses.push(`${fromReasoning} answered only in the reasoning channel with no parseable block`);
+    clauses.push(`${fromReasoning} answered only in the reasoning channel and was not rescued`);
   }
   if (preMarker > 0) {
     clauses.push(`${preMarker} judge result${preMarker === 1 ? '' : 's'} `
