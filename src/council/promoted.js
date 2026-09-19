@@ -18,7 +18,7 @@
  * A promoted Stage-1 leg is NOT a review (run-launch.js :: materializeReviews
  * skips it, so the once-only retry fires). A promoted Stage-2 judge is never
  * used as it stands — it is relaunched once with the ORIGINAL bundle (R-X32),
- * and a `judge-reasoning-only` note names how that ended (run-stage2.js,
+ * and a `judge-reasoning-only` note names how that ended (run-stage2-judge.js,
  * run-stage2-notes.js); a promoted debate defence or re-vote is likewise
  * relaunched with its original briefing (R-X33).
  */
@@ -33,30 +33,83 @@ function isPromotedLeg(leg) {
  * A `finish` identifier's cap — the same ceiling `schemas/run.schema.json` puts
  * on the backstop's `status`, and the one `session-status.js` spells as
  * `MAX_STATUS_TYPE_CHARS`: an identifier, not a sentence. It is the SECOND of
- * the two bounds `promotedFacts` applies: the token allowlist below decides
- * WHICH characters may reach this ceiling at all, and this decides how many.
+ * the three bounds `promotedFacts` applies: the token allowlist decides WHICH
+ * characters may reach this ceiling at all, this decides how many, and the
+ * intraword-underscore rule then runs on what the cut actually LEFT — in that
+ * order, so the cut itself cannot strand a trailing `_` the rule never saw.
  */
 const MAX_FINISH_CHARS = 40;
+
+/**
+ * Bound 1 — the ALLOWLIST: the characters a `finish` is really spelled with.
+ * Every other character is dropped (the why is on `promotedFacts`).
+ */
+const FINISH_ALLOWED = /[^A-Za-z0-9_.:-]/g;
+
+/**
+ * Bound 3 — every `_` WITHOUT an alphanumeric on both sides. CommonMark's
+ * flanking rules are the whole reason only THAT underscore may stay: a leading,
+ * trailing or doubled one can open or close emphasis (`_x_`, `__x__`), while an
+ * intraword one (`end_turn`) can do neither and is inert wherever it is quoted.
+ */
+const FINISH_LONE_UNDERSCORE = /(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])/g;
 
 /**
  * The facts every announcement of a promoted leg names, read off the leg
  * document; null for a leg that is not promoted so callers can spread
  * `...(facts ? { promoted: facts } : {})`.
  *
- * `finish` is PROVIDER text, and every reader interpolates it RAW — into the
- * five Stage-1 announcements, and into verdict.json's `seatLoss.reason`, which
- * CI renders into a sticky PR comment. It is therefore BOUNDED here, at the one
- * producer, rather than at each reader (repo rule #219, and the house rule that
- * one value has one sanitizer): the bound is an ALLOWLIST of the token
- * characters a finish is actually spelled with — `A-Z a-z 0-9 _ . : -`, enough
- * for every real value ('stop', 'length', 'end_turn', 'tool_calls',
- * 'content-filter', 'stop:1') — and every other character is DROPPED, after
- * which what remains is cut to `MAX_FINISH_CHARS`. Nothing left means there was
- * no usable finish, so it is `null`, indistinguishable from an absent one.
+ * `finish` is PROVIDER text, and every PROSE surface interpolates it RAW: the
+ * five Stage-1 announcements, the `Notice:` lines run-degrade.js writes to
+ * stderr, the degrade text carried in run.json / verdict.json, and the MARKDOWN
+ * REPORT — `report-md.js :: renderMd` renders each degrade record as a LIST
+ * ITEM (`- ` + formatDegrade(d)), which `amicus council report` writes to
+ * stdout and the MCP `report` tool hands to a client to RENDER. That list item
+ * is the one surface where a Markdown-active character actually renders; the
+ * on-disk report artifact is report.html, and report-html.js escapes it. The
+ * bound is applied HERE, at the one producer, for all of them, rather than at
+ * each reader (repo rule #219, and the house rule that one value has one
+ * sanitizer).
+ *
+ * NOT the sticky PR comment, which council r1 and r2 both named and r3
+ * measured: .github/workflows/council-review.yml composes that comment from the
+ * verdict line, the tier table, the five findings sections (each one run
+ * through the workflow's own byte-identical `neutralize()` sed filter), the
+ * street-cred table, and a status/cost footer carrying the seat census.
+ * `seatLoss` and `degrades` are interpolated NOWHERE in that step, which is
+ * what makes the guarantee STRUCTURAL rather than a matter of configuration:
+ * the default PR path asks for no `--critic`, but the `critic`
+ * workflow_dispatch input can ask for one and this prose still would not reach
+ * the comment.
+ *
+ * The MACHINE fields are deliberately NOT bounded and do not need to be:
+ * headless.js PRODUCES the provider's raw `finish`, session-finalize.js writes
+ * it into metadata.json, and fanout-leg.js and leg-riders.js carry it onto the
+ * leg documents that wave.json and the `--json` run documents are built from.
+ * (run-stats-entry.js carries no `finish` at all, and run-assemble.js derives
+ * only the boolean `cut` from it.) That is DATA a consumer matches on, not
+ * PROSE a renderer interprets — the bound exists to stop provider text becoming
+ * markup, and nothing renders those.
+ *
+ * The bound is three steps:
+ *   1. an ALLOWLIST of the token characters a finish is actually spelled with —
+ *      `A-Z a-z 0-9 _ . : -`, enough for every real value ('stop', 'length',
+ *      'end_turn', 'tool_calls', 'content-filter', 'stop:1') — and every other
+ *      character is DROPPED;
+ *   2. what remains is cut to `MAX_FINISH_CHARS`;
+ *   3. every `_` that is not INTRAWORD is dropped. Step 1 has to keep `_`
+ *      because real values are spelled with it, but CommonMark opens emphasis
+ *      on a leading, trailing or doubled underscore (`_x_` is emphasis, `__x__`
+ *      is strong emphasis, and a trailing one can close a run opened elsewhere
+ *      in the same line); only an underscore with an alphanumeric on BOTH sides
+ *      can neither open nor close it (council r3). `end_turn` and `a_b-c.d:e`
+ *      keep theirs; `_x_`, `x_`, `a__b`, `-_-` and `a_.b` lose theirs.
+ * Nothing left means there was no usable finish, so it is `null`,
+ * indistinguishable from an absent one.
  *
  * An ALLOWLIST, not the printable-ASCII strip this started as (council r2): a
  * strip keeps every Markdown-active character, so a provider-controlled finish
- * of `[click](http://x)` would reach that sticky PR comment as a LINK. The
+ * of `[click](http://x)` would reach that rendered report as a LINK. The
  * allowlist drops brackets, parentheses, backticks, angle brackets, pipes and
  * spaces for the same reason it drops C0 controls, DEL, an ANSI escape's
  * introducer and the bidi overrides that would reorder the sentence it is
@@ -72,7 +125,8 @@ function promotedFacts(leg) {
   if (!isPromotedLeg(leg)) { return null; }
   const t = (leg.usage && leg.usage.tokens) || {};
   const finish = typeof leg.finish === 'string'
-    ? leg.finish.replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, MAX_FINISH_CHARS)
+    ? leg.finish.replace(FINISH_ALLOWED, '').slice(0, MAX_FINISH_CHARS)
+      .replace(FINISH_LONE_UNDERSCORE, '')
     : '';
   return {
     reasoning: Number.isInteger(t.reasoning) && t.reasoning >= 0 ? t.reasoning : 0,
@@ -94,16 +148,34 @@ function tokenSplit(facts) {
   return `${facts.reasoning} reasoning / ${facts.output} output tokens${finish}`;
 }
 
+/** The sentence both arms of the clause share, so the two cannot drift apart. */
+const REASONING_ONLY_CAUSE = ' — it answered only in its reasoning channel';
+
 /**
  * The one clause the retry heal note, the still-dead notes and the skipped-leg
- * note append after "with no usable output". The EMPTY STRING for anything
- * that is not a facts object, so every announcement for a leg that is not
- * promoted stays byte-identical (spec R9) — the guard is kept HERE rather than
- * delegated to `tokenSplit`, which would otherwise leave an empty parenthetical.
+ * note append after "with no usable output".
+ *
+ * `promoted` has TWO documented shapes and this takes either:
+ *   - the literal `true`, which is what a leg DOCUMENT and a run row carry
+ *     (`isPromotedLeg` above reads exactly that, and nothing else);
+ *   - `{ reasoning, output, finish }`, the facts object `promotedFacts` builds,
+ *     which the three Stage-1 still-dead RECORDS carry on `data.promoted`.
+ * The readers spell `reasoningOnlyClause(ff && ff.promoted)` and
+ * `reasoningOnlyClause(criticLeg.data.promoted)` without knowing which shape
+ * they hold, so a producer that stamped the boolean on a record silently lost
+ * the CAUSE — the R-X14 regression, one guard away (council r3). The boolean
+ * now names the cause; it carries no numbers to quote, so it gets no
+ * parenthetical and `tokenSplit` is never called with it.
+ *
+ * The EMPTY STRING for anything else, so every announcement for a leg that is
+ * not promoted stays byte-identical (spec R9) — the guard is kept HERE rather
+ * than delegated to `tokenSplit`, which would otherwise leave an empty
+ * parenthetical.
  */
 function reasoningOnlyClause(facts) {
+  if (facts === true) { return `${REASONING_ONLY_CAUSE}, which is not a review`; }
   if (!facts || typeof facts !== 'object' || Array.isArray(facts)) { return ''; }
-  return ` — it answered only in its reasoning channel (${tokenSplit(facts)}), which is not a review`;
+  return `${REASONING_ONLY_CAUSE} (${tokenSplit(facts)}), which is not a review`;
 }
 
 module.exports = { isPromotedLeg, promotedFacts, tokenSplit, reasoningOnlyClause };

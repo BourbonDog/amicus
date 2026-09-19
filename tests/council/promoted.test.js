@@ -26,18 +26,31 @@ describe('council/promoted — the one vocabulary for a promoted leg (#257)', ()
 
   /**
    * Council r1 (Nit, repo rule #219): `finish` is PROVIDER text and every reader
-   * interpolates it RAW into prose — the five Stage-1 announcements, and
-   * verdict.json's `seatLoss.reason`, which CI renders into a sticky PR comment.
+   * interpolates it RAW into prose — the five Stage-1 announcements, the
+   * `Notice:` lines on stderr, the text carried in run.json / verdict.json, and
+   * the MARKDOWN REPORT, where report-md.js :: renderMd renders each degrade
+   * record as a LIST ITEM (`- ` + formatDegrade(d)) — written to stdout by
+   * `amicus council report` and handed to a client by the MCP `report` tool.
+   * That list item is the surface where a Markdown-active character would
+   * actually render (the on-disk artifact is report.html, which is escaped).
    * It is bounded HERE, at the one producer, so no reader has to remember to.
    * Named mutant FINISHUNBOUNDED: return the raw string. Red set: the length
    * assertion below.
    *
+   * NOT the sticky PR comment, which council r3 measured: .github/workflows/
+   * council-review.yml composes that comment from the verdict line, the tier
+   * table, the five findings sections, the street-cred table and a status/cost
+   * footer carrying the seat census — `seatLoss` and `degrades` are
+   * interpolated NOWHERE in that step, so no degrade prose reaches it whatever
+   * a run was asked for. Rounds 1 and 2 named it; the Markdown report is the
+   * surface.
+   *
    * Council r2 made that bound an ALLOWLIST. A printable-ASCII strip keeps every
    * Markdown-active character, so a provider-controlled `finish` of
-   * `[click](http://x)` would reach that sticky comment as a LINK. Only the
-   * characters a finish is actually spelled with survive now: A-Z a-z 0-9 and
-   * `_ . : -`. Named mutant FINISHMARKDOWN: restore the strip. Red set: the
-   * Markdown assertions below.
+   * `[click](http://x)` would reach that report as a LINK. Only the characters a
+   * finish is actually spelled with survive now: A-Z a-z 0-9 and `_ . : -`.
+   * Named mutant FINISHMARKDOWN: restore the strip. Red set: the Markdown
+   * assertions below.
    */
   test('promotedFacts BOUNDS the provider finish before anyone interpolates it (#219)', () => {
     const finishOf = f => promotedFacts({ promoted: true, finish: f }).finish;
@@ -58,17 +71,20 @@ describe('council/promoted — the one vocabulary for a promoted leg (#257)', ()
     expect(finishOf('\u202estop')).toBe('stop');
     expect(finishOf('stop\u00e9\u4f60')).toBe('stop');
     // …and so is every Markdown-active character, so a hostile finish cannot
-    // open a link, a code span, emphasis, a tag or a table cell in the sticky PR
-    // comment CI renders verdict.json's seatLoss.reason into.
+    // open a link, a code span, emphasis, a tag or a table cell in the report.
     expect(finishOf('[stop](http://x)')).toBe('stophttp:x');
-    expect(finishOf('*_~`')).toBe('_');
+    // `*` and `~` are outside the allowlist; the `_` is left LONE by that drop
+    // and the intraword rule below then takes it, so nothing survives at all.
+    expect(finishOf('*_~`')).toBeNull();
     expect(finishOf('`code`')).toBe('code');
     expect(finishOf('<b>stop</b>')).toBe('bstopb');
     expect(finishOf('stop now')).toBe('stopnow');
     expect(finishOf('stop\nnow')).toBe('stopnow');
     // One character at a time, so a widened allowlist cannot slip through on a
-    // compound fixture. `_ - . :` are deliberately absent from this list: they are
-    // IN the allowlist, because real provider values are spelled with them.
+    // compound fixture. `- . :` are deliberately absent from this list: they are
+    // IN the allowlist, because real provider values are spelled with them. So
+    // is `_`, but only BETWEEN two alphanumerics — `a_b` survives the fixture
+    // shape this sweep uses, so the truth table below owns it instead.
     for (const ch of ['[', ']', '(', ')', '*', '~', '`', '<', '>', ' ', '!', '#', '|', '\\', '/', '\n', "'", '"', '&', ';']) {
       expect(finishOf(`a${ch}b`)).toBe('ab');
     }
@@ -79,8 +95,80 @@ describe('council/promoted — the one vocabulary for a promoted leg (#257)', ()
     expect(finishOf('')).toBeNull();
   });
 
-  test('reasoningOnlyClause is the EMPTY STRING for anything but a facts object (byte-identity guard)', () => {
-    for (const x of [null, undefined, '', 0, false, [], 'facts']) { expect(reasoningOnlyClause(x)).toBe(''); }
+  /**
+   * Council r3 (C1, major): the allowlist KEEPS `_`, and an underscore is only
+   * inert where it sits between two alphanumerics. CommonMark's flanking rules
+   * let a LEADING, TRAILING or DOUBLED underscore open emphasis — `_x_` renders
+   * as <em>x</em> and `__x__` as <strong>x</strong> in the Markdown report's
+   * degrade list item — while an intraword one (`end_turn`, the shape every real provider
+   * value has) can neither open nor close it. So the bound is two steps: the
+   * allowlist, then every underscore WITHOUT an alphanumeric on both sides is
+   * dropped. The old pin asserted `finishOf('*_~`') === '_'` under a comment
+   * saying a hostile finish "cannot open … emphasis" — the comment was false and
+   * the test proved the loophole.
+   *
+   * Named mutant UNDERSCOREEMPHASIS: remove the intraword step from
+   * promotedFacts. Red set: this test.
+   */
+  test('a finish keeps an underscore only INSIDE a word (CommonMark flanking, #257 r3)', () => {
+    const finishOf = f => promotedFacts({ promoted: true, finish: f }).finish;
+    const table = [
+      // An alphanumeric on BOTH sides: kept, because it is inert.
+      ['end_turn', 'end_turn'],
+      ['tool_calls', 'tool_calls'],
+      ['a_b-c.d:e', 'a_b-c.d:e'],
+      // Leading, trailing or doubled: emphasis-capable, so dropped.
+      ['_x_', 'x'],
+      ['__x__', 'x'],
+      ['x_', 'x'],
+      ['_x', 'x'],
+      ['a__b', 'ab'],
+      ['stop_', 'stop'],
+      // Next to another allowlisted punctuation character is not "inside a word".
+      ['-_-', '--'],
+      ['a_.b', 'a.b'],
+      // Nothing survived — indistinguishable from an absent finish.
+      ['_', null],
+      ['*_~`', null],
+    ];
+    for (const [input, want] of table) {
+      expect([input, finishOf(input)]).toEqual([input, want]);
+    }
+    // The 40-char ceiling is applied BEFORE the intraword rule, so the CUT
+    // itself cannot strand a trailing `_` that the rule never saw: this input's
+    // 40th character is an underscore, and the result stops at 39.
+    expect(finishOf(`${'a'.repeat(39)}_${'b'.repeat(5)}`)).toBe('a'.repeat(39));
+  });
+
+  test('reasoningOnlyClause is the EMPTY STRING for anything but a facts object or the bare true (byte-identity guard)', () => {
+    for (const x of [null, undefined, '', 0, false, [], 'facts', 'true', 1]) { expect(reasoningOnlyClause(x)).toBe(''); }
+  });
+
+  /**
+   * Council r3 (C3, HQ2): `promoted` has TWO documented shapes. The Stage-1
+   * still-dead RECORDS carry the facts object on `data.promoted`; leg documents
+   * and run rows carry the literal `true` (`isPromotedLeg` reads exactly that).
+   * The readers spell `reasoningOnlyClause(ff && ff.promoted)` and
+   * `reasoningOnlyClause(criticLeg.data.promoted)` without knowing which shape
+   * they hold, so a producer that stamped the boolean on a record used to lose
+   * the CAUSE silently — the R-X14 regression, one guard away. The boolean now
+   * names the cause; it just has no numbers to quote, so there is no
+   * parenthetical (and `tokenSplit` is never called with it).
+   *
+   * Named mutant BAREPROMOTEDSWALLOWED: restore the old guard so `true` returns
+   * ''. Red set: this test.
+   */
+  test('reasoningOnlyClause(true) names the cause without the parenthetical', () => {
+    expect(reasoningOnlyClause(true))
+      .toBe(' — it answered only in its reasoning channel, which is not a review');
+    // The facts shape is untouched: same sentence, with the numbers.
+    expect(reasoningOnlyClause(promotedFacts({ promoted: true, finish: 'stop', usage: { tokens: { reasoning: 40332, output: 1 } } })))
+      .toBe(" — it answered only in its reasoning channel (40332 reasoning / 1 output tokens, finish 'stop'), which is not a review");
+    // An object without the fields is a facts object per the guard, today and
+    // still: it keeps the parenthetical rather than falling to the boolean arm.
+    expect(reasoningOnlyClause({}))
+      .toBe(` — it answered only in its reasoning channel (${tokenSplit({})}), which is not a review`);
+    expect(reasoningOnlyClause({})).not.toBe(reasoningOnlyClause(true));
   });
 
   test('reasoningOnlyClause wording, with and without finish', () => {
