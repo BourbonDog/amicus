@@ -564,7 +564,7 @@ describe('#257 R-X42 every retry-note arm bounds its reason; data stays raw', ()
  * must be `Number.isInteger(v) && v >= 0`, so `-1e308` was never a report) with the widest
  * LEGAL count — `Number.MAX_VALUE`'s 17-significant-digit exponential form, 23 chars, beating
  * a plain `1e20` (21) and `Number.MAX_SAFE_INTEGER` (16) — used for BOTH reasoning and output,
- * which is 140 under the cap. A `1e308` budget row measures 576, well inside. The three 96/500-char rows
+ * which is 140 under the cap. A `1e308` budget row measures 569, well inside. The three 96/500-char rows
  * below are the realistic worst case; the non-vacuity test pins the supremum beside them, so the
  * docblock cannot claim a worst case that a legal input beats (council #270 r4 review, M3).
  *
