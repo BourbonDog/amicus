@@ -110,8 +110,8 @@ describe('judgeDeadNote — #202’s record, moved verbatim (#257 headroom)', ()
  * where the call site it removes is driven.
  */
 describe('promotedJudgeNote — the note for a judge that answered in reasoning', () => {
-  const promotedLeg = (tokens) => ({ status: 'complete', summary: 'judged', promoted: true,
-    usage: { tokens } });
+  const promotedLeg = (tokens, finish) => ({ status: 'complete', summary: 'judged', promoted: true,
+    usage: { tokens }, ...(finish ? { finish } : {}) });
   const SEAT = { id: 'gpt-1', alias: 'gpt' };
   const HEAD = 'its own answer was its deliberation, not a judgement; ';
   const RELAUNCHED = 'relaunched once with the original briefing, and ';
@@ -122,6 +122,20 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
     Number.isInteger(r) && Number.isInteger(o) ? `${r} reasoning / ${o} output tokens` : 'token usage not reported'
   })`;
   const COUNTS = 'the adjudication counts; nothing else changes';
+
+  // R-X44 (council r4 verification O1): the parenthetical is `tokenSplit(facts)`, so a
+  // promoted judge leg that REPORTS a finish carries it — the motivating shape of #257
+  // is a `finish 'length'` judge leg. Named mutant "JUDGENOTEFINISHDROPPED": render the
+  // counts by hand without the finish clause and this reds.
+  test('a promoted judge leg with a reported finish carries the finish clause in `why` (R-X44)', () => {
+    const note = promotedJudgeNote('gpt', SEAT, promotedLeg({ reasoning: 32000, output: 1 }, 'length'),
+      { attempts: 1, rescued: true });
+    expect(note.why).toContain("read by nobody (32000 reasoning / 1 output tokens, finish 'length')");
+    expect(note.what).toBe('judge gpt answered in its reasoning channel');
+    // No finish reported: byte-identical to the pre-R-X44 parenthetical.
+    expect(promotedJudgeNote('gpt', SEAT, promotedLeg({ reasoning: 32000, output: 1 }),
+      { attempts: 1, rescued: true }).why).toContain('read by nobody (32000 reasoning / 1 output tokens)');
+  });
   const LOST = 'the judge is not counted; the cross-review proceeds with the judges that '
     + 'answered, and thin-cross-review fires below two';
 

@@ -169,7 +169,10 @@ function promotedJudgeNote(judge, seat, leg, { attempts = 0, rescued = false, st
     // the one whose text was actually used (they differ when the relaunch's own
     // answer needed its one repair). Emit-when-set, so a stand-down's `data` — which
     // is called with neither — is byte-identical, and so is every pre-ruling record.
-    // The `what`/`why` above do not move: the prose is pinned, and this is a fact
+    // The `what` above does not move. The `why` moved once, under R-X44 (council r4):
+    // its "read by nobody" parenthetical is `tokenSplit(facts)`, which appends
+    // `, finish '<f>'` when the leg reports a finish — pinned by the `finish 'length'`
+    // case in run-stage2-notes.test.js. R-X45 adds only these `data` fields, a fact
     // the prose never carried (named mutant "RELAUNCHWAVEIDDROPPED").
     data: { judge, seat: seat ? seat.id : null, reasoningTokens: reasoning, outputTokens: output,
       attempts, ...(relaunchRan ? { relaunched: true } : {}), ...(rescued ? { rescued: true } : {}),

@@ -9142,9 +9142,9 @@ Deferred — one line each, none blocks anything:
   ⚠️ The remaining completed-status readers were RULED CORRECT AS-IS at that review, recorded so
   they are not re-adjudicated: `src/utils/result-schema.js:93`/`:147` (wave-status aggregation — a
   promoted leg IS complete for wave status); `src/spend-query.js:43`/`:109` (a receipt; `--failed`
-  rightly excludes it); `src/council/report-cost.js:54` (the cost table prints `r.status` verbatim,
+  rightly excludes it); `src/council/report-cost.js:59` (the cost table prints `r.status` verbatim,
   so a lost seat's row reads `complete` beside the `Notice:` in "What was lost" — exactly the shape
-  an empty-answer dead seat already has); `electron/workspace-ui/workspace-render.js:169` (the
+  an empty-answer dead seat already has); `electron/workspace-ui/workspace-render.js:168` (the
   stage rail, not a leg). `src/sidecar/models-probe.js:41` was already ruled correct in spec R10.
   ⚠️ **The record.** 2026-09-19, council round 1, owner decision C: every reader listed here now
   stands a promoted leg down (`run-debate.js`'s `bad()` through the `conformance` the new gate sets;
