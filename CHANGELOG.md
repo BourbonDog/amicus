@@ -21,7 +21,10 @@ All notable changes to Amicus are documented here. Format follows
   unparseable text gets the one remaining repair, and a relaunch that answers in its reasoning
   channel again — or dies — stands the judge down; a `Note:` on `judge-reasoning-only` records
   which, and when fewer than two judges remain usable the thin-cross-review reason says `answered
-  only in the reasoning channel and was not rescued`. No `judge-<seat>.md` is written from a
+  only in the reasoning channel and was not rescued`. A promoted judge whose relaunch answered for
+  real but did not parse, and whose repair then answered in its reasoning channel, stands down as
+  `relaunch-repair-promoted` and the note says so — a schema failure and a refusal to produce text
+  are different fixes. No `judge-<seat>.md` is written from a
   promoted leg; the relaunch's real text is the judge artifact. The relaunch is recorded as one: a
   `role: 'relaunch'` runStats row (a promoted judge's first relaunch; a promoted defence's or
   re-vote's relaunch that produced nothing usable), a rescued judge's row and its tally/verdict
@@ -29,7 +32,10 @@ All notable changes to Amicus are documented here. Format follows
   `data` names `relaunchWaveId` and `usedWaveId`; `conformance` keeps its three values and means
   how many asks it took to parse. A promoted repair of a real defence or re-vote never replaces
   the real text it failed to repair, and the debate note names whose repair — or relaunch —
-  answered in its reasoning channel. A judge whose own answer was real but unparseable and whose
+  answered in its reasoning channel. The debate note names a promoted retry whichever branch its
+  leg took — a promoted defence or re-vote whose relaunch came back promoted again is named even
+  when that relaunch superseded the first leg. A judge whose own answer was real but unparseable
+  and whose
   repair comes back in the reasoning channel is announced too, on the same channel, with a `Note:`
   that names the repair rather than the judge's answer.
   Every reader of a leg in the council now treats a promoted leg as no deliverable: Stage-1
@@ -62,13 +68,14 @@ All notable changes to Amicus are documented here. Format follows
   reason text the same way on every arm, and the operator's
   `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` value is quoted bounded (96 characters), so the longest
   reason amicus can mint is now a computable worst case rather than a sample — a measured 620
-  characters on the corpus's pinned rows, 627 over all legal inputs, 173 under the 800 cap — while
+  characters on the corpus's pinned rows, 660 over all legal inputs, 140 under the 800 cap — while
   `data.reason` keeps the verbatim text.
   A promoted leg whose provider reported no token usage says `token usage not reported` in every
   announcement instead of a fabricated `0 reasoning / 0 output tokens` — a usage record with no
   positive count is not a report, since a promoted leg produced the reasoning it promoted and a
   length stop consumed its reservation — and the same rule governs the OUTPUT_LENGTH reason and
-  the output-truncated note; the leg document and the spend ledger still carry the summed zeros
+  the output-truncated note, all three homes testing each count the same way (an integer, never
+  negative); the leg document and the spend ledger still carry the summed zeros
   (filed in `BACKLOG.md` under #257 — `pricing.js :: sumPerMessageUsage`).
   The fact rides every leg document (`promoted: true`, emit-when-true, declared in
   `run.schema.json`, the tally schema and, on its open leg objects, `wave.schema.json`).

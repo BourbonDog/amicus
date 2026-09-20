@@ -9160,6 +9160,7 @@ Deferred — one line each, none blocks anything:
   stands and never repaired against its deliberation.
   Council round 3 (2026-09-19): R-X35–R-X40.
   Council round 4 (2026-09-20): R-X41–R-X47.
+  Council round 5 (2026-09-20): R-X48–R-X50.
 - [x] #257 (build, E1 review M6) — src/council/run-stage2.js is at 298/300 with two ~250-char
   lines (`:202` at 275 chars, `:261` at 249) carrying the R-X32 conjuncts; extract the judge
   leg-loop body (parse → bounded repair/relaunch → result row) into its own module so the next

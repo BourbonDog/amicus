@@ -1437,13 +1437,31 @@ promoted. The chair's `chairAttempts[].reason` reads that one parenthetical
 (`utils/output-length.js`) and the `output-truncated` note
 (`run-retry-notes.js :: truncatedReviewNote`) spell the same rule and the same literal
 themselves — `— token usage not reported` in place of ` after <r> reasoning / <o> output tokens`
-— and are pinned equal to it. A reported zero beside a positive count is still a reported zero.
+— and are pinned equal to it. All three homes also test each COUNT the same way (**#257 R-X50**):
+one predicate, `Number.isInteger(v) && v >= 0` — a fractional or negative count is not a report
+anywhere, rather than a number in one surface and `token usage not reported` in the other two.
+The five-count rule above is unchanged: a usage record with no positive count at all is not a
+report. A reported zero beside a positive count is still a reported zero.
 A Stage-2 judge's retry is a relaunch: a promoted
 judge is never used as it stands — its first `-q<N>` attempt re-asks the original bundle, a
 relaunch that answers with real but unparseable text gets the one remaining repair, and a relaunch
 that answers in its reasoning channel again (or dies) stands the judge down; a `Note:` on the
 `judge-reasoning-only` channel records which, and when fewer than two judges remain usable the
-thin-cross-review reason says `answered only in the reasoning channel and was not rescued`. No
+thin-cross-review reason says `answered only in the reasoning channel and was not rescued`. The
+stand-down cause is ONE explicit state, and it has seven values (plus `null`, which means the
+judge was rescued): `relaunch-promoted`, `relaunch-died`, `relaunch-unparseable`,
+`relaunch-repair-promoted`, `relaunch-unrepaired`, `not-relaunched`, and R-X36's
+`repair-promoted` — the one whose subject is a judge whose own answer was real.
+`relaunch-repair-promoted` is the newest of the seven, and it used to be
+folded into `relaunch-unparseable` (**#257 R-X49**): the relaunch answered for REAL, its text did
+not parse, and its one repair answered in ITS reasoning channel. That ending now says so, byte
+for byte — the `why`'s cause reads `relaunched once with the original briefing, and the
+relaunch's answer did not parse and its repair answered in its reasoning channel`, and the note's
+`data.repairPromotedAttempt` is `2` (the same field R-X36's arm carries, so one key answers
+"which ask answered in the reasoning channel" on either path). A model that cannot follow the
+JSON schema and a model that produced no answer text block at all are different fixes, so they
+are no longer one sentence; `relaunch-unparseable` keeps its own wording and carries no
+`repairPromotedAttempt`. No
 `judge-<seat>.md` is written from a promoted leg; the relaunch's real text is the judge artifact.
 That relaunch is recorded as one (**#257 R-X45**): a `-q<N>` wave whose runStats row is
 `role: 'relaunch'`, not `role: 'repair'` — every attempt-1 relaunch of a promoted judge leaves
@@ -1511,6 +1529,15 @@ unstructured output`):
 
 Kinds are grouped, the groups follow the round's own first-appearance order, and with no promoted
 retry at all the clause is empty and the `why` is byte-identical to any other degraded round.
+Membership is decided by the RETRY, not by the row it happens to leave (**#257 R-X48**):
+`runDefenseSolo` and `repairRevoteLeg` mint an explicit `promotedRetry` marker — the raiser's
+alias beside the kind, `relaunch` when the wave-1 leg was promoted and `repair` otherwise —
+whenever the retry leg is promoted, and the note is built from those markers. A promoted defence
+or re-vote whose relaunch comes back promoted **and complete** supersedes its first leg under
+R-X46 and therefore leaves no retry row at all; it is named all the same. Until R-X48 that one
+case was silent while its timed-out sibling was named, because the clause was derived from the
+rows. The four forms above are unchanged and so are the rows — only the SOURCE of the aliases
+moved.
 The promoted leg still gets its own row — `rebuttal`/`revote`, or `superseded` when the repair came
 back with a leg of its own — carrying `promoted: true`, but no `rebuttal-<seat>.md` or
 `revote-<seat>.md` of its own: `materializeDebate` skips a promoted leg as `materializeReviews`
