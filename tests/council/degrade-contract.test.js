@@ -191,25 +191,26 @@ describe("kind 'info' + channel 'output-truncated' (#218 PR 3)", () => {
   /**
    * #257 R-X44(b) — ONE spelling of the not-reported literal across every home that mints it.
    *
-   * ⚠️ READ BEFORE CHANGING. The ruling asks for a strict equality against
-   * `council/promoted.js :: tokenSplit` for an absent split. That file is owned by fix G1 in
-   * another worktree and its not-reported rendering has NOT landed here: MEASURED on this
-   * branch, `tokenSplit({ reasoning: null, output: null, finish: null })` still returns
-   * `'null reasoning / null output tokens'`. So the third home is pinned to the two-value set
-   * below — which is green before AND after G1 lands, and RED the moment any home invents a
-   * THIRD wording, which is the drift the ruling exists to stop. When G1 integrates, drop the
-   * pre-fix member and this becomes the strict equality as ruled.
+   * ⚠️ READ BEFORE CHANGING. R-X44 is one rule with three renderers, and a reader meets them
+   * on the same surfaces — stderr, run.json, the `amicus council report` Markdown — so a second
+   * wording of "we do not know the counts" is a second vocabulary for one fact:
+   *   - `council/promoted.js :: tokenSplit` — every promoted-leg announcement (fix G1);
+   *   - `council/run-retry-notes.js :: truncatedReviewNote` — the cut-review note (this file);
+   *   - `utils/output-length.js :: formatOutputLengthReason` — the OUTPUT_LENGTH death.
+   * They live in three modules with no shared constant between them ON PURPOSE (`promoted.js`
+   * is a LEAF that requires nothing, spec R12's require-free pin), so the literal is held equal
+   * HERE instead. `tokenSplit` is the canonical one: this is a STRICT equality against it, not
+   * a `toContain` on a set — adding a member to relax a failure is the drift, not the fix.
    */
   test('R-X44(b) cross-module: the not-reported literal has ONE spelling in every home', () => {
     const { formatOutputLengthReason } = require('../../src/utils/output-length');
     const { tokenSplit } = require('../../src/council/promoted');
-    const NOT_REPORTED = 'token usage not reported';
+    const NOT_REPORTED = tokenSplit({ reasoning: null, output: null, finish: null });
+    expect(NOT_REPORTED).toBe('token usage not reported');
     expect(truncatedReviewNote('glm', { finish: 'length' }).why)
       .toContain(`(finish 'length') — ${NOT_REPORTED};`);
     expect(formatOutputLengthReason({ tokens: null, budget: null }))
       .toContain(`— ${NOT_REPORTED}; outputBudget`);
-    expect([NOT_REPORTED, 'null reasoning / null output tokens'])
-      .toContain(tokenSplit({ reasoning: null, output: null, finish: null }));
   });
 });
 
