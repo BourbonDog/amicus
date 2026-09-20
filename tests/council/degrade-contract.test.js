@@ -211,15 +211,11 @@ describe("kind 'info' + channel 'output-truncated' (#218 PR 3)", () => {
    * HERE instead. `tokenSplit` is the canonical one: this is a STRICT equality against it, not
    * a `toContain` on a set — adding a member to relax a failure is the drift, not the fix.
    *
-   * ⚠️ THE PREDICATE IS NOT PINNED EQUAL, ONLY THE WORDING — and the three do differ (council
-   * #270 r4 review of G2, M1). All three share R-X44(c)'s `reportedTokens` gate (no positive
-   * count in the record ⇒ not a report), pinned below on the product's own zero object. The
-   * PER-COUNT test then differs by ruling: `promoted.js :: promotedFacts` and
-   * `truncatedReviewNote` use `Number.isInteger(v) && v >= 0`, `formatOutputLengthReason` uses
-   * `Number.isFinite`. MEASURED divergence: `{ reasoning: 31000.5, output: 700 }` reads
-   * `token usage not reported` in the first two and `31000.5 reasoning / 700 output tokens` in
-   * the third; a negative count likewise. Each follows its own ruling text, so this is recorded,
-   * not asserted — unifying on `isInteger && >= 0` would be a behaviour change and needs a ruling.
+   * #257 R-X50 (council round 5, A3/B1): the PER-COUNT test is now pinned equal too, not just
+   * the wording — `Number.isInteger(v) && v >= 0` in all three homes. Before this ruling
+   * `formatOutputLengthReason` alone used `Number.isFinite`, so a fractional or negative count
+   * (a hand-edited artifact; providers report integers) rendered a number there and read
+   * `token usage not reported` in the other two — the divergence the next test pins closed.
    */
   test('R-X44(b) cross-module: the not-reported literal has ONE spelling in every home', () => {
     const { formatOutputLengthReason } = require('../../src/utils/output-length');
@@ -276,6 +272,42 @@ describe("kind 'info' + channel 'output-truncated' (#218 PR 3)", () => {
       .toContain("(finish 'length') after 0 reasoning / 0 output tokens;");
     expect(formatOutputLengthReason({ tokens: OBSERVED, budget: null }))
       .toContain(' — 0 reasoning / 0 output tokens;');
+  });
+
+  /**
+   * #257 R-X50 cross-module: the PER-COUNT predicate is pinned equal in every home, on the
+   * two records that DIFFERED before this ruling (a fractional and a negative reasoning
+   * count, each beside a positive `output`) and one that was already agreed (unchanged).
+   * Named mutant "PREDICATEDIVERGED" (utils/output-length.js): restore `Number.isFinite` —
+   * the first two rows red (they render a number instead of `token usage not reported`).
+   */
+  test('R-X50 cross-module: the per-count predicate agrees in every home', () => {
+    const { formatOutputLengthReason } = require('../../src/utils/output-length');
+    const { tokenSplit, promotedFacts } = require('../../src/council/promoted');
+    const NOT_REPORTED = 'token usage not reported';
+
+    const FRACTIONAL = { input: 1200, reasoning: 1.5, output: 3 };
+    expect(tokenSplit(promotedFacts({ promoted: true, usage: { tokens: FRACTIONAL } }))).toBe(NOT_REPORTED);
+    expect(truncatedReviewNote('glm', { finish: 'length', usage: { tokens: FRACTIONAL } }).why)
+      .toContain(`(finish 'length') — ${NOT_REPORTED};`);
+    expect(formatOutputLengthReason({ tokens: FRACTIONAL, budget: null }))
+      .toContain(`— ${NOT_REPORTED}; outputBudget`);
+
+    const NEGATIVE = { input: 1200, reasoning: -1, output: 3 };
+    expect(tokenSplit(promotedFacts({ promoted: true, usage: { tokens: NEGATIVE } }))).toBe(NOT_REPORTED);
+    expect(truncatedReviewNote('glm', { finish: 'length', usage: { tokens: NEGATIVE } }).why)
+      .toContain(`(finish 'length') — ${NOT_REPORTED};`);
+    expect(formatOutputLengthReason({ tokens: NEGATIVE, budget: null }))
+      .toContain(`— ${NOT_REPORTED}; outputBudget`);
+
+    // unchanged: an integer, non-negative record was already a report in every home.
+    const REPORTED = { input: 1200, reasoning: 32000, output: 0 };
+    expect(tokenSplit(promotedFacts({ promoted: true, usage: { tokens: REPORTED } })))
+      .toBe('32000 reasoning / 0 output tokens');
+    expect(truncatedReviewNote('glm', { finish: 'length', usage: { tokens: REPORTED } }).why)
+      .toContain("(finish 'length') after 32000 reasoning / 0 output tokens;");
+    expect(formatOutputLengthReason({ tokens: REPORTED, budget: null }))
+      .toContain(' — 32000 reasoning / 0 output tokens;');
   });
 });
 

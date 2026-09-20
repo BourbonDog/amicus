@@ -91,6 +91,21 @@ describe('formatOutputLengthReason (#218 PR 3)', () => {
     expect(OUTPUT_LENGTH_PREFIX).toBe('OUTPUT_LENGTH:');
     expect(formatOutputLengthReason({ tokens, budget: null }).startsWith(OUTPUT_LENGTH_PREFIX + ' ')).toBe(true);
   });
+  // #257 R-X50: the per-count test is `Number.isInteger(v) && v >= 0`, the SAME predicate
+  // `council/promoted.js :: promotedFacts` and `council/run-retry-notes.js :: truncatedReviewNote`
+  // use — not `Number.isFinite`, which let a fractional or negative count render as a number
+  // here while the other two homes called it unreported. Named mutant "PREDICATEDIVERGED":
+  // restore `Number.isFinite` for either count — this reds.
+  test('a fractional or negative count is not a report, matching the other two homes (R-X50)', () => {
+    expect(formatOutputLengthReason({ tokens: { input: 1200, reasoning: 1.5, output: 3 }, budget: null }))
+      .toContain(' — token usage not reported;');
+    expect(formatOutputLengthReason({ tokens: { input: 1200, reasoning: -1, output: 3 }, budget: null }))
+      .toContain(' — token usage not reported;');
+    // unchanged: an integer, non-negative record still reports (R-X50 changes the predicate,
+    // never the literal for a record every home already agreed on).
+    expect(formatOutputLengthReason({ tokens: { input: 1200, reasoning: 32000, output: 0 }, budget: null }))
+      .toContain(' — 32000 reasoning / 0 output tokens;');
+  });
 });
 
 /**

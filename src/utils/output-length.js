@@ -82,12 +82,10 @@ function isOutputLengthDeath({ finish, hasText }) {
  * us, both when either count is not a finite number (#257 R-X44, round 4 D2) and
  * when NO count in the record is positive (R-X44(c): see `reportedTokens` above —
  * this is the arm the product actually reaches). A REPORTED zero, beside a
- * positive count, stays a zero. ⚠️ The per-count test here is `Number.isFinite`,
- * as R-X44 ruled for this formatter, while `promoted.js` and
- * `run-retry-notes.js :: truncatedReviewNote` use `Number.isInteger(v) && v >= 0`:
- * `{ reasoning: 31000.5, output: 700 }` renders its fractional count here and
- * reads not-reported there. One rule, three renderers, two per-count predicates —
- * the literal is pinned equal across all three, the predicate is not.
+ * positive count, stays a zero. #257 R-X50: the per-count test is
+ * `Number.isInteger(v) && v >= 0`, the SAME spelling `promoted.js` and
+ * `run-retry-notes.js :: truncatedReviewNote` use — one rule, three renderers, one
+ * per-count predicate, pinned equal across all three in tests/council/degrade-contract.test.js.
  * The budget clause is what
  * the engine serving the leg was spawned with: the budget (`null` = unset,
  * `undefined` = unknown — no handle value and config unreadable) or, when no
@@ -109,7 +107,12 @@ function formatOutputLengthReason({ tokens, budget, reasoningOnly, ambientFlag }
   // missing token record to 0 and minted "0 reasoning / 0 output tokens" — a measurement the
   // engine never made, in the clause whose whole job is to report what the engine recorded.
   // A REPORTED zero stays a zero. Named mutant "OUTPUTLENGTHZEROS".
-  const counts = (reportedTokens(t) && Number.isFinite(t.reasoning) && Number.isFinite(t.output))
+  // #257 R-X50: the per-count test is `Number.isInteger(v) && v >= 0`, the same spelling
+  // `promoted.js :: promotedFacts` and `run-retry-notes.js :: truncatedReviewNote` use.
+  // Named mutant "PREDICATEDIVERGED": restore `Number.isFinite` for either count.
+  const counts = (reportedTokens(t)
+    && Number.isInteger(t.reasoning) && t.reasoning >= 0
+    && Number.isInteger(t.output) && t.output >= 0)
     ? `${t.reasoning} reasoning / ${t.output} output tokens`
     : 'token usage not reported';
   const streamed = reasoningOnly
