@@ -22,12 +22,16 @@ All notable changes to Amicus are documented here. Format follows
   channel again — or dies — stands the judge down; a `Note:` on `judge-reasoning-only` records
   which, and when fewer than two judges remain usable the thin-cross-review reason says `answered
   only in the reasoning channel and was not rescued`. No `judge-<seat>.md` is written from a
-  promoted leg; the relaunch's real text is the judge artifact. That relaunch is recorded as the
-  judge's first repair attempt — a `-q<N>` wave, a `role: 'repair'` row, and
-  `conformance: 'repaired'` when it is used — so only that `Note:`'s prose tells a relaunch from a
-  repair. A judge whose own answer was real but unparseable and whose repair comes back in the
-  reasoning channel is announced too, on the same channel, with a `Note:` that names the repair
-  rather than the judge's answer.
+  promoted leg; the relaunch's real text is the judge artifact. The relaunch is recorded as one: a
+  `role: 'relaunch'` runStats row (a promoted judge's first relaunch; a promoted defence's or
+  re-vote's relaunch that produced nothing usable), a rescued judge's row and its tally/verdict
+  copies carry `rescued: true` beside `promoted: true`, and the `judge-reasoning-only` note's
+  `data` names `relaunchWaveId` and `usedWaveId`; `conformance` keeps its three values and means
+  how many asks it took to parse. A promoted repair of a real defence or re-vote never replaces
+  the real text it failed to repair, and the debate note names whose repair — or relaunch —
+  answered in its reasoning channel. A judge whose own answer was real but unparseable and whose
+  repair comes back in the reasoning channel is announced too, on the same channel, with a `Note:`
+  that names the repair rather than the judge's answer.
   Every reader of a leg in the council now treats a promoted leg as no deliverable: Stage-1
   reviews (not materialized; the once-only retry fires); the Stage-1 `-p<N>` and Stage-2 `-q<N>`
   repair solos (a promoted repair is a failed repair attempt inside the existing bound); the chair
@@ -54,9 +58,17 @@ All notable changes to Amicus are documented here. Format follows
   The Stage-1 dead-leg announcements bound the engine's error text the same way the Stage-2
   judge-death prose already did — at its own cap — one line, no control characters, at most 800
   characters, a cap
-  measured to pass every reason amicus itself mints (the `OUTPUT_LENGTH` remedy is 517 characters;
-  the longest, the extended no-output backstop reason, 518) — while `data.reason` keeps the
-  verbatim text.
+  measured to pass every reason amicus itself mints; every retry announcement bounds the engine's
+  reason text the same way on every arm, and the operator's
+  `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` value is quoted bounded (96 characters) so the longest
+  reason amicus can mint is a measured 620 characters, 180 under the 800 cap — while
+  `data.reason` keeps the verbatim text.
+  A promoted leg whose provider reported no token usage says `token usage not reported` in every
+  announcement instead of a fabricated `0 reasoning / 0 output tokens` — a usage record with no
+  positive count is not a report, since a promoted leg produced the reasoning it promoted and a
+  length stop consumed its reservation — and the same rule governs the OUTPUT_LENGTH reason and
+  the output-truncated note; the leg document and the spend ledger still carry the summed zeros
+  (filed).
   The fact rides every leg document (`promoted: true`, emit-when-true, declared in
   `run.schema.json`, the tally schema and, on its open leg objects, `wave.schema.json`).
   Measured motive: PR #254 round 1, where 40,332 reasoning

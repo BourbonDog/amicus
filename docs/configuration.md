@@ -104,7 +104,10 @@ Set it by hand-editing `~/.config/amicus/config.json`:
 `amicus doctor`'s `output-budget` row then says what the value reaches: how many of your alias
 routes the catalog can clamp it to, whether an `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` you exported
 yourself is being honoured or overridden, and a malformed value in either place — the engine falls
-back to 32,000 *silently* on those (measured), so the doctor row is where it surfaces.
+back to 32,000 *silently* on those (measured), so the doctor row is where it surfaces. Both that
+row and the `OUTPUT_LENGTH` death reason quote your ambient value **bounded to 96 characters**
+(#257 R-X43 — a longer one is shown truncated with an ellipsis), while the plain-positive-integer
+check that decides which arm they report reads the raw bytes the engine actually saw.
 
 Five things worth knowing before you set it. Every number below was measured on the wire by
 `scripts/probe-max-tokens.js` against the pinned engine, or read in the pinned binary where it says

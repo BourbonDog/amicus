@@ -9159,6 +9159,7 @@ Deferred — one line each, none blocks anything:
   a promoted judge, defence or re-vote is relaunched with its original briefing, never used as it
   stands and never repaired against its deliberation.
   Council round 3 (2026-09-19): R-X35–R-X40.
+  Council round 4 (2026-09-20): R-X41–R-X47.
 - [x] #257 (build, E1 review M6) — src/council/run-stage2.js is at 298/300 with two ~250-char
   lines (`:202` at 275 chars, `:261` at 249) carrying the R-X32 conjuncts; extract the judge
   leg-loop body (parse → bounded repair/relaunch → result row) into its own module so the next
@@ -9243,3 +9244,4 @@ Deferred — one line each, none blocks anything:
   minted reason is now MEASURED at 620 for the pinned rows (supremum 627), under the 800 cap,
   and the pin is a bound.
 - [ ] pricing.js :: sumPerMessageUsage sums a leg that reported no usage to all-zero totals, indistinguishable from reported zeros; the formatters treat an all-zero record as unreported (R-X44(c)) because their triggers consume tokens, but the leg document and the spend ledger still carry the summed zeros in their TOKEN fields (the cost is already honest there: `resolveLegCost` / `hasObservedTokens` treat an all-zero record as unobserved and resolve it to `unknown`, which `run-budget.js` counts under `unknownLegs`) — the seam should record `usage: null` (or an observed flag) when no message carried usage, so the token fields say what the cost already says (council #270 r4 review of G2, I1 and its re-review).
+- [ ] #257 (council r4, from R-X45) — `src/council/debate.js` reached **300/300** at round 4: the relaunch mark that `legRow` carries is turned into `role: 'relaunch'` by `debate.js :: mk`, and that map cost the file its last line (299 → 300, added in place). The debate cluster now has no headroom at all — `debate.js`, `run-debate.js` and `run-debate-revote.js` are each at **300** and `run-assemble.js` at **298** — so the next edit to any of them must extract first. Candidates: `debate.js`'s row builders; `run-debate-stage.js`'s note builder (174 lines, the one file in the cluster with room). ⚠️ MEASURED on `32fefea4`, and the brief's framing of "four council files at the gate" understates it: `src/council/` also holds `report.js`, `run-retry.js` and `run-server.js` at 300, and `briefings-chair.js`, `run.js`, `run-retry-notes.js` and `seat-tools.js` at 299. The gate is crowded well beyond the files this round touched; a resplit plan for `src/council/` is the real item here.
