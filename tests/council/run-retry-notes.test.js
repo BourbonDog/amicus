@@ -560,9 +560,11 @@ describe('#257 R-X42 every retry-note arm bounds its reason; data stays raw', ()
  * flag is now quoted through `safeFragment` (≤ 96 chars), the budget through
  * `outputTokenFlagValue`, and the counts are numbers — so every variable part of that
  * sentence is bounded and the cap clears a COMPUTABLE bound, not a sample. 620 is the longest
- * PINNED row; the SUPREMUM over all legal inputs is 627, MEASURED with pathological finite
- * counts (a JS number's decimal form caps at 24 chars — `-1.7976931348623157e+308`), which is
- * 173 under the cap. A `1e308` budget row measures 576, well inside. The three 96/500-char rows
+ * PINNED row; the SUPREMUM over all legal inputs is 660, RE-MEASURED round 5 (R-X50: a count
+ * must be `Number.isInteger(v) && v >= 0`, so `-1e308` was never a report) with the widest
+ * LEGAL count — `Number.MAX_VALUE`'s 17-significant-digit exponential form, 23 chars, beating
+ * a plain `1e20` (21) and `Number.MAX_SAFE_INTEGER` (16) — used for BOTH reasoning and output,
+ * which is 140 under the cap. A `1e308` budget row measures 576, well inside. The three 96/500-char rows
  * below are the realistic worst case; the non-vacuity test pins the supremum beside them, so the
  * docblock cannot claim a worst case that a legal input beats (council #270 r4 review, M3).
  *
@@ -638,8 +640,11 @@ describe('#257 R-X38 the cap never truncates a reason amicus itself minted', () 
    * is bounded and the longest reason it can mint is a number, measured here.
    *
    * The SUPREMUM is asserted too, not just the pinned rows (council #270 r4 review, M3): the
-   * counts are the one remaining variable, and a JS number's decimal form is itself bounded,
-   * so the pathological row below is the true maximum over all legal inputs.
+   * counts are the one remaining variable, and a JS number's decimal form is itself bounded.
+   * R-X50 (round 5) requires each count to be LEGAL — `Number.isInteger(v) && v >= 0`, so
+   * `-1e308` is never a report — and the widest LEGAL count, `Number.MAX_VALUE` (23 chars,
+   * beating `1e20`'s 21-digit plain form and `Number.MAX_SAFE_INTEGER`'s 16), is the true
+   * maximum over all legal inputs.
    */
   test('R-X43: an operator flag of ANY length is quoted bounded — the cap is a theorem now', () => {
     const { MAX_FRAGMENT_CHARS } = require('../../src/utils/text-sanitize');
@@ -657,10 +662,12 @@ describe('#257 R-X38 the cap never truncates a reason amicus itself minted', () 
       expect(s.length).toBeLessThanOrEqual(MAX_LEG_ERROR_CHARS);
       expect(collapseExcerpt(s, MAX_LEG_ERROR_CHARS)).toBe(s);
     }
-    // M3: the counts are the one variable the pinned rows do not stress. A JS number's decimal
-    // form is bounded (`-1.7976931348623157e+308`, 24 chars), so this IS the supremum — and it
-    // BEATS the pinned 620, which is why the docblocks name both numbers.
-    const worst = formatOutputLengthReason({ tokens: { reasoning: 1e308, output: -1e308 },
+    // M3: the counts are the one variable the pinned rows do not stress. R-X50 (round 5) made
+    // `-1e308` illegal — a count must be `Number.isInteger(v) && v >= 0` — so the widest LEGAL
+    // count is `Number.MAX_VALUE`'s 17-significant-digit exponential form (23 chars; beats a
+    // plain `1e20` at 21 and `Number.MAX_SAFE_INTEGER` at 16). Used for BOTH reasoning and
+    // output, this IS the supremum — and it still BEATS the pinned 620.
+    const worst = formatOutputLengthReason({ tokens: { reasoning: Number.MAX_VALUE, output: Number.MAX_VALUE },
       budget: null, reasoningOnly: true, ambientFlag: '9'.repeat(MAX_FRAGMENT_CHARS) });
     expect(worst.length).toBeGreaterThan(exact.length);
     expect(worst.length).toBeLessThanOrEqual(MAX_LEG_ERROR_CHARS);

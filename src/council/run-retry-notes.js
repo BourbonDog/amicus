@@ -43,7 +43,8 @@ const { collapseExcerpt } = require('../utils/text-sanitize');
  * Pinned against the REAL formatters, never a copied literal, in run-retry-notes.test.js (mutant
  * "MINTEDREASONTRUNCATED"; 400 REFUTED). R-X43 made 800 a BOUND: the ambient flag is now a
  * `safeFragment` copy (≤ 96). 620 is the longest PINNED row; the SUPREMUM over all legal inputs
- * is 627 (MEASURED: pathological finite counts, decimal form ≤ 24 chars), 173 under it. R-X42:
+ * is 660 (RE-MEASURED round 5, R-X50: the widest LEGAL count, `Number.MAX_VALUE`, decimal form
+ * 23 chars), 140 under it. R-X42:
  * `boundReason` is this cap's ONE spelling, at every prose arm here and run-retry.js's heal note.
  *
  * Shared with run-stages.js through this module's exports: it already destructures this one,
