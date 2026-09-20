@@ -9231,9 +9231,13 @@ Deferred — one line each, none blocks anything:
   `OUTPUT_LENGTH` format is 265 characters and the longest minted reason is 518. R-X38's ruling (a
   cap bounds provider noise and must pass every minted reason whole) applies here unchanged; it is
   its own change because it moves a pinned Stage-2 string.
-- [ ] #257 (council r3, F3 concern 3) — `src/utils/output-length.js :: formatOutputLengthReason`
+- [x] #257 (council r3, F3 concern 3) — `src/utils/output-length.js :: formatOutputLengthReason`
   interpolates the operator-controlled `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` verbatim (`:83`
   and `:84`), so the minted reason's length is operator-controlled and NO finite prose cap is a
   proof that a minted reason survives it — R-X38's pin is a tripwire on drift, not a bound. The
   guarantee belongs at the formatter: run the flag through
   `src/utils/text-sanitize.js :: safeFragment` before interpolating it.
+  — done at round 4 (R-X43, output-length.js). The flag is bounded before it is quoted while
+  `PLAIN_OUTPUT_TOKEN_FLAG` is still tested on the RAW bytes; the doctor row
+  (`doctor-output-budget-check.js`) took the same split so the two gates agree. The longest
+  minted reason is now MEASURED at 620, 180 under the 800 cap, and the pin is a bound.

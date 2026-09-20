@@ -28,6 +28,9 @@
 const {
   outputTokenFlagValue, ENGINE_DEFAULT_OUTPUT_TOKENS, OUTPUT_TOKEN_FLAG, PLAIN_OUTPUT_TOKEN_FLAG,
 } = require('./engine-output-flag');
+// #257 R-X43: the house sanitizer, a leaf. The ambient flag below is OPERATOR text quoted into
+// a reason that is itself quoted into a council note, so it is bounded before interpolation.
+const { safeFragment } = require('./text-sanitize');
 
 /** The prefix a consumer can classify on, like `NO_OUTPUT_BACKSTOP:`. */
 const OUTPUT_LENGTH_PREFIX = 'OUTPUT_LENGTH:';
@@ -47,7 +50,10 @@ function isOutputLengthDeath({ finish, hasText }) {
 
 /**
  * The reason string. Every clause is an observation: `finish` and the two
- * counts are the engine's own record of the message; the budget clause is what
+ * counts are the engine's own record of the message — and when either count is
+ * not a finite number the clause says `token usage not reported` rather than
+ * minting a zero the engine never reported (#257 R-X44's principle, round 4 D2);
+ * a REPORTED zero stays a zero. The budget clause is what
  * the engine serving the leg was spawned with: the budget (`null` = unset,
  * `undefined` = unknown — no handle value and config unreadable) or, when no
  * budget was set, the ambient flag. The remedy names the one
@@ -64,7 +70,13 @@ function isOutputLengthDeath({ finish, hasText }) {
  */
 function formatOutputLengthReason({ tokens, budget, reasoningOnly, ambientFlag }) {
   const t = tokens || {};
-  const count = (n) => (Number.isFinite(n) ? n : 0);
+  // #257 R-X44's principle: an ABSENT count is not a zero count. The old `count()` floored a
+  // missing token record to 0 and minted "0 reasoning / 0 output tokens" — a measurement the
+  // engine never made, in the clause whose whole job is to report what the engine recorded.
+  // A REPORTED zero stays a zero. Named mutant "OUTPUTLENGTHZEROS".
+  const counts = (Number.isFinite(t.reasoning) && Number.isFinite(t.output))
+    ? `${t.reasoning} reasoning / ${t.output} output tokens`
+    : 'token usage not reported';
   const streamed = reasoningOnly
     ? 'only reasoning was streamed, no answer text'
     : 'no answer text arrived';
@@ -72,18 +84,23 @@ function formatOutputLengthReason({ tokens, budget, reasoningOnly, ambientFlag }
   // K12); 64000abc and 0 fell back to 32000 (D1/D2); every other form is
   // unmeasured, and the clause below says so -- shared with the doctor row
   // (doctor-output-budget-check.js :: evaluateOutputBudget) so the gates agree.
-  const ambient = typeof ambientFlag === 'string' ? ambientFlag : null;
+  // #257 R-X43: the ARM is decided on the RAW bytes — the engine saw those, so ' 64000 ' really
+  // does fall back to 32000 and must still read as unmeasured. The PROSE quotes a bounded copy
+  // (safeFragment, ≤ 96 chars), which is what makes the 800-char prose cap in
+  // run-retry-notes.js a theorem rather than a tripwire. Named mutant "FLAGUNBOUNDED".
+  const ambientRaw = typeof ambientFlag === 'string' ? ambientFlag : null;
+  const ambient = ambientRaw === null ? null : safeFragment(ambientRaw);
   const knob = budget === undefined
     ? 'outputBudget could not be read'
     : budget !== null
       ? `outputBudget is ${outputTokenFlagValue(budget)}`
       : ambient === null
         ? `outputBudget is unset — the engine's ${ENGINE_DEFAULT_OUTPUT_TOKENS} default reservation governs`
-        : PLAIN_OUTPUT_TOKEN_FLAG.test(ambient)
+        : PLAIN_OUTPUT_TOKEN_FLAG.test(ambientRaw)
           ? `outputBudget is unset — the ambient ${OUTPUT_TOKEN_FLAG}=${ambient} the engine was started with governs (each leg reserves min(${ambient}, the ceiling the engine's catalog knows for it))`
           : `outputBudget is unset and the ambient ${OUTPUT_TOKEN_FLAG}=${ambient} the engine was started with is not a plain positive integer — the only form measured to be honoured (probe D1/D2: 64000abc and 0 fell back to ${ENGINE_DEFAULT_OUTPUT_TOKENS} silently); any other form is unmeasured`;
   return `${OUTPUT_LENGTH_PREFIX} the provider stopped at the max_tokens reservation (finish 'length') and ${streamed} — `
-    + `${count(t.reasoning)} reasoning / ${count(t.output)} output tokens; ${knob} — `
+    + `${counts}; ${knob} — `
     + 'raise outputBudget in config.json (docs/configuration.md, Output budget)';
 }
 

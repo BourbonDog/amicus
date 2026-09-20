@@ -412,6 +412,110 @@ describe('#257 R-X38 the still-dead prose bounds the provider error; data stays 
 });
 
 /**
+ * #257 R-X42 — EVERY arm bounds its reason, not only the leg arm.
+ *
+ * Council round 4 (run 35476684772), A1 (glm, Confirmed 3-0) and chair HQ3: the R-X38
+ * sweep bounded the LEG arm of each builder and left the wave-class and missing-class
+ * arms interpolating `ff.reason` raw, while this module's own header asserts that every
+ * `why` is bounded. An inconsistent invariant is worse than none — a reader who trusts
+ * the header stops checking.
+ *
+ * One exported helper, `boundReason`, is now the SINGLE spelling at every prose site
+ * (`waveStillDeadNote`, `skippedWaveNote`, and the wave / missing / leg arms of both
+ * still-dead builders). `data.*` keeps the RAW bytes — machine surface, not a sentence.
+ *
+ * Named mutants: "WAVEARMRAW" and "MISSINGARMRAW" (run-retry-notes.js, here);
+ * "HEALARMRAW" (run-retry.js, pinned in tests/council/run-retry.test.js).
+ */
+describe('#257 R-X42 every retry-note arm bounds its reason; data stays raw', () => {
+  const { waveStillDeadNote, skippedWaveNote, boundReason, MAX_LEG_ERROR_CHARS }
+    = require('../../src/council/run-retry-notes');
+  // Same hostile shape the R-X38 block uses: one ANSI sequence, two newlines, well past the cap.
+  const ESC2 = String.fromCharCode(27);
+  const RAW = `${ESC2}[31mPROVIDER_ERROR: upstream refused${ESC2}[0m\nsecond line\n${'y'.repeat(900)}`;
+  const OK = `PROVIDER_ERROR: upstream refused second line ${'y'.repeat(754)}…`;
+
+  test('the fixture is hostile, the expectation is bounded, and boundReason is the cap (non-vacuity)', () => {
+    expect(RAW).toContain('\n');
+    expect(RAW).toContain(`${ESC2}[`);
+    expect(RAW.length).toBeGreaterThan(900);
+    expect(OK).toHaveLength(MAX_LEG_ERROR_CHARS);
+    expect(OK).not.toContain('\n');
+    expect(OK).not.toContain(ESC2);
+    expect(boundReason(RAW)).toBe(OK);
+  });
+
+  test('waveStillDeadNote: the why is bounded, data.reason is the raw string', () => {
+    const w = { waveId: 'r1-s1', models: ['glm', 'qwen'], reason: RAW };
+    const n = waveStillDeadNote(w, UNIT);
+    expect(n.why).toBe(`${OK}; the once-only retry wave also produced no legs`);
+    expect(n.data.reason).toBe(RAW);
+  });
+
+  test('MINOR-7c survives the bound: a falsy reason still reads "no reason recorded"', () => {
+    // collapseExcerpt(null) and collapseExcerpt('') both yield '', so the `||` fallback holds.
+    for (const reason of [null, undefined, '']) {
+      expect(waveStillDeadNote({ waveId: 'r1-s1', models: ['glm'], reason }, UNIT).why)
+        .toBe('no reason recorded; the once-only retry wave also produced no legs');
+    }
+  });
+
+  test('skippedWaveNote: the why IS the reason, so it is bounded; data.reason is raw', () => {
+    const n = skippedWaveNote({ waveId: 'r1-s1', models: ['glm'], reason: RAW });
+    expect(n.why).toBe(OK);
+    expect(n.data.reason).toBe(RAW);
+  });
+
+  test('retryLegStillDeadNote, the WAVE arm: bounded in the why, raw on data.firstFailure', () => {
+    const ff = { class: 'wave', waveId: 'r1-s1', reason: RAW };
+    const n = note(ff, { status: 'timeout', error: null });
+    expect(n.why).toBe(`its first wave r1-s1 produced no legs (${OK}); `
+      + "its once-only retry leg ended 'timeout' with no usable output");
+    expect(n.data.firstFailure.reason).toBe(RAW);
+  });
+
+  test('retryLegStillDeadNote, the MISSING arm: bounded in the why, raw on data.firstFailure', () => {
+    const ff = { class: 'missing', waveId: 'r1-s1', reason: RAW };
+    const n = note(ff, { status: 'timeout', error: null });
+    expect(n.why).toBe(`${OK} in wave r1-s1; its once-only retry leg ended `
+      + "'timeout' with no usable output");
+    expect(n.data.firstFailure.reason).toBe(RAW);
+  });
+
+  test('missingLegStillDeadNote, the WAVE arm: bounded in the why, raw on data.firstFailure', () => {
+    const ff = { class: 'wave', waveId: 'r1-s1', reason: RAW };
+    const n = missingLegStillDeadNote('glm', ff, UNIT, COUNTS);
+    expect(n.why).toBe(`its first wave r1-s1 produced no legs (${OK}); `
+      + 'its once-only retry produced no leg for this seat');
+    expect(n.data.firstFailure.reason).toBe(RAW);
+  });
+
+  test('missingLegStillDeadNote, the MISSING arm: bounded in the why, raw on data.firstFailure', () => {
+    const ff = { class: 'missing', waveId: 'r1-s1', reason: RAW };
+    const n = missingLegStillDeadNote('glm', ff, UNIT, COUNTS);
+    expect(n.why).toBe(`${OK} in wave r1-s1; its once-only retry produced no leg for this seat`);
+    expect(n.data.firstFailure.reason).toBe(RAW);
+  });
+
+  test('the header\'s invariant now holds: no why in any arm carries a newline or an escape', () => {
+    const ff = { class: 'wave', waveId: 'r1-s1', reason: RAW };
+    const whys = [
+      waveStillDeadNote({ waveId: 'r1-s1', models: ['glm'], reason: RAW }, UNIT).why,
+      skippedWaveNote({ waveId: 'r1-s1', models: ['glm'], reason: RAW }).why,
+      note(ff, { status: 'timeout', error: null }).why,
+      note({ ...ff, class: 'missing' }, { status: 'timeout', error: null }).why,
+      missingLegStillDeadNote('glm', ff, UNIT, COUNTS).why,
+      missingLegStillDeadNote('glm', { ...ff, class: 'missing' }, UNIT, COUNTS).why,
+    ];
+    for (const why of whys) {
+      expect(why).not.toContain('\n');
+      expect(why).not.toContain(ESC2);
+      expect(why).not.toContain('y'.repeat(MAX_LEG_ERROR_CHARS));
+    }
+  });
+});
+
+/**
  * #257 R-X38 fix round 1 — THE CAP NEVER TRUNCATES A REASON AMICUS ITSELF MINTED.
  *
  * THE RULING (owner, round 3): the cap exists to bound PROVIDER noise. A reason amicus
@@ -429,12 +533,24 @@ describe('#257 R-X38 the still-dead prose bounds the provider error; data stays 
  * — the NO_OUTPUT_BACKSTOP reason is minted by `headless.js :: formatNoOutputBackstopReason`
  * (exported for exactly this kind of assertion), so that is what is called here.
  *
- * MEASURED 2026-09-19 with the exact inputs below, longest first: 518 (the backstop,
- * caller-set + extended + every clause — the same shape reads 505 with a `sessionStatus`
- * of `idle`, which is the row ABOVE it plus an extension, not this one), 517
- * (`formatOutputLengthReason`, budget unset + a non-plain ambient flag), 438 (the plain
- * ambient flag). The fix brief proposed a 400 cap; this corpus REFUTES it, and the
+ * RE-MEASURED 2026-09-19, round 4, with the exact inputs below — every row re-run, longest
+ * first: 620 and 620 (`formatOutputLengthReason`, budget unset + a 96-char PLAIN ambient
+ * flag, and the same with a 500-char one: R-X43 caps the quote, so they are the SAME
+ * length), 605 (a 96-char NON-plain flag), 518 (the backstop, caller-set + extended + every
+ * clause — the same shape reads 505 with a `sessionStatus` of `idle`, which is the row
+ * ABOVE it plus an extension, not this one), 517 (budget unset + a non-plain ambient flag),
+ * 438 (the plain ambient flag), 398 (the backstop with engine log + skew + session, NOT
+ * extended). The four round-3 rows are UNMOVED by R-X44's not-reported change because each
+ * passes explicit TOKENS. The fix brief proposed a 400 cap; this corpus REFUTES it, and the
  * non-vacuity test below states that refutation as an assertion rather than as a comment.
+ *
+ * THE RULING TEXT CHANGED WITH R-X43. Until round 4 the operator's ambient
+ * `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` was interpolated verbatim, so the longest minted
+ * reason was operator-controlled and this corpus was a TRIPWIRE ON DRIFT, not a bound. The
+ * flag is now quoted through `safeFragment` (≤ 96 chars), the budget through
+ * `outputTokenFlagValue`, and the counts are numbers — so every variable part of that
+ * sentence is bounded and the cap clears a COMPUTABLE WORST CASE (620, 180 under it), not a
+ * sample. The three 96/500-char rows below are that worst case, not an illustration.
  *
  * Named mutant "MINTEDREASONTRUNCATED": set `MAX_LEG_ERROR_CHARS` to 200 (or to 400) —
  * the identity cases red.
@@ -466,6 +582,14 @@ describe('#257 R-X38 the cap never truncates a reason amicus itself minted', () 
       formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: true, ambientFlag: '64000' })],
     ['OUTPUT_LENGTH: unset + a NON-PLAIN ambient flag (the longest OUTPUT_LENGTH format, 517)',
       formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: true, ambientFlag: '64000abc' })],
+    // #257 R-X43: the operator flag is bounded at the formatter by `safeFragment`
+    // (MAX_FRAGMENT_CHARS = 96), so these three are the WORST CASE, not a sample.
+    ['OUTPUT_LENGTH: unset + a 96-char NON-PLAIN ambient flag (worst case, quoted once)',
+      formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: true, ambientFlag: 'a'.repeat(96) })],
+    ['OUTPUT_LENGTH: unset + a 96-digit PLAIN ambient flag (worst case, quoted TWICE)',
+      formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: true, ambientFlag: '9'.repeat(96) })],
+    ['OUTPUT_LENGTH: unset + a 500-char PLAIN ambient flag — the quote is still 96',
+      formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: true, ambientFlag: '9'.repeat(500) })],
     ['NO_OUTPUT_BACKSTOP: the plain env-window kill',
       formatNoOutputBackstopReason({ ms: 480000, fromEnv: true })],
     ['NO_OUTPUT_BACKSTOP: + engine log + skew + session status',
@@ -487,6 +611,34 @@ describe('#257 R-X38 the cap never truncates a reason amicus itself minted', () 
     // cap and would pin nothing. They do not: three of them are longer than 400.
     expect(lengths.filter((n) => n > 400).length).toBeGreaterThanOrEqual(3);
     expect(Math.max(...lengths)).toBeLessThanOrEqual(MAX_LEG_ERROR_CHARS);
+  });
+
+  /**
+   * #257 R-X43 — the cap now clears a COMPUTABLE WORST CASE, not a sample.
+   *
+   * Before this fix the longest `OUTPUT_LENGTH` reason was operator-controlled: the
+   * ambient `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` was interpolated verbatim (twice on
+   * the plain arm), so no finite cap could be a proof and the corpus above was a tripwire
+   * on drift. `formatOutputLengthReason` now runs the flag through `safeFragment`
+   * (MAX_FRAGMENT_CHARS = 96) BEFORE quoting it, so every variable part of that sentence
+   * is bounded and the longest reason it can mint is a number, measured here.
+   */
+  test('R-X43: an operator flag of ANY length is quoted bounded — the cap is a theorem now', () => {
+    const { MAX_FRAGMENT_CHARS } = require('../../src/utils/text-sanitize');
+    const mint = (ambientFlag) => formatOutputLengthReason({ tokens: TOKENS, budget: null,
+      reasoningOnly: true, ambientFlag });
+    const huge = mint('9'.repeat(500));
+    const exact = mint('9'.repeat(MAX_FRAGMENT_CHARS));
+    // The quote is truncated to the fragment cap, ellipsis included — never 97 digits.
+    expect(huge).toContain(`${'9'.repeat(MAX_FRAGMENT_CHARS - 1)}…`);
+    expect(huge).not.toContain('9'.repeat(MAX_FRAGMENT_CHARS + 1));
+    // A 500-char flag and a 96-char flag mint the SAME length: the quote is capped, so the
+    // operator cannot push the reason past the cap however long the env var is.
+    expect(huge).toHaveLength(exact.length);
+    for (const s of [huge, exact, mint('a'.repeat(96))]) {
+      expect(s.length).toBeLessThanOrEqual(MAX_LEG_ERROR_CHARS);
+      expect(collapseExcerpt(s, MAX_LEG_ERROR_CHARS)).toBe(s);
+    }
   });
 
   test('the REMEDY — the sentence the ruling exists for — survives the cap in the prose', () => {

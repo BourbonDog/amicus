@@ -28,6 +28,8 @@
 'use strict';
 
 const { normalizeOutputBudget, buildLimitLookup, computeModelLimit, positiveCount } = require('./model-output-limit');
+// #257 R-X43: the house sanitizer — the operator flag is quoted into this row's message.
+const { safeFragment } = require('./text-sanitize');
 const {
   OUTPUT_TOKEN_FLAG, ENGINE_DEFAULT_OUTPUT_TOKENS, outputTokenFlagValue, PLAIN_OUTPUT_TOKEN_FLAG,
 } = require('./engine-output-flag');
@@ -130,7 +132,12 @@ function analyseRoutes(d, cache, value, lowerHint) {
  */
 function evaluateOutputBudget(d) {
   const env = d.env || process.env;
-  const ambient = env[OUTPUT_TOKEN_FLAG];
+  // #257 R-X43: the same split formatOutputLengthReason makes, so the two gates agree. Every
+  // TEST below reads the RAW bytes (the engine saw those: ' 64000 ' really does fall back to
+  // 32000); every QUOTE of the value into a row reads the bounded copy — this message reaches
+  // the terminal, and an operator env var is unbounded, control bytes and all.
+  const ambientRaw = env[OUTPUT_TOKEN_FLAG];
+  const ambient = typeof ambientRaw === 'string' ? safeFragment(ambientRaw) : ambientRaw;
   const raw = d.readOutputBudgetRaw();
   // Not "32000 per leg": under the default a leg reserves min(32000, the
   // ceiling the engine's catalog knows for it) — probe B sent 4096 for a
@@ -143,13 +150,13 @@ function evaluateOutputBudget(d) {
   // `0` fall back to 32000 silently (D1/D2); ' 64000 ', '064000', '1e5', '0x10' and
   // '64000.7' have never been probed, so they are reported as unmeasured rather than
   // as healthy (council #231 r1 finding 3, r2 D5).
-  const ambientOk = (ambient !== undefined && PLAIN_OUTPUT_TOKEN_FLAG.test(ambient)) ? positiveCount(Number(ambient)) : null;
-  const ambientBad = ambient !== undefined && ambientOk === null;
+  const ambientOk = (ambientRaw !== undefined && PLAIN_OUTPUT_TOKEN_FLAG.test(ambientRaw)) ? positiveCount(Number(ambientRaw)) : null;
+  const ambientBad = ambientRaw !== undefined && ambientOk === null;
   const ambientBadText = `${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is not a plain positive integer — the only form measured to be honoured (probe D1/D2: 64000abc and 0 fell back to ${ENGINE_DEFAULT_OUTPUT_TOKENS} silently); any other form is unmeasured`;
   const ambientHint = `unset ${OUTPUT_TOKEN_FLAG}, or set it to a plain positive integer`;
 
   if (raw === undefined) {
-    if (ambient === undefined) { return row('ok', `not set — ${dflt}`); }
+    if (ambientRaw === undefined) { return row('ok', `not set — ${dflt}`); }
     if (ambientBad) { return row('warn', `not set — ${ambientBadText}`, ambientHint); }
     // A valid ambient value governs every engine amicus starts exactly as a
     // budget would, so it gets the same route analysis (council #231 r2 D2).
@@ -171,7 +178,7 @@ function evaluateOutputBudget(d) {
     const cfgDir = typeof d.getConfigDir === 'function' ? d.getConfigDir() : '~/.config/amicus';
     const fixHint = `set outputBudget to a positive integer in ${cfgDir}/config.json, or remove it`;
     const lead = `${JSON.stringify(raw)} is not a positive integer — ignored; `;
-    if (ambient === undefined) { return row('warn', lead + dflt, fixHint); }
+    if (ambientRaw === undefined) { return row('warn', lead + dflt, fixHint); }
     if (ambientBad) { return row('warn', `${lead}${dflt} (${ambientBadText})`, fixHint); }
     const shownA = outputTokenFlagValue(ambientOk);
     const a = analyseRoutes(d, d.readCache(), ambientOk, `lower ${OUTPUT_TOKEN_FLAG} — input plus the reservation must fit the context window`);
@@ -182,7 +189,7 @@ function evaluateOutputBudget(d) {
   // A malformed ambient value never reaches an engine amicus starts — the
   // budget overrides it — so the row stays ok, but it says the value is
   // malformed rather than only "overridden" (council #231 r4 D1).
-  const overridden = ambient === undefined ? ''
+  const overridden = ambientRaw === undefined ? ''
     : (ambientBad
       ? `; ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is not a plain positive integer and is overridden by outputBudget for engines amicus starts (an engine started outside amicus would read it and fall back to ${ENGINE_DEFAULT_OUTPUT_TOKENS} silently)`
       : `; ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is overridden by outputBudget for engines amicus starts`);
