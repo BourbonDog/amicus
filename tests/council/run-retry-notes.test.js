@@ -559,8 +559,12 @@ describe('#257 R-X42 every retry-note arm bounds its reason; data stays raw', ()
  * reason was operator-controlled and this corpus was a TRIPWIRE ON DRIFT, not a bound. The
  * flag is now quoted through `safeFragment` (≤ 96 chars), the budget through
  * `outputTokenFlagValue`, and the counts are numbers — so every variable part of that
- * sentence is bounded and the cap clears a COMPUTABLE WORST CASE (620, 180 under it), not a
- * sample. The three 96/500-char rows below are that worst case, not an illustration.
+ * sentence is bounded and the cap clears a COMPUTABLE bound, not a sample. 620 is the longest
+ * PINNED row; the SUPREMUM over all legal inputs is 627, MEASURED with pathological finite
+ * counts (a JS number's decimal form caps at 24 chars — `-1.7976931348623157e+308`), which is
+ * 173 under the cap. A `1e308` budget row measures 576, well inside. The three 96/500-char rows
+ * below are the realistic worst case; the non-vacuity test pins the supremum beside them, so the
+ * docblock cannot claim a worst case that a legal input beats (council #270 r4 review, M3).
  *
  * Named mutant "MINTEDREASONTRUNCATED": set `MAX_LEG_ERROR_CHARS` to 200 (or to 400) —
  * the identity cases red.
@@ -590,7 +594,7 @@ describe('#257 R-X38 the cap never truncates a reason amicus itself minted', () 
       formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: true, ambientFlag: null })],
     ['OUTPUT_LENGTH: unset + a PLAIN ambient flag',
       formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: true, ambientFlag: '64000' })],
-    ['OUTPUT_LENGTH: unset + a NON-PLAIN ambient flag (the longest OUTPUT_LENGTH format, 517)',
+    ['OUTPUT_LENGTH: unset + a NON-PLAIN ambient flag 64000abc (517)',
       formatOutputLengthReason({ tokens: TOKENS, budget: null, reasoningOnly: true, ambientFlag: '64000abc' })],
     // #257 R-X43: the operator flag is bounded at the formatter by `safeFragment`
     // (MAX_FRAGMENT_CHARS = 96), so these three are the WORST CASE, not a sample.
@@ -605,7 +609,7 @@ describe('#257 R-X38 the cap never truncates a reason amicus itself minted', () 
     ['NO_OUTPUT_BACKSTOP: + engine log + skew + session status',
       formatNoOutputBackstopReason({ ms: 480000, fromEnv: true, engineLogExcerpt: LOG,
         engineSkew: SKEW, sessionStatus: { type: 'idle' } })],
-    ['NO_OUTPUT_BACKSTOP: caller-set, extended, every clause (the longest minted reason today, 518)',
+    ['NO_OUTPUT_BACKSTOP: caller-set, extended, every clause (the longest BACKSTOP reason, 518)',
       formatNoOutputBackstopReason({ ms: 912000, fromEnv: false, engineLogExcerpt: LOG,
         engineSkew: SKEW, sessionStatus: { type: 'retry_after_error' }, extension: EXTENSION })],
   ];
@@ -624,7 +628,7 @@ describe('#257 R-X38 the cap never truncates a reason amicus itself minted', () 
   });
 
   /**
-   * #257 R-X43 — the cap now clears a COMPUTABLE WORST CASE, not a sample.
+   * #257 R-X43 — the cap now clears a COMPUTABLE bound, not a sample.
    *
    * Before this fix the longest `OUTPUT_LENGTH` reason was operator-controlled: the
    * ambient `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` was interpolated verbatim (twice on
@@ -632,6 +636,10 @@ describe('#257 R-X38 the cap never truncates a reason amicus itself minted', () 
    * on drift. `formatOutputLengthReason` now runs the flag through `safeFragment`
    * (MAX_FRAGMENT_CHARS = 96) BEFORE quoting it, so every variable part of that sentence
    * is bounded and the longest reason it can mint is a number, measured here.
+   *
+   * The SUPREMUM is asserted too, not just the pinned rows (council #270 r4 review, M3): the
+   * counts are the one remaining variable, and a JS number's decimal form is itself bounded,
+   * so the pathological row below is the true maximum over all legal inputs.
    */
   test('R-X43: an operator flag of ANY length is quoted bounded — the cap is a theorem now', () => {
     const { MAX_FRAGMENT_CHARS } = require('../../src/utils/text-sanitize');
@@ -649,6 +657,14 @@ describe('#257 R-X38 the cap never truncates a reason amicus itself minted', () 
       expect(s.length).toBeLessThanOrEqual(MAX_LEG_ERROR_CHARS);
       expect(collapseExcerpt(s, MAX_LEG_ERROR_CHARS)).toBe(s);
     }
+    // M3: the counts are the one variable the pinned rows do not stress. A JS number's decimal
+    // form is bounded (`-1.7976931348623157e+308`, 24 chars), so this IS the supremum — and it
+    // BEATS the pinned 620, which is why the docblocks name both numbers.
+    const worst = formatOutputLengthReason({ tokens: { reasoning: 1e308, output: -1e308 },
+      budget: null, reasoningOnly: true, ambientFlag: '9'.repeat(MAX_FRAGMENT_CHARS) });
+    expect(worst.length).toBeGreaterThan(exact.length);
+    expect(worst.length).toBeLessThanOrEqual(MAX_LEG_ERROR_CHARS);
+    expect(collapseExcerpt(worst, MAX_LEG_ERROR_CHARS)).toBe(worst);
   });
 
   test('the REMEDY — the sentence the ruling exists for — survives the cap in the prose', () => {

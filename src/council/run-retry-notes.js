@@ -21,7 +21,7 @@
  * so each is bounded to one sanitized line as `run-stage2-notes.js :: judgeDeadNote` already
  * bounds its own (#219). The `data` fields keep RAW bytes — machine surface, not a sentence.
  */
-const { promotedFacts, reasoningOnlyClause } = require('./promoted');
+const { promotedFacts, reasoningOnlyClause, reportedTokens } = require('./promoted');
 const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /**
@@ -40,13 +40,11 @@ const { collapseExcerpt } = require('../utils/text-sanitize');
  *   518  headless.js :: formatNoOutputBackstopReason — caller-set, extended, every clause
  *   517  formatOutputLengthReason — budget unset, a non-plain ambient flag (64000abc)
  *   398  formatNoOutputBackstopReason — engine log + skew + session, NOT extended
- * 800 clears the longest by 180 (400 REFUTED), pinned against the REAL formatters and never a
- * copied literal, in tests/council/run-retry-notes.test.js. Mutant "MINTEDREASONTRUNCATED".
- * R-X43 (round 4) made that a BOUND, not a tripwire: `formatOutputLengthReason` used to quote
- * the operator's ambient OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX verbatim, so no finite cap was
- * a proof; it now quotes a `safeFragment` copy (≤ 96 chars), so 620 is a THEOREM. R-X42:
- * `boundReason` below is the ONE spelling of this cap, at EVERY prose arm here and in
- * run-retry.js's heal note — the header's "every why is bounded" now holds on all of them.
+ * Pinned against the REAL formatters, never a copied literal, in run-retry-notes.test.js (mutant
+ * "MINTEDREASONTRUNCATED"; 400 REFUTED). R-X43 made 800 a BOUND: the ambient flag is now a
+ * `safeFragment` copy (≤ 96). 620 is the longest PINNED row; the SUPREMUM over all legal inputs
+ * is 627 (MEASURED: pathological finite counts, decimal form ≤ 24 chars), 173 under it. R-X42:
+ * `boundReason` is this cap's ONE spelling, at every prose arm here and run-retry.js's heal note.
  *
  * Shared with run-stages.js through this module's exports: it already destructures this one,
  * so a single definition costs no new require edge and no cycle. Deliberately NOT in
@@ -273,16 +271,18 @@ function missingLegStillDeadNote(seat, ff, unit, counts) {
 
 /**
  * #218 PR 3: a review that reached the packet but was cut at the reservation.
- * `kind: 'info'` -- announced, never a loss (utils/degrade.js on the channel).
- * The counts are the engine's own token record for the leg; when EITHER is not a non-negative
- * integer the clause says so (#257 R-X44(b), promoted.js's guard) rather than minting a zero.
+ * `kind: 'info'` -- announced, never a loss (utils/degrade.js on the channel). Both token guards
+ * below are promoted.js's: `token usage not reported` when a count is not a non-negative integer
+ * (#257 R-X44(b)), or when NO count in the record is positive (R-X44(c) — a length stop spent
+ * tokens, so an all-zero record is an absence of observation, not a measurement).
  * @param {string} seat the alias every note renders — `materializeReviews` has
  *   already resolved it (`leg.modelInput || leg.model`), so the caller passes
  *   `m.modelInput` as-is
  * @param {object} leg the leg run document (finish === 'length')
  */
 function truncatedReviewNote(seat, leg) {
-  const t = (leg.usage && leg.usage.tokens) || {}; const n = (v) => (Number.isInteger(v) && v >= 0 ? v : null); const r = n(t.reasoning), o = n(t.output);
+  const t = (leg.usage && leg.usage.tokens) || {}; const reported = reportedTokens(t);
+  const n = (v) => (reported && Number.isInteger(v) && v >= 0 ? v : null); const r = n(t.reasoning), o = n(t.output);
   return { kind: 'info', channel: 'output-truncated',
     what: `seat ${seat}'s review was cut at its output reservation`,
     why: `the provider stopped for length (finish 'length')${r === null || o === null ? ' — token usage not reported' : ` after ${r} reasoning / ${o} output tokens`}; the review ends where the reservation ended`,

@@ -134,16 +134,44 @@ const FINISH_LONE_UNDERSCORE = /(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])/g;
  * chooses from a small set ('stop', 'length', 'tool_calls'), so a stray byte in
  * one is corruption to drop, not prose to collapse into spaces.
  */
+/**
+ * #257 R-X44(c) — THE PHYSICS RULE. A usage record with no positive count is not a report.
+ *
+ * Every trigger that reaches one of R-X44's three formatters CONSUMED tokens: a `finish 'length'`
+ * stop hit the reservation, and a promoted leg produced the reasoning it promoted. So had usage
+ * actually been reported, at least one of the five counts would be positive. An all-zero record
+ * is therefore the absence of an observation, exactly as `utils/pricing.js :: resolveLegCost`
+ * already rules for cost (v4.4 B2) — and it is what the product really hands us:
+ * `pricing.js :: sumPerMessageUsage` starts from `emptyUsageTotals()` and accumulates with
+ * `|| 0`, so a leg whose engine reported nothing arrives as `{ input: 0, output: 0, … }`,
+ * indistinguishable from reported zeros. Without this clause R-X44's not-reported arm was
+ * unreachable from the product (council #270 r4 review of G2, I1).
+ *
+ * NOT `pricing.js :: hasObservedTokens`, which was read and rejected: it tests input/output
+ * ONLY (v4.4.1 CA-7, deliberately — reasoning and cache tokens are real observations that its
+ * estimate cannot price). A reasoning-only promoted leg — `{ reasoning: 32000, output: 0 }`, the
+ * #218 flagship shape — is a REPORT here and is not observed there. Two predicates, two jobs.
+ * HAND-SPELLED for the same reason the finish bound is: this module is a LEAF.
+ * @param {object|null|undefined} tokens
+ * @returns {boolean}
+ */
+function reportedTokens(tokens) {
+  if (!tokens || typeof tokens !== 'object') { return false; }
+  return [tokens.input, tokens.output, tokens.reasoning, tokens.cacheRead, tokens.cacheWrite]
+    .some((v) => Number.isInteger(v) && v > 0);
+}
+
 function promotedFacts(leg) {
   if (!isPromotedLeg(leg)) { return null; }
   const t = (leg.usage && leg.usage.tokens) || {};
+  const reported = reportedTokens(t);
   const finish = typeof leg.finish === 'string'
     ? leg.finish.replace(FINISH_ALLOWED, '').slice(0, MAX_FINISH_CHARS)
       .replace(FINISH_LONE_UNDERSCORE, '')
     : '';
   return {
-    reasoning: Number.isInteger(t.reasoning) && t.reasoning >= 0 ? t.reasoning : null,
-    output: Number.isInteger(t.output) && t.output >= 0 ? t.output : null,
+    reasoning: reported && Number.isInteger(t.reasoning) && t.reasoning >= 0 ? t.reasoning : null,
+    output: reported && Number.isInteger(t.output) && t.output >= 0 ? t.output : null,
     finish: finish || null,
   };
 }
@@ -202,4 +230,4 @@ function reasoningOnlyClause(facts) {
   return `${REASONING_ONLY_CAUSE} (${tokenSplit(facts)}), which is not a review`;
 }
 
-module.exports = { isPromotedLeg, promotedFacts, tokenSplit, reasoningOnlyClause };
+module.exports = { isPromotedLeg, promotedFacts, tokenSplit, reasoningOnlyClause, reportedTokens };

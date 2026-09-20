@@ -76,11 +76,16 @@ describe('formatOutputLengthReason (#218 PR 3)', () => {
       expect(s).not.toContain('reasoning /');
     }
   });
+  // #257 R-X44(c): a reported zero needs a REPORT to sit in — some other count positive. A
+  // `finish 'length'` stop spent tokens, so an all-zero record is an absence of observation.
   test('REPORTED zeros stay zeros — "none" and "not reported" are different facts', () => {
-    expect(formatOutputLengthReason({ tokens: { reasoning: 0, output: 0 }, budget: null }))
+    expect(formatOutputLengthReason({ tokens: { input: 1200, reasoning: 0, output: 0 }, budget: null }))
       .toContain(' — 0 reasoning / 0 output tokens;');
     expect(formatOutputLengthReason({ tokens: { reasoning: 0, output: 24000 }, budget: null }))
       .toContain(' — 0 reasoning / 24000 output tokens;');
+    // …and with nothing positive anywhere, there is nothing to report.
+    expect(formatOutputLengthReason({ tokens: { reasoning: 0, output: 0 }, budget: null }))
+      .toContain(' — token usage not reported;');
   });
   test('the prefix is the classifiable constant', () => {
     expect(OUTPUT_LENGTH_PREFIX).toBe('OUTPUT_LENGTH:');

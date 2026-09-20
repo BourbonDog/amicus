@@ -9240,4 +9240,6 @@ Deferred — one line each, none blocks anything:
   — done at round 4 (R-X43, output-length.js). The flag is bounded before it is quoted while
   `PLAIN_OUTPUT_TOKEN_FLAG` is still tested on the RAW bytes; the doctor row
   (`doctor-output-budget-check.js`) took the same split so the two gates agree. The longest
-  minted reason is now MEASURED at 620, 180 under the 800 cap, and the pin is a bound.
+  minted reason is now MEASURED at 620 for the pinned rows (supremum 627), under the 800 cap,
+  and the pin is a bound.
+- [ ] pricing.js :: sumPerMessageUsage sums a leg that reported no usage to all-zero totals, indistinguishable from reported zeros; the formatters treat an all-zero record as unreported (R-X44(c)) because their triggers consume tokens, but the leg document and the spend ledger still carry zeros and an estimated cost of $0 for such a leg — the seam should record `usage: null` (or an observed flag) when no message carried usage, so cost is reported unknown rather than fabricated (council #270 r4 review of G2, I1).

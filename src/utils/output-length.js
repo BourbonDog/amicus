@@ -32,6 +32,33 @@ const {
 // a reason that is itself quoted into a council note, so it is bounded before interpolation.
 const { safeFragment } = require('./text-sanitize');
 
+/**
+ * #257 R-X44(c) — a usage record with no positive count is not a report.
+ *
+ * This death is a `finish 'length'` stop: the provider hit the max_tokens RESERVATION, so tokens
+ * were spent. Had usage been reported, one of the five counts would be positive. An all-zero
+ * record is the absence of an observation — the same rule `resolveLegCost` applies to cost
+ * (v4.4 B2) — and it is exactly what this formatter is handed: its only caller,
+ * `headless.js :: runHeadless`, passes `sumPerMessageUsage(...)`.tokens, which starts at
+ * `emptyUsageTotals()` and accumulates with `|| 0`, so a leg whose engine reported nothing
+ * arrives here as all zeros. Without this clause the not-reported arm below was unreachable from
+ * the product and this sentence still printed `0 reasoning / 0 output tokens` — the exact
+ * falsehood R-X44 names (council #270 r4 review of G2, I1). ⚠️ The SEAM still sums to zeros, so
+ * the leg document and the spend ledger keep them; that is filed in BACKLOG.md, not fixed here.
+ *
+ * A SECOND SPELLING of `council/promoted.js :: reportedTokens`, deliberately: `utils/` must not
+ * require `council/`, and `pricing.js :: hasObservedTokens` — read, as the ruling directs — is a
+ * DIFFERENT predicate (input/output only, by design: v4.4.1 CA-7 keeps reasoning and cache out
+ * because its estimate cannot price them). Using it here would render the #218 flagship shape,
+ * `{ reasoning: 32000, output: 0 }`, as "not reported". The two spellings are pinned equal in
+ * tests/council/degrade-contract.test.js.
+ */
+function reportedTokens(tokens) {
+  if (!tokens || typeof tokens !== 'object') { return false; }
+  return [tokens.input, tokens.output, tokens.reasoning, tokens.cacheRead, tokens.cacheWrite]
+    .some((v) => Number.isInteger(v) && v > 0);
+}
+
 /** The prefix a consumer can classify on, like `NO_OUTPUT_BACKSTOP:`. */
 const OUTPUT_LENGTH_PREFIX = 'OUTPUT_LENGTH:';
 
@@ -50,10 +77,18 @@ function isOutputLengthDeath({ finish, hasText }) {
 
 /**
  * The reason string. Every clause is an observation: `finish` and the two
- * counts are the engine's own record of the message — and when either count is
- * not a finite number the clause says `token usage not reported` rather than
- * minting a zero the engine never reported (#257 R-X44's principle, round 4 D2);
- * a REPORTED zero stays a zero. The budget clause is what
+ * counts are the engine's own record of the message — and the counts clause says
+ * `token usage not reported` rather than minting a number the engine never gave
+ * us, both when either count is not a finite number (#257 R-X44, round 4 D2) and
+ * when NO count in the record is positive (R-X44(c): see `reportedTokens` above —
+ * this is the arm the product actually reaches). A REPORTED zero, beside a
+ * positive count, stays a zero. ⚠️ The per-count test here is `Number.isFinite`,
+ * as R-X44 ruled for this formatter, while `promoted.js` and
+ * `run-retry-notes.js :: truncatedReviewNote` use `Number.isInteger(v) && v >= 0`:
+ * `{ reasoning: 31000.5, output: 700 }` renders its fractional count here and
+ * reads not-reported there. One rule, three renderers, two per-count predicates —
+ * the literal is pinned equal across all three, the predicate is not.
+ * The budget clause is what
  * the engine serving the leg was spawned with: the budget (`null` = unset,
  * `undefined` = unknown — no handle value and config unreadable) or, when no
  * budget was set, the ambient flag. The remedy names the one
@@ -74,7 +109,7 @@ function formatOutputLengthReason({ tokens, budget, reasoningOnly, ambientFlag }
   // missing token record to 0 and minted "0 reasoning / 0 output tokens" — a measurement the
   // engine never made, in the clause whose whole job is to report what the engine recorded.
   // A REPORTED zero stays a zero. Named mutant "OUTPUTLENGTHZEROS".
-  const counts = (Number.isFinite(t.reasoning) && Number.isFinite(t.output))
+  const counts = (reportedTokens(t) && Number.isFinite(t.reasoning) && Number.isFinite(t.output))
     ? `${t.reasoning} reasoning / ${t.output} output tokens`
     : 'token usage not reported';
   const streamed = reasoningOnly

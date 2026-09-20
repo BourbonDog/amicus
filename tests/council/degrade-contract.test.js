@@ -174,18 +174,27 @@ describe("kind 'info' + channel 'output-truncated' (#218 PR 3)", () => {
     ['output missing', { reasoning: 31000 }, 31000, null],
     ['a non-integer count', { reasoning: 31000.5, output: 700 }, null, 700],
     ['a negative count', { reasoning: -1, output: 700 }, null, 700],
-    ['a NaN count', { reasoning: NaN, output: 0 }, null, 0],
+    // R-X44(c): `output: 0` beside a NaN is not a report at all — no count is positive.
+    ['a NaN count beside a zero', { reasoning: NaN, output: 0 }, null, null],
+    ['a NaN count beside a positive one', { reasoning: NaN, output: 700 }, null, 700],
     ['a string count', { reasoning: '31000', output: 700 }, null, 700],
   ])('one unusable count (%s) makes the whole split unreported', (_n, tokens, wantR, wantO) => {
     const r = makeDegrade(truncatedReviewNote('glm', { finish: 'length', usage: { tokens } }));
     expect(r.why).toContain("(finish 'length') — token usage not reported;");
     expect(r.data).toEqual({ seat: 'glm', finish: 'length', reasoningTokens: wantR, outputTokens: wantO });
   });
+  // R-X44(c): a reported zero needs a REPORT to sit in — `input` positive here. Without one,
+  // the all-zero record is an absence of observation, pinned in the next test.
   test('REPORTED zeros stay zeros — the note is byte-identical to the pre-R-X44 wording', () => {
-    const r = makeDegrade(truncatedReviewNote('glm', { finish: 'length', usage: { tokens: { reasoning: 0, output: 0 } } }));
+    const r = makeDegrade(truncatedReviewNote('glm', { finish: 'length', usage: { tokens: { input: 1200, reasoning: 0, output: 0 } } }));
     expect(r.why).toBe("the provider stopped for length (finish 'length') after 0 reasoning / 0 output tokens; "
       + 'the review ends where the reservation ended');
     expect(r.data).toEqual({ seat: 'glm', finish: 'length', reasoningTokens: 0, outputTokens: 0 });
+  });
+  test('an all-zero usage record is an absence of observation, not two reported zeros (R-X44(c))', () => {
+    const r = makeDegrade(truncatedReviewNote('glm', { finish: 'length', usage: { tokens: { reasoning: 0, output: 0 } } }));
+    expect(r.why).toContain("(finish 'length') — token usage not reported;");
+    expect(r.data).toEqual({ seat: 'glm', finish: 'length', reasoningTokens: null, outputTokens: null });
   });
 
   /**
@@ -201,6 +210,16 @@ describe("kind 'info' + channel 'output-truncated' (#218 PR 3)", () => {
    * is a LEAF that requires nothing, spec R12's require-free pin), so the literal is held equal
    * HERE instead. `tokenSplit` is the canonical one: this is a STRICT equality against it, not
    * a `toContain` on a set — adding a member to relax a failure is the drift, not the fix.
+   *
+   * ⚠️ THE PREDICATE IS NOT PINNED EQUAL, ONLY THE WORDING — and the three do differ (council
+   * #270 r4 review of G2, M1). All three share R-X44(c)'s `reportedTokens` gate (no positive
+   * count in the record ⇒ not a report), pinned below on the product's own zero object. The
+   * PER-COUNT test then differs by ruling: `promoted.js :: promotedFacts` and
+   * `truncatedReviewNote` use `Number.isInteger(v) && v >= 0`, `formatOutputLengthReason` uses
+   * `Number.isFinite`. MEASURED divergence: `{ reasoning: 31000.5, output: 700 }` reads
+   * `token usage not reported` in the first two and `31000.5 reasoning / 700 output tokens` in
+   * the third; a negative count likewise. Each follows its own ruling text, so this is recorded,
+   * not asserted — unifying on `isInteger && >= 0` would be a behaviour change and needs a ruling.
    */
   test('R-X44(b) cross-module: the not-reported literal has ONE spelling in every home', () => {
     const { formatOutputLengthReason } = require('../../src/utils/output-length');
@@ -211,6 +230,52 @@ describe("kind 'info' + channel 'output-truncated' (#218 PR 3)", () => {
       .toContain(`(finish 'length') — ${NOT_REPORTED};`);
     expect(formatOutputLengthReason({ tokens: null, budget: null }))
       .toContain(`— ${NOT_REPORTED}; outputBudget`);
+  });
+
+  /**
+   * #257 R-X44(c) — THE ARM IS REACHABLE FROM THE PRODUCT, on the object the product passes.
+   *
+   * The round-4 review's I1: `formatOutputLengthReason`'s only caller (`headless.js:1967`) hands
+   * it `sumPerMessageUsage(...)`.tokens, which `pricing.js:14-32` seeds from `emptyUsageTotals()`
+   * and accumulates with `|| 0` — so a leg whose engine reported NO usage arrives as all zeros
+   * and the not-reported arm could never fire in production. The same seam writes the leg
+   * document's `usage`, so `promotedFacts` and `truncatedReviewNote` saw zeros too.
+   *
+   * This pin uses `emptyUsageTotals()` itself — not a hand-written `{ reasoning: 0, output: 0 }`
+   * — so it is the REAL object, and if pricing.js ever adds a sixth count the three formatters
+   * are re-checked against it automatically. ⚠️ The SEAM is still unfixed: the leg document and
+   * the spend ledger keep the zeros and cost is estimated from them. That is filed in BACKLOG.md
+   * under `## #257 — filed at the PR (2026-09-19)`; this pin covers the PROSE only.
+   */
+  test('R-X44(c) cross-module: all three homes read the product\'s own zero totals as unreported', () => {
+    const { formatOutputLengthReason } = require('../../src/utils/output-length');
+    const { tokenSplit, promotedFacts } = require('../../src/council/promoted');
+    const { emptyUsageTotals } = require('../../src/utils/pricing');
+    const ZEROS = emptyUsageTotals().tokens;
+    // Non-vacuity: this really is the all-zero shape the summing seam mints.
+    expect(Object.values(ZEROS).every((v) => v === 0)).toBe(true);
+    expect(Object.keys(ZEROS).sort()).toEqual(['cacheRead', 'cacheWrite', 'input', 'output', 'reasoning']);
+
+    const NOT_REPORTED = 'token usage not reported';
+    expect(tokenSplit(promotedFacts({ promoted: true, usage: { tokens: ZEROS } }))).toBe(NOT_REPORTED);
+    expect(truncatedReviewNote('glm', { finish: 'length', usage: { tokens: ZEROS } }).why)
+      .toContain(`(finish 'length') — ${NOT_REPORTED};`);
+    expect(formatOutputLengthReason({ tokens: ZEROS, budget: null }))
+      .toContain(`— ${NOT_REPORTED}; outputBudget`);
+    // The machine fields follow the prose: null, never a fabricated 0.
+    expect(truncatedReviewNote('glm', { finish: 'length', usage: { tokens: ZEROS } }).data)
+      .toEqual({ seat: 'glm', finish: 'length', reasoningTokens: null, outputTokens: null });
+    expect(promotedFacts({ promoted: true, usage: { tokens: ZEROS } }))
+      .toEqual({ reasoning: null, output: null, finish: null });
+
+    // ONE positive count anywhere makes the same record a report, in all three.
+    const OBSERVED = { ...ZEROS, input: 1200 };
+    expect(tokenSplit(promotedFacts({ promoted: true, usage: { tokens: OBSERVED } })))
+      .toBe('0 reasoning / 0 output tokens');
+    expect(truncatedReviewNote('glm', { finish: 'length', usage: { tokens: OBSERVED } }).why)
+      .toContain("(finish 'length') after 0 reasoning / 0 output tokens;");
+    expect(formatOutputLengthReason({ tokens: OBSERVED, budget: null }))
+      .toContain(' — 0 reasoning / 0 output tokens;');
   });
 });
 

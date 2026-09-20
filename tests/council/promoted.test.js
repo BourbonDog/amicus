@@ -33,8 +33,22 @@ describe('council/promoted — the one vocabulary for a promoted leg (#257)', ()
     // Only one side reported.
     expect(promotedFacts({ promoted: true, usage: { tokens: { reasoning: 40332 } } }))
       .toEqual({ reasoning: 40332, output: null, finish: null });
-    // A REPORTED zero on both sides stays zero — it is a fact, not a floor.
+    // A REPORTED zero on both sides stays zero — it is a fact, not a floor. What makes it a
+    // REPORT is another count being positive (R-X44(c)): usage was observed, and these two
+    // were genuinely nil.
+    expect(promotedFacts({ promoted: true, usage: { tokens: { input: 1200, reasoning: 0, output: 0 } } }))
+      .toEqual({ reasoning: 0, output: 0, finish: null });
+    // #257 R-X44(c): with NO positive count anywhere in the record there was no observation —
+    // a promoted leg PRODUCED the reasoning it promoted, so a real report would show it. This
+    // is the shape `pricing.js :: sumPerMessageUsage` hands the product for an unreported leg.
     expect(promotedFacts({ promoted: true, usage: { tokens: { reasoning: 0, output: 0 } } }))
+      .toEqual({ reasoning: null, output: null, finish: null });
+    expect(promotedFacts({ promoted: true,
+      usage: { tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 } } }))
+      .toEqual({ reasoning: null, output: null, finish: null });
+    // Any ONE positive count is an observation — cache and reasoning included (this is where
+    // the rule parts company with pricing.js :: hasObservedTokens, which tests input/output only).
+    expect(promotedFacts({ promoted: true, usage: { tokens: { cacheRead: 9, reasoning: 0, output: 0 } } }))
       .toEqual({ reasoning: 0, output: 0, finish: null });
     // Not a non-negative integer (negative, non-integer) is not a report either.
     expect(promotedFacts({ promoted: true, usage: { tokens: { reasoning: -1, output: 1.5 } } }))
