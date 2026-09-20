@@ -280,6 +280,33 @@ describe('W11 byte-order goldens — legRow (run-debate-revote)', () => {
     expect(legRow('gpt', legPresent, 'unstructured').role).toBeUndefined();
   });
 
+  // #257 R-X45 — THE RELAUNCH MARK. `legRow` is an INTERMEDIATE normalizer whose
+  // only consumer is `debate.js :: mk`, and `mk` is where a debate row's role is
+  // stamped. A promoted defence or re-vote whose RELAUNCH produced no usable leg
+  // needs that row named `relaunch` rather than `repair`, so the mark rides the
+  // normalized row and `mk` reads it. It is emit-when-TRUE and lands AFTER the
+  // shared entry's own keys, so G2a-c above (relaunch absent) stay byte-exact.
+  //
+  // NAMED MUTANT — DEBATERELAUNCHROLEREPAIR: drop the `isPromotedLeg(leg)` 4th
+  // argument at run-debate.js:93 / run-debate-revote.js:181, OR drop the
+  // `l.relaunch === true ? 'relaunch' :` ternary in debate.js :: mk.
+  test('G2e — the relaunch mark is emit-when-true, last, and never reaches the runStats row as a field', () => {
+    expect(JSON.stringify(legRow('glm', legPresent, 'unstructured', true))).toBe(
+      '{"model":"glm","wasChair":false,"conformance":"unstructured",'
+      + '"summary":"the pre-repair defense","waveId":"r1-d1",'
+      + '"resolvedModel":"openrouter/z-ai/glm-4.7","status":"complete","durationMs":900,'
+      + '"usage":{"input":1,"output":2},"relaunch":true}');
+    // Falsy — including the DEFAULT, which is how every non-promoted caller spells it.
+    for (const notTrue of [undefined, false, null, 0, '']) {
+      expect('relaunch' in legRow('glm', legPresent, 'unstructured', notTrue)).toBe(false);
+    }
+    // Through `mk`: the mark becomes the ROLE and is not a key of its own.
+    const [row] = debateRunStatsRows({ defenseLegs: [], revoteLegs: [], supersededLegs: [],
+      repairLegs: [legRow('glm', legPresent, 'unstructured', true)] });
+    expect(row.role).toBe('relaunch');
+    expect('relaunch' in row).toBe(false);
+  });
+
   // The END-TO-END pin, and the whole justification for FOLD DIFF #2: the literals
   // below are legRow's PRE-FOLD bytes, frozen. Feeding them and the post-fold call
   // through debateRunStatsRows must produce the SAME runStats rows — that is
@@ -317,6 +344,45 @@ describe('W11 byte-order goldens — claudeRunStatsRow (run-assemble)', () => {
     expect(JSON.stringify(claudeRunStatsRow())).toBe(
       '{"model":"claude","role":"claude","wasChair":false,"conformance":"clean",'
       + '"status":"complete","durationMs":null,"usage":null}');
+  });
+});
+
+describe('#257 R-X45 — the rescued judge row (run-assemble)', () => {
+  // The judge row is the ONE row whose `rescued` marker is not leg-sourced, so it
+  // is spread onto the BUILT row instead of being taught to buildRunStatsEntry
+  // (which stays require-free and leg-driven). That spread's slot is the END of
+  // the row — after `usage` — and this is that slot's pin: the entry's own key
+  // order is untouched, and `rescued` is simply appended.
+  //
+  // NAMED MUTANT — JUDGEROWRESCUEDDROPPED: delete the spread in run-assemble.js.
+  const judgeRow = (rescued) => {
+    const input = require('../../src/council/run-assemble').buildTallyInput({
+      runId: 'r1', date: 'd', bench: ['alpha'], chair: 'deepseek', reviews: [],
+      judgeResults: [{ judge: 'alpha', ok: true, conformance: 'repaired', adjudications: [],
+        ...(rescued === undefined ? {} : { rescued }),
+        leg: { model: 'openai/gpt-5', status: 'complete', durationMs: 50,
+          usage: { input: 3 }, waveId: 'r1-s2', promoted: true } }],
+      chairStats: null, claudeReview: null,
+    });
+    return input.runStats.find(r => r.role === 'judge');
+  };
+
+  test('G4e — `rescued` is the LAST key, after `usage`, and the rest is the entry\'s own order', () => {
+    expect(JSON.stringify(judgeRow(true))).toBe(
+      '{"model":"alpha","role":"judge","wasChair":false,"conformance":"repaired",'
+      + '"waveId":"r1-s2","resolvedModel":"openai/gpt-5","status":"complete","durationMs":50,'
+      + '"promoted":true,"usage":{"input":3},"rescued":true}');
+    // The SLOT, not merely the presence.
+    const keys = Object.keys(judgeRow(true));
+    expect(keys[keys.length - 1]).toBe('rescued');
+    expect(keys.indexOf('usage')).toBe(keys.indexOf('rescued') - 1);
+  });
+
+  test('G4f — a judge row with no rescue is byte-identical to the pre-ruling row', () => {
+    expect(JSON.stringify(judgeRow(undefined))).toBe(
+      '{"model":"alpha","role":"judge","wasChair":false,"conformance":"repaired",'
+      + '"waveId":"r1-s2","resolvedModel":"openai/gpt-5","status":"complete","durationMs":50,'
+      + '"promoted":true,"usage":{"input":3}}');
   });
 });
 

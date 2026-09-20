@@ -185,7 +185,8 @@ function debateRunStatsRows({ defenseLegs, revoteLegs, supersededLegs, repairLeg
   const mk = (role) => (l) => buildRunStatsEntry({
     leg: { status: l.status, durationMs: l.durationMs, usage: l.usage,
       waveId: l.waveId, model: l.resolvedModel, ...(l.promoted === true ? { promoted: true } : {}) }, // #257 R-X26 (named mutant "DEBATEROWPROMOTEDDROPPED")
-    model: l.model, role, conformance: l.conformance });
+    // #257 R-X45: `relaunch` is a TRANSPORT mark on the normalized row (run-debate-revote.js :: legRow's 4th argument), never a field of the runStats row — a promoted defence's or re-vote's retry is a RELAUNCH (R-X33), so the row it leaves behind when it produces nothing usable says so instead of calling itself a correction. Emit-when-true; every unmarked row keeps its list's role, byte for byte (named mutant "DEBATERELAUNCHROLEREPAIR").
+    model: l.model, role: l.relaunch === true ? 'relaunch' : role, conformance: l.conformance });
   return [
     ...(defenseLegs || []).map(mk('rebuttal')),
     ...(revoteLegs || []).map(mk('revote')),

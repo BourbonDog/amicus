@@ -246,6 +246,23 @@ describe('v4.7 fail-closed ledger join — non-primary rows never overwrite a be
     expect(rows.find(r => r.model === 'alpha').role).toBe('seat');
   });
 
+  // #257 R-X45 — THE NEW ROLE IS EXCLUDED BY THE MECHANISM, NOT BY AN EDIT.
+  // `joinsLedger` is fail-closed: `LEDGER_JOIN_ROLES` is an allowlist, so
+  // `relaunch` — a role this ruling MINTS — never joins without anyone having to
+  // remember to add it to a skip-set. That is the whole point of the v4.7 D4
+  // swap, and it is worth a pin precisely because the ruling adds a role and
+  // changes NOTHING here: a future reader must be able to see that the absence
+  // of a ledger.js edit was measured rather than forgotten.
+  //
+  // NAMED MUTANT — LEDGERRELAUNCHJOINS: add 'relaunch' to LEDGER_JOIN_ROLES in
+  // src/council/ledger.js. Reds this test.
+  test('#257 R-X45: a `relaunch` row never overwrites a bench model ledger row (fail-closed)', () => {
+    const rows = buildLedgerRows(singleModelRecord(
+      { model: 'alpha', role: 'relaunch', wasChair: false, conformance: 'unstructured', status: 'error', durationMs: null, usage: null }));
+    expect(rows.find(r => r.model === 'alpha').role).toBe('seat');
+    expect(rows.find(r => r.model === 'alpha').conformance).toBe('clean');
+  });
+
   // Carried in VERBATIM from tests/council/debate.test.js (commit d279384,
   // pre-fix-wave) per Task-6's report ("Review fix wave" §5): the fix wave
   // reverted DEBATE_ROLES and deleted this test because it would fail under

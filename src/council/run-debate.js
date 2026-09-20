@@ -90,7 +90,7 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
     parsed = leg2 && !isPromotedLeg(leg2) ? parseDebateDefense(leg2.summary, expectedIds) : parsed; // #257 R-X23 (named mutant "DEFENSEREPAIRPROMOTEDUSED")
     conformance = parsed.ok ? 'repaired' : 'unstructured';
     if (leg2) { supersededLeg = legRow(raiserAlias, leg, 'unstructured'); leg = leg2; }
-    else { repairLeg = legRow(raiserAlias, res2.leg, 'unstructured'); }
+    else { repairLeg = legRow(raiserAlias, res2.leg, 'unstructured', isPromotedLeg(leg)); } // #257 R-X45: a promoted defence's retry was a RELAUNCH (R-X33) — its row says so (named mutant "DEBATERELAUNCHROLEREPAIR")
   }
   // A dead leg (no complete summary) OR an 'unstructured' conformance after the one
   // repair is a debate degradation (spec §5.7) — surfaced via the returned leg.

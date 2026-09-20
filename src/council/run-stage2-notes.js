@@ -101,16 +101,19 @@ function judgeDeadNote({ judge, seat, leg, judgesCount, runId }) {
  * @param {object|null} seat
  * @param {object} leg the judge's ORIGINAL Stage-2 wave leg (#83's convention)
  * @param {{attempts?: number, rescued?: boolean, standDown?: ?string,
- *   repairPromotedAttempt?: ?number}} [opts]
+ *   repairPromotedAttempt?: ?number, relaunchWaveId?: ?string, usedWaveId?: ?string}} [opts]
  *   `attempts` is the `-q<N>` counter the caller already tracks (1 = the
  *   relaunch, 2 = its one repair); `rescued` says whether an adjudication was
  *   used in the end; `repairPromotedAttempt` belongs to the R-X36 arm alone and
  *   is the attempt number of the repair that came back promoted — NOT
- *   `attempts`, which is how many ran in total.
+ *   `attempts`, which is how many ran in total. #257 R-X45: `relaunchWaveId` and
+ *   `usedWaveId` belong to the RESCUED arm — the `-q<N>` id of the relaunch that
+ *   was asked, and of the ask whose text was adjudicated. They are the wave ids,
+ *   not a count, because the `-q` counter is run-wide rather than per judge.
  * @returns {{kind: string, channel: string, what: string, why: string, effect: string, data: object}}
  */
 function promotedJudgeNote(judge, seat, leg, { attempts = 0, rescued = false, standDown = null,
-  repairPromotedAttempt = null } = {}) {
+  repairPromotedAttempt = null, relaunchWaveId = null, usedWaveId = null } = {}) {
   const notCounted = 'the judge is not counted; the cross-review proceeds with the judges that '
     + 'answered, and thin-cross-review fires below two';
   // #257 R-X36 (council round 3, B1): the one arm whose subject is the REPAIR.
@@ -162,8 +165,15 @@ function promotedJudgeNote(judge, seat, leg, { attempts = 0, rescued = false, st
     what: `judge ${judge} answered in its reasoning channel`,
     why: `its own answer was its deliberation, not a judgement; ${cause}; ${unread}`,
     effect: rescued ? 'the adjudication counts; nothing else changes' : notCounted,
+    // #257 R-X45: the heal note names BOTH waves — the relaunch that was asked and
+    // the one whose text was actually used (they differ when the relaunch's own
+    // answer needed its one repair). Emit-when-set, so a stand-down's `data` — which
+    // is called with neither — is byte-identical, and so is every pre-ruling record.
+    // The `what`/`why` above do not move: the prose is pinned, and this is a fact
+    // the prose never carried (named mutant "RELAUNCHWAVEIDDROPPED").
     data: { judge, seat: seat ? seat.id : null, reasoningTokens: reasoning, outputTokens: output,
-      attempts, ...(relaunchRan ? { relaunched: true } : {}), ...(rescued ? { rescued: true } : {}) } };
+      attempts, ...(relaunchRan ? { relaunched: true } : {}), ...(rescued ? { rescued: true } : {}),
+      ...(relaunchWaveId ? { relaunchWaveId } : {}), ...(usedWaveId ? { usedWaveId } : {}) } };
 }
 
 /** Thin-cross-review is announced below TWO usable judges: one judge is not a

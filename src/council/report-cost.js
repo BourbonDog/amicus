@@ -36,6 +36,11 @@ const ROLE_SUFFIX = Object.create(null);
 ROLE_SUFFIX.judge = 'judge';
 ROLE_SUFFIX['chair-attempt'] = 'chair-attempt';
 ROLE_SUFFIX.repair = 'repair';
+// #257 R-X45: the follow-up ask that RE-asks a promoted seat with its original
+// briefing rather than correcting it. Without an entry here such a row renders
+// bare — indistinguishable in the table from that model's own bench-seat row,
+// which is the collision this table exists to prevent.
+ROLE_SUFFIX.relaunch = 'relaunch';
 ROLE_SUFFIX.superseded = 'superseded';
 
 /**

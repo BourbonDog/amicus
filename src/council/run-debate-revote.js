@@ -71,10 +71,10 @@ function legOpts(ctx, waveId) {
  * contract this argument already satisfies exactly (a raw leg doc: `.model` IS the
  * resolved id, `model` here IS the alias). `role` is deliberately not passed: which
  * role this is depends on which list the caller pushes it onto, and `debate.js :: mk`
- * stamps it. Its byte diff + the pin that all of it is invisible to `mk`: "FOLD DIFF #2" and G6, tests/council/runstats-byte-order.test.js. #257 R-X26: this hands the REAL leg document straight to buildRunStatsEntry, so the row it returns ALREADY carries `promoted` — no spread is needed here, and `mk` forwarding the field (pin G1f) is what carries it on to the superseded/repair rows.
+ * stamps it. Its byte diff + the pin that all of it is invisible to `mk`: "FOLD DIFF #2" and G6, tests/council/runstats-byte-order.test.js. #257 R-X26: this hands the REAL leg document straight to buildRunStatsEntry, so the row it returns ALREADY carries `promoted` — no spread is needed here, and `mk` forwarding the field (pin G1f) is what carries it on to the superseded/repair rows. #257 R-X45: the 4th argument `relaunch` is a TRANSPORT mark — emit-when-TRUE and LAST, so pins G2a-c stay byte-exact — that `debate.js :: mk` reads to stamp `role: 'relaunch'` in place of `'repair'`, and never copies onto the row. It is true exactly when the leg being retried was PROMOTED, because that retry is a relaunch with the original briefing (R-X33), not a correction.
  */
-function legRow(model, leg, conformance) {
-  return buildRunStatsEntry({ leg, model, conformance, summary: leg && leg.summary });
+function legRow(model, leg, conformance, relaunch) {
+  return { ...buildRunStatsEntry({ leg, model, conformance, summary: leg && leg.summary }), ...(relaunch === true ? { relaunch: true } : {}) };
 }
 
 /**
@@ -178,7 +178,7 @@ async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedI
     ? { aborted: null, parsed, conformance, outLeg: leg2,
         supersededRow: legRow(judge, leg, 'unstructured'), repairRow: null }
     : { aborted: null, parsed, conformance, outLeg: leg,
-        supersededRow: null, repairRow: legRow(judge, r2.leg, 'unstructured') };
+        supersededRow: null, repairRow: legRow(judge, r2.leg, 'unstructured', isPromotedLeg(leg)) }; // #257 R-X45: a promoted re-vote's retry was a RELAUNCH (R-X33) — when it produces no usable leg its row says so, not 'repair' (named mutant "REVOTERELAUNCHROLEREPAIR")
 }
 
 /**

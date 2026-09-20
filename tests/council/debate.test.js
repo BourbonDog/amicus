@@ -484,6 +484,52 @@ describe('debateRunStatsRows', () => {
     });
   });
 
+    // #257 R-X45 — A RELAUNCH THAT PRODUCED NOTHING IS STILL A RELAUNCH. A
+    // promoted defence or re-vote is RELAUNCHED with its original briefing
+    // (R-X33), not repaired; when that relaunch produces no usable leg, the row
+    // it leaves behind is the record of a relaunch and must not be filed as a
+    // correction. The mark rides the normalized row (`run-debate-revote.js ::
+    // legRow`'s 4th argument) and `mk` turns it into the ROLE — the leg's own
+    // outcome fields are untouched, and a row without the mark is unchanged.
+    //
+    // NAMED MUTANT — DEBATERELAUNCHROLEREPAIR: drop the `l.relaunch === true ?
+    // 'relaunch' :` ternary in debate.js :: mk. Reds this test.
+    test('a `relaunch` mark on a repair row names the role relaunch, and nothing else moves', () => {
+      const rows = debateRunStatsRows({
+        defenseLegs: [],
+        revoteLegs: [],
+        supersededLegs: [],
+        repairLegs: [
+          { model: 'gemini', status: 'error', durationMs: null, usage: null, conformance: 'unstructured', waveId: 'r-d1r', relaunch: true },
+          { model: 'gpt', status: 'timeout', durationMs: 5000, usage: null, conformance: 'unstructured', waveId: 'r-rv-gptr' },
+        ],
+      });
+      expect(rows).toEqual([
+        { model: 'gemini', role: 'relaunch', wasChair: false, conformance: 'unstructured', status: 'error', durationMs: null, usage: null, waveId: 'r-d1r' },
+        { model: 'gpt', role: 'repair', wasChair: false, conformance: 'unstructured', status: 'timeout', durationMs: 5000, usage: null, waveId: 'r-rv-gptr' },
+      ]);
+      // The mark is a transport field, never a key of the runStats row itself.
+      expect(rows.every(r => !('relaunch' in r))).toBe(true);
+    });
+
+    test('only the LITERAL true is the relaunch mark — every other value leaves the list role', () => {
+      for (const notTrue of [false, null, 0, 'true', 1, undefined]) {
+        const [row] = debateRunStatsRows({ defenseLegs: [], revoteLegs: [], supersededLegs: [],
+          repairLegs: [{ model: 'gemini', status: 'error', durationMs: null, usage: null,
+            conformance: 'unstructured', relaunch: notTrue }] });
+        expect(row.role).toBe('repair');
+      }
+      // …and the mark never renames a rebuttal/revote/superseded row: only the
+      // repair arm's producers ever set it, but `mk` is shared, so pin the shape.
+      const rows = debateRunStatsRows({
+        defenseLegs: [{ model: 'a', status: 'complete', durationMs: 1, usage: null, conformance: 'clean' }],
+        revoteLegs: [{ model: 'b', status: 'complete', durationMs: 1, usage: null, conformance: 'clean' }],
+        supersededLegs: [{ model: 'c', status: 'complete', durationMs: 1, usage: null, conformance: 'unstructured' }],
+        repairLegs: [],
+      });
+      expect(rows.map(r => r.role)).toEqual(['rebuttal', 'revote', 'superseded']);
+    });
+
   test('mk passes resolvedModel through when the normalized leg carries it (v4.7 GOA-7 D8)', () => {
     const rows = debateRunStatsRows({
       defenseLegs: [{ model: 'gemini', resolvedModel: 'google/gemini-3.5-pro', status: 'complete',

@@ -509,6 +509,58 @@ test('#83: buildTallyInput emits a runStats row per judge, role judge', () => {
   expect(judges[1]).toMatchObject({ model: 'beta', role: 'judge', status: 'error', usage: null });
 });
 
+/**
+ * #257 R-X45 (D1) — THE RESCUED JUDGE'S ROW. A promoted Stage-2 judge that its
+ * relaunch rescued still ships a `role: 'judge'` row built from the ORIGINAL
+ * `-s2` leg (#83 — the row must join the seat's own wave), so the row carries
+ * `promoted: true`. D1's chair question was how a downstream reader tells that
+ * row from a judge that delivered no review at all. It reads `rescued`.
+ *
+ * `rescued` is spread onto the BUILT row rather than taught to
+ * buildRunStatsEntry: it is not a leg-sourced fact (the leg it describes is the
+ * promoted one), and this is its only producer. Emit-when-true, so every judge
+ * row without it — which is every judge row a run without a promoted judge
+ * writes — is byte-identical.
+ *
+ * NAMED MUTANT — JUDGEROWRESCUEDDROPPED: delete the `...(j.rescued === true …)`
+ * spread in run-assemble.js. Reds this test.
+ */
+test('#257 R-X45: a RESCUED judge row says so, beside the promoted leg it is attributed to', () => {
+  const input = asm.buildTallyInput({
+    runId: 'r1', date: '2026-08-01', bench: ['alpha', 'beta'], chair: 'deepseek',
+    reviews: [],
+    judgeResults: [
+      // The rescued judge: ok:true, adjudications from the RELAUNCH's text, but
+      // `leg` is the promoted -s2 leg it is attributed to (#83).
+      { judge: 'alpha', ok: true, conformance: 'repaired', adjudications: [],
+        rescued: true, usedWaveId: 'r1-q1', fromReasoning: false,
+        leg: { model: 'alpha', status: 'complete', durationMs: 50, waveId: 'r1-s2', promoted: true } },
+      // The control on the same bench: an ordinary clean judge, byte-identical.
+      { judge: 'beta', ok: true, conformance: 'clean', adjudications: [],
+        leg: { model: 'beta', status: 'complete', durationMs: 60, waveId: 'r1-s2' } },
+    ],
+    chairStats: null, claudeReview: null,
+  });
+  const judges = input.runStats.filter(r => r.role === 'judge');
+  expect(judges[0]).toMatchObject({ model: 'alpha', role: 'judge', conformance: 'repaired',
+    waveId: 'r1-s2', promoted: true, rescued: true });
+  // The control carries NEITHER key — `rescued` is emit-when-true, exactly like `promoted`.
+  expect('rescued' in judges[1]).toBe(false);
+  expect('promoted' in judges[1]).toBe(false);
+});
+
+test('#257 R-X45: a FALSY rescued is no marker at all — only the literal true', () => {
+  for (const notTrue of [false, null, 0, 'true', 1, undefined]) {
+    const input = asm.buildTallyInput({
+      runId: 'r1', date: '2026-08-01', bench: ['alpha'], chair: 'deepseek', reviews: [],
+      judgeResults: [{ judge: 'alpha', ok: true, conformance: 'clean', adjudications: [],
+        rescued: notTrue, leg: { model: 'alpha', status: 'complete', durationMs: 1 } }],
+      chairStats: null, claudeReview: null,
+    });
+    expect('rescued' in input.runStats.find(r => r.role === 'judge')).toBe(false);
+  }
+});
+
 // Finding 3: --models containing the reserved 'claude' seat, combined with
 // --claude-review, corrupts the append-only ledger (a synthesized claude row
 // collides with a real bench leg's claude row on ledger.js's Map join). The

@@ -222,9 +222,9 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   // shared emit-when-DIFFERENT predicate, so a unique bench stays byte-identical
   // and no new predicate enters the tree.
   for (const j of (judgeResults || [])) {
-    runStats.push(buildRunStatsEntry({
+    runStats.push({ ...buildRunStatsEntry({
       leg: j.leg, model: j.judge, role: 'judge', conformance: j.conformance, seat: j.seat,
-    }));
+    }), ...(j.rescued === true ? { rescued: true } : {}) }); // #257 R-X45 (D1): a judge RESCUED by its relaunch is attributed to its PROMOTED -s2 leg above, so this row legitimately carries `promoted: true` — `rescued` is the field that tells it from a judge that delivered no review at all. It is not a leg-sourced fact (the leg it describes IS the promoted one), so it is spread onto the built row rather than taught to buildRunStatsEntry, which stays require-free and leg-driven. Emit-when-TRUE (the literal), so every judge row of every run without a rescue is byte-identical; its slot is the END of the row (pins G4e/G4f, tests/council/runstats-byte-order.test.js). `tally.js`'s re-projection allowlist does not name it, so it reaches tally-input.json and stops there — the same scope `summary` has. Named mutant "JUDGEROWRESCUEDDROPPED".
   }
   if (chairStats) { runStats.push(chairStats); }
   return { meta, findings, adjudications, rankings, runStats };

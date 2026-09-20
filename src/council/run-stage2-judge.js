@@ -108,6 +108,13 @@ async function adjudicateJudgeLeg(ctx, o, leg, env) {
   // it into a stand-down. The FIRST such attempt is the one named: it is the one
   // whose block the reader would otherwise wonder about.
   let repairPromoted = null;
+  // #257 R-X45: the two wave ids the RESCUED record names, each set at the point
+  // it becomes known rather than re-derived downstream. `relaunchWaveId` is the
+  // attempt-1 relaunch's `-q<N>`; `usedWaveId` is the wave whose TEXT was
+  // adjudicated — the one fact `leg` cannot carry, because `leg` stays the
+  // attributed `-s2` leg (#83) whose summary is the deliberation (C3). The `-q`
+  // counter is run-wide, not per judge, so neither can be spelled from `attempts`.
+  let relaunchWaveId = null, usedWaveId = null;
   while (!parsed.ok && leg.status === 'complete' && leg.summary && attempts < 2 && !ctx.overBudget() && !standDown) { // #257 R-X32/C4: a relaunch that produced no real text stands the judge down (named mutant "STANDDOWNDROPPED")
     attempts += 1;
     env.repairSeq += 1;
@@ -136,8 +143,9 @@ async function adjudicateJudgeLeg(ctx, o, leg, env) {
       return { aborted: solo.exitCode, judgeResults, extraRows };
     }
     const out = (solo.leg && !isPromotedLeg(solo.leg) && solo.leg.summary) || ''; // #257 R-X21: a promoted repair supplies no block (named mutant "JUDGEREPAIRPROMOTEDUSED")
-    if (out.trim()) { judging = out; }
+    if (out.trim()) { judging = out; usedWaveId = waveId; } // #257 R-X45: the wave whose text is adjudicated below (named mutant "USEDWAVEIDDROPPED")
     if (isPromotedLeg(leg) && attempts === 1) { // #257 R-X32: the relaunch's outcome IS the stand-down cause when it produced nothing real; its real text becomes the judge artifact
+      relaunchWaveId = waveId; // #257 R-X45: THIS ask is the relaunch — the heal note names it (named mutant "RELAUNCHWAVEIDDROPPED")
       if (out.trim()) { fs.writeFileSync(path.join(o.runDir, name), out, { mode: 0o600 }); }
       else { standDown = isPromotedLeg(solo.leg) ? 'relaunch-promoted' : 'relaunch-died'; }
     }
@@ -153,8 +161,21 @@ async function adjudicateJudgeLeg(ctx, o, leg, env) {
     parsed = parseJudgeOutput(out, parseCtx);
     // Every -q<N> launch gets a row — INCLUDING a failed repair (null/'error' leg ⇒ never-invent
     // defaults); pushed AFTER the re-parse to stamp the repair LEG's own measured outcome (PR 199 D1, v4.9 V18 refined).
-    extraRows.push(buildRunStatsEntry({ leg: solo.leg, model: judge, role: 'repair',
+    // #257 R-X45 (A3/C2): the ROLE names the KIND of follow-up ask. Attempt 1 of a
+    // promoted judge is a RELAUNCH — a fresh ask carrying the original bundle, not a
+    // correction of anything; attempt 2 is the relaunch's one LC-12 repair, and every
+    // ask of a non-promoted judge is a repair. The `-q<N>` ID SPACE deliberately does
+    // NOT fork: it means "a follow-up ask of this seat", and a second id space would
+    // reach resume, appendStageWave and the ledger join for no reader's benefit
+    // (named mutant "RELAUNCHROLEREPAIR").
+    extraRows.push(buildRunStatsEntry({ leg: solo.leg, model: judge,
+      role: isPromotedLeg(leg) && attempts === 1 ? 'relaunch' : 'repair',
       wasChair: false, conformance: parsed.ok ? 'clean' : 'unstructured' }));
+    // #257 R-X45 (b): `conformance` is the ASKS-TO-PARSE axis and nothing else —
+    // 'clean' = the FIRST ask parsed, 'repaired' = a LATER ask did, 'unstructured' =
+    // none did. The CAUSE (a promoted leg, a relaunch, a stand-down) lives on the
+    // row's `role`/`promoted` and in the `judge-reasoning-only` note; no value here
+    // is ever stretched to carry it.
     if (parsed.ok) { conformance = 'repaired'; }
   }
   if (!parsed.ok) {
@@ -212,7 +233,7 @@ async function adjudicateJudgeLeg(ctx, o, leg, env) {
     return null;
   }
   // #257 R-X32: a promoted judge reaches here only through its relaunch (attempt 1) or the relaunch's one repair (attempt 2) — never through its own block. Kind 'info'; the exit code holds.
-  if (isPromotedLeg(leg)) { ctx.degrade.note(promotedJudgeNote(judge, seat, leg, { attempts, rescued: true })); }
+  if (isPromotedLeg(leg)) { ctx.degrade.note(promotedJudgeNote(judge, seat, leg, { attempts, rescued: true, relaunchWaveId, usedWaveId })); }
   // v4.8 T3.2: labels.seatMap (anonymize.js :: assignLabels) threads through
   // so orderSeats can disambiguate a twin bench's `order`, which stays
   // alias-only. T3.3 wired it into street-cred.js :: rankPositions, via
@@ -220,8 +241,21 @@ async function adjudicateJudgeLeg(ctx, o, leg, env) {
   const { order, orderSeats } = rankingToOrder(parsed.ranking, labels.labelMap, labels.seatMap);
   // `died: false` by construction: a dead leg's `parsed` is the DEAD_LEG arm,
   // which never becomes ok. Stamped anyway so every entry has the same shape.
+  // #257 R-X45 (c): `fromReasoning` means "answered only in its reasoning channel
+  // AND was not rescued" — `run-stage2-notes.js :: thinCrossReviewWhy` reads it on
+  // FAILED entries alone, and its clause says exactly that. An ok:true entry's
+  // adjudication came from real text, so the marker is false here by construction
+  // (D7; named mutant "FROMREASONINGONRESCUED"). What a rescued judge carries
+  // instead is `rescued: true` — the answer to D1's reader question, since its
+  // `-s2` leg (and therefore its runStats row) legitimately says `promoted: true` —
+  // and `usedWaveId`, which names the `-q<N>` wave whose text WAS adjudicated.
+  // `leg` stays the attributed `-s2` leg (#83 above), so `leg.summary` is the
+  // deliberation and `usedWaveId` is the only field that names the answer (C3).
+  // Both are emit-when-set, so a non-promoted judge's entry is byte-identical
+  // (named mutants "RESCUEDMARKERDROPPED", "USEDWAVEIDDROPPED").
   judgeResults.push({ judge, seat, ok: true, order, orderSeats, adjudications: parsed.adjudications,
-    died: false, emptyAnswer: false, fromReasoning: isPromotedLeg(leg), conformance, leg: leg || null });
+    died: false, emptyAnswer: false, fromReasoning: false, conformance,
+    ...(isPromotedLeg(leg) ? { rescued: true, usedWaveId } : {}), leg: leg || null });
   return null;
 }
 

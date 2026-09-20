@@ -1184,6 +1184,113 @@ describe('runDebate — v4.7 D2/E4 debate rows: superseded pre-repair legs and f
   });
 });
 
+
+/**
+ * #257 R-X45, the DEBATE half — a relaunch that produced nothing is still
+ * recorded as a relaunch.
+ *
+ * R-X33 already made a promoted defence's / re-vote's one bounded retry a
+ * RELAUNCH (the original briefing, byte for byte). Round 4's A3/C2 caught the
+ * record lagging behind the behaviour: when that relaunch produces no usable
+ * leg, the row it leaves behind still said `role: 'repair'` — the vocabulary of
+ * a correction, for an ask that corrected nothing.
+ *
+ * A relaunch that SUCCEEDS needs no extra row: it becomes the rebuttal/revote
+ * row and supersedes the promoted first leg exactly as a successful repair does
+ * today. Only the failed arm (`repairLeg` / `repairRow`) is renamed.
+ *
+ * NAMED MUTANT — DEBATERELAUNCHROLEREPAIR: drop the `isPromotedLeg(leg)` 4th
+ * argument at run-debate.js's `repairLeg = legRow(...)` (or at
+ * run-debate-revote.js's `repairRow: legRow(...)`). Reds this block.
+ */
+describe('runDebate — a promoted defence/re-vote relaunch is recorded as one (#257 R-X45)', () => {
+  const promotedLeg = (model, summary, waveId, slot = 1) => ({ ...leg(model, summary, waveId, slot),
+    promoted: true, durationMs: 4200, usage: { tokens: { output: 0, reasoning: 1900 } } });
+
+  test("a promoted defence whose RELAUNCH died leaves a role:'relaunch' row, not a repair row", async () => {
+    const tmp = mkTmp('run-debate-relaunch-role-');
+    const input = provisionalInput();
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        // The RELAUNCH is dead — no leg at all, so nothing supersedes.
+        if (opts.waveId === 'r-d1r') { return { wave: wave([]), leg: null, exitCode: 0 }; }
+        const l = promotedLeg('gemini', inReasoning, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows.map(r => r.role).sort()).toEqual(['rebuttal', 'relaunch']);
+    // The relaunch row is the DEAD attempt's own row: never invented, never a repair.
+    expect(rows.find(r => r.role === 'relaunch')).toMatchObject(
+      { model: 'gemini', role: 'relaunch', conformance: 'unstructured', status: 'error', usage: null });
+    expect(rows.some(r => r.role === 'repair')).toBe(false);
+    expect(rows.some(r => r.role === 'superseded')).toBe(false);
+  });
+
+  test("an ORDINARY defence whose repair died keeps role:'repair' — the control", async () => {
+    const tmp = mkTmp('run-debate-relaunch-control-');
+    const input = provisionalInput();
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1r') { return { wave: wave([]), leg: null, exitCode: 0 }; }
+        // ALIVE but unparseable, and NOT promoted: the retry is a real repair.
+        const l = leg('gemini', 'prose only, no json block', opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows.map(r => r.role).sort()).toEqual(['rebuttal', 'repair']);
+    expect(rows.some(r => r.role === 'relaunch')).toBe(false);
+  });
+
+  test("a promoted re-vote whose RELAUNCH died leaves a role:'relaunch' row too", async () => {
+    const tmp = mkTmp('run-debate-relaunch-revote-');
+    const input = provisionalInput();
+    const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1') {
+          const l = leg('gemini', defended, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        // gpt's re-vote RELAUNCH dies.
+        return { wave: wave([]), leg: null, exitCode: 0 };
+      },
+      launchWave: async () => ({ exitCode: 0, wave: wave([
+        promotedLeg('gpt', gptFlip, 'r-rv', 1),
+        leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const gptRows = result.debatedInput.runStats.filter(r => r.model === 'gpt');
+    expect(gptRows.find(r => r.role === 'relaunch')).toMatchObject(
+      { model: 'gpt', conformance: 'unstructured', status: 'error' });
+    expect(gptRows.some(r => r.role === 'repair')).toBe(false);
+    // qwen re-voted cleanly on the same wave — the control that the rename is
+    // the promoted leg's fact, not a property of the round.
+    expect(result.debatedInput.runStats.filter(r => r.model === 'qwen')
+      .every(r => r.role === 'revote')).toBe(true);
+  });
+
+  test('a relaunch row never joins the ledger, and the cost table tags it (relaunch)', () => {
+    // The two consumers of the new role, driven directly off a row of its shape.
+    const row = { model: 'gemini', role: 'relaunch', wasChair: false,
+      conformance: 'unstructured', status: 'error', durationMs: null, usage: null };
+    const rec = tally({ ...provisionalInput(),
+      runStats: [{ model: 'gemini', role: 'seat', wasChair: false, conformance: 'clean',
+        status: 'complete', durationMs: 10, usage: null }, row] });
+    const { buildLedgerRows } = require('../../src/council/ledger');
+    expect(buildLedgerRows(rec).find(r => r.model === 'gemini'))
+      .toMatchObject({ role: 'seat', conformance: 'clean' });
+    const { buildCostModel } = require('../../src/council/report-cost');
+    expect(buildCostModel([row], undefined).rows[0].model).toBe('gemini (relaunch)');
+  });
+});
 describe('runDebate — cost ceiling is a WHOLE-ROUND gate before the re-vote wave (spec §5.7)', () => {
   test('over budget after the defense wave skips the re-vote and reports skipped-cost-ceiling', async () => {
     const tmp = mkTmp('run-debate-cc-');
