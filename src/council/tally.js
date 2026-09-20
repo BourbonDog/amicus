@@ -195,6 +195,11 @@ function tally(input) {
       ...(isMeasuredTtft(r.ttftMs) ? { ttftMs: r.ttftMs } : {}),
       // #257: emit-when-true, in buildRunStatsEntry's own slot so G7b's key-order invariant holds.
       ...(r.promoted === true ? { promoted: true } : {}),
+      // #257 R-X45: `rescued` travels wherever `promoted` travels — D1's reader is a
+      // verdict.json consumer, and this allowlist is the only road there (buildVerdict
+      // copies runStats verbatim). Same slot, same emit-when-TRUE gate as the line above,
+      // so a truthy stand-in is dropped here too (named mutant "RESCUEDNOTPROJECTED").
+      ...(r.rescued === true ? { rescued: true } : {}),
       usage: r.usage || null,
     })),
     tierCounts: countTiers(outFindings),

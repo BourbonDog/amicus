@@ -355,6 +355,28 @@ describe('published council-family schemas validate real builder output (v4.0 §
     expectValid(validate, record); // …and a run with no promoted leg is untouched
   });
 
+  // #257 R-X45 (fix round 1): `rescued` is declared beside `promoted` on the same
+  // runStats row, because it travels with it — tally.js's allowlist carries both,
+  // and buildVerdict copies the array verbatim. Same pairing as the test above:
+  // the declaration is pinned structurally AND enforcement is shown on the values
+  // the producer never writes (the row has no `additionalProperties: false`, so an
+  // ajv pass alone would prove nothing about a newly declared key).
+  test('council-tally.schema.json declares rescued beside promoted, rejects false / "true"', () => {
+    const validate = compile('council-tally');
+    const schema = JSON.parse(fs.readFileSync(path.join(SCHEMAS_DIR, 'council-tally.schema.json'), 'utf-8'));
+    expect(schema.properties.runStats.items.properties.rescued).toMatchObject({ type: 'boolean', enum: [true] });
+
+    const withRescued = (value) => ({
+      ...record,
+      runStats: record.runStats.map((row, i) => (i === 0 ? { ...row, promoted: true, rescued: value } : row)),
+    });
+    expectValid(validate, withRescued(true));
+    expect(validate(withRescued(false))).toBe(false);
+    expect(validate(withRescued('true'))).toBe(false);
+    expect(validate(withRescued(1))).toBe(false);
+    expectValid(validate, record); // …and a run with no rescued judge is untouched
+  });
+
   test('council-verdict.schema.json accepts buildVerdict output (null and set overallVerdict)', () => {
     expectValid(compile('council-verdict'), buildVerdict(record, []));
     expectValid(compile('council-verdict'), buildVerdict(record, [], { overallVerdict: 'Ship it' }));

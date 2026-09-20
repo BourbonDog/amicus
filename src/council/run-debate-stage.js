@@ -32,6 +32,32 @@ const { emitStageStarted, emitStageTerminal } = require('../observe/events');
 
 const now = () => new Date().toISOString();
 
+/**
+ * #257 R-X46 (fix round 1) — the clause that names WHOSE repair answered only in
+ * its reasoning channel.
+ *
+ * `debate-degraded` is ONE note for the whole round, so the round-1 wording
+ * ("its repair") was unreadable the moment two defences were in it: the reader
+ * could not tell which raiser's work the sentence was about — the same silence
+ * R-X36 exists to remove. `runDebate` therefore hands over the affected ALIASES
+ * rather than a boolean, and this renders them.
+ *
+ * Oxford-free (`a, b and c`), matching the house style of the rest of the
+ * degrade prose. Returns '' for an empty/absent list, which is what keeps every
+ * other degraded round's `why` byte-identical (named mutants
+ * "DEBATEPROMOTEDREPAIRSILENT", "DEBATEPROMOTEDREPAIRUNNAMED").
+ * @param {Array<string>} [aliases] bench aliases whose repair came back promoted
+ * @returns {string} '' or a leading-'; ' clause
+ */
+function promotedRepairClause(aliases) {
+  if (!Array.isArray(aliases) || aliases.length === 0) { return ''; }
+  if (aliases.length === 1) {
+    return `; ${aliases[0]}'s repair answered only in its reasoning channel`;
+  }
+  const list = `${aliases.slice(0, -1).join(', ')} and ${aliases[aliases.length - 1]}`;
+  return `; the repairs of ${list} answered only in their reasoning channels`;
+}
+
 async function runDebateStage(ctx, { provisional, provisionalInput, overBudget }) {
   const { o } = ctx;
   let debatedInput = provisionalInput, debatedRecord = provisional;
@@ -93,11 +119,11 @@ async function runDebateStage(ctx, { provisional, provisionalInput, overBudget }
           // #257 R-X46: R-X36's rule, applied to the debate — a `promoted: true`
           // row is never the only record of itself. When a defence's or re-vote's
           // repair came back promoted (case iii: the wave-1 REAL text was kept
-          // rather than superseded), the prose names it. The clause is '' for
-          // every other degraded round, so every other `why` is byte-identical
-          // (named mutant "DEBATEPROMOTEDREPAIRSILENT").
+          // rather than superseded), the prose NAMES whose it was (fix round 1;
+          // see promotedRepairClause above). The clause is '' for every other
+          // degraded round, so every other `why` is byte-identical.
           why: 'one or more defense or re-vote legs died or returned unstructured output'
-            + (dbg.repairPromoted ? '; its repair answered only in its reasoning channel' : ''),
+            + promotedRepairClause(dbg.promotedRepairs),
           effect: 'affected findings keep their provisional tier; will exit degraded (2)',
         });
       }

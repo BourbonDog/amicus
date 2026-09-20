@@ -1497,11 +1497,12 @@ describe('runDebate — a promoted repair never supersedes real text (#257 R-X46
       return ctx.degrade.all().filter(n => n.channel === 'debate-degraded');
     };
 
-    // Case (iii): the repair came back promoted.
+    // Case (iii): the repair came back promoted. Fix round 1: the clause NAMES the
+    // raiser — "its" is ambiguous the moment two defences are listed.
     const promotedNotes = await run((w) => promotedLeg('gemini', inReasoning, w));
     expect(promotedNotes).toHaveLength(1);
     expect(promotedNotes[0].why).toBe('one or more defense or re-vote legs died or returned '
-      + 'unstructured output; its repair answered only in its reasoning channel');
+      + "unstructured output; gemini's repair answered only in its reasoning channel");
     expect(promotedNotes[0].what).toBe('the debate round did not complete cleanly');
 
     // The CONTROL: an ordinary dead repair, same degraded round, byte-identical prose.
@@ -1509,6 +1510,81 @@ describe('runDebate — a promoted repair never supersedes real text (#257 R-X46
     expect(deadNotes).toHaveLength(1);
     expect(deadNotes[0].why).toBe(
       'one or more defense or re-vote legs died or returned unstructured output');
+  });
+
+  /**
+   * #257 R-X46 (fix round 1) — THE CLAUSE NAMES WHOSE REPAIR IT WAS.
+   *
+   * `debate-degraded` is ONE note for the whole round, so a bare "its repair"
+   * stops being readable the moment two defences are in it: the reader cannot
+   * tell which raiser's work the sentence is about, which is the same silence
+   * R-X36 exists to remove. The clause carries the affected ALIASES and renders
+   * one of three shapes — one name, two names joined with `and`, three or more
+   * joined Oxford-free (`a, b and c`).
+   *
+   * NAMED MUTANT — DEBATEPROMOTEDREPAIRSILENT: drop the clause entirely.
+   * NAMED MUTANT — DEBATEPROMOTEDREPAIRUNNAMED: render the old boolean clause
+   * (`; its repair answered only in its reasoning channel`) regardless of who.
+   * Reds every case below.
+   */
+  describe('the clause names every raiser whose repair answered in its reasoning channel', () => {
+    const { runDebateStage } = require('../../src/council/run-debate-stage');
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    // N raisers on one round: one Disputed finding each, disputed by the other two
+    // seats. ⚠️ `provisionalInput()`'s meta/rankings are kept — `nothingToDebate`
+    // short-circuits on `judged === false`, and an empty `rankings` is what makes
+    // tally() report that, so a hand-rolled input without them debates nothing.
+    const manyRaiserInput = (raisers) => ({
+      ...provisionalInput(),
+      findings: raisers.map((m, i) => ({ id: `F${i + 1}`, raiser: m, severity: 'major', claim: `claim ${i}` })),
+      adjudications: raisers.flatMap((m, i) => ['gemini', 'gpt', 'qwen']
+        .filter(j => j !== m)
+        .map(j => ({ findingId: `F${i + 1}`, judge: j, verdict: 'dispute' }))),
+    });
+    // `promotedFor` decides, per raiser alias, whether its repair comes back
+    // PROMOTED (case iii) or simply dead — so a round can mix the two.
+    const runRound = async (raisers, promotedFor) => {
+      const tmp = mkTmp('run-debate-fr1-clause-');
+      const input = manyRaiserInput(raisers);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (/r$/.test(opts.waveId)) {
+            if (!promotedFor(opts.model)) { return { wave: wave([]), leg: null, exitCode: 0 }; }
+            const l = promotedLeg(opts.model, inReasoning, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          const l = leg(opts.model, REAL_BUT_UNPARSEABLE, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+      return ctx.degrade.all().find(n => n.channel === 'debate-degraded').why;
+    };
+    const HEAD = 'one or more defense or re-vote legs died or returned unstructured output';
+
+    test('TWO raisers: both named, joined with `and`, plural channels', async () => {
+      expect(await runRound(['gemini', 'gpt'], () => true)).toBe(
+        `${HEAD}; the repairs of gemini and gpt answered only in their reasoning channels`);
+    });
+
+    test('THREE raisers: Oxford-free `a, b and c`', async () => {
+      expect(await runRound(['gemini', 'gpt', 'qwen'], () => true)).toBe(
+        `${HEAD}; the repairs of gemini, gpt and qwen answered only in their reasoning channels`);
+    });
+
+    test('MIXED: only the raiser whose repair was PROMOTED is named, in the singular', async () => {
+      // gemini's repair is promoted; gpt's simply died — the round degrades for
+      // both, and the clause is about the one fact it exists to surface.
+      expect(await runRound(['gemini', 'gpt'], (m) => m === 'gemini')).toBe(
+        `${HEAD}; gemini's repair answered only in its reasoning channel`);
+    });
+
+    test('NONE: the clause is empty and the why is byte-identical to a plain degraded round', async () => {
+      expect(await runRound(['gemini', 'gpt'], () => false)).toBe(HEAD);
+    });
   });
 });
 describe('runDebate — cost ceiling is a WHOLE-ROUND gate before the re-vote wave (spec §5.7)', () => {
