@@ -1585,6 +1585,107 @@ describe('runDebate — a promoted repair never supersedes real text (#257 R-X46
     test('NONE: the clause is empty and the why is byte-identical to a plain degraded round', async () => {
       expect(await runRound(['gemini', 'gpt'], () => false)).toBe(HEAD);
     });
+
+    /**
+     * #257 R-X46 (fix round 3) — THE CLAUSE NAMES THE KIND OF RETRY IT IS.
+     *
+     * Round 2's clause said "repair" about every promoted retry. But a promoted
+     * defence's or re-vote's retry is a RELAUNCH with the original briefing
+     * (R-X33), and calling it a repair is exactly the misnaming the council
+     * raised as A3/C2 and R-X45 removed from the RECORD — the prose must not
+     * re-introduce it. The kind is read off the row's own role-deciding mark, the
+     * same `relaunch` transport field `debate.js :: mk` stamps `role: 'relaunch'`
+     * from, so the sentence and the row can never disagree.
+     *
+     * THE REACHABLE RELAUNCH ROW (found by the round-2 review): wave 1 is a
+     * PROMOTED defence, its relaunch comes back promoted AND does not complete —
+     * `leg2` is null, so the supersede arm is skipped and the relaunch leaves a
+     * `repairLeg`. `promoted` is minted on a completed, TIMED-OUT or aborted leg
+     * (council-tally.schema.json), never on `status: 'error'` — so a timed-out
+     * promoted relaunch is a real row carrying `promoted: true`, and R-X36's rule
+     * says it is never the only record of itself. It is announced, as a relaunch.
+     *
+     * NAMED MUTANT — RELAUNCHCALLEDREPAIR: render the repair wording for every
+     * entry regardless of kind (round 2's behaviour). Reds all three below.
+     */
+    // A promoted retry leg that TIMED OUT: complete-ness is what `leg2` gates on,
+    // so this one never becomes the kept leg and leaves a row behind instead.
+    const promotedTimeout = (model, summary, waveId) => ({
+      ...promotedLeg(model, summary, waveId), status: 'timeout' });
+
+    test('a promoted RELAUNCH is announced as a relaunch — never as a repair', async () => {
+      const tmp = mkTmp('run-debate-fr3-relaunch-');
+      const input = manyRaiserInput(['gemini']);
+      const inReasoning = defenseOut([{ id: 'F1', action: 'defend', argument: 'caps at 5' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          // wave 1 is PROMOTED → its retry is a relaunch (R-X33); the relaunch
+          // comes back promoted AGAIN and times out, so it leaves a row.
+          const l = /r$/.test(opts.waveId)
+            ? promotedTimeout('gemini', inReasoning, opts.waveId)
+            : promotedLeg('gemini', inReasoning, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      const why = ctx.degrade.all().find(n => n.channel === 'debate-degraded').why;
+      expect(why).toBe(`${HEAD}; gemini's relaunch answered only in its reasoning channel again`);
+      expect(why).not.toContain('repair');
+    });
+
+    test('a MIXED round groups by kind: the repair clause, then the relaunch clause', async () => {
+      const tmp = mkTmp('run-debate-fr3-mixed-');
+      const input = manyRaiserInput(['gemini', 'gpt']);
+      const inReasoning = defenseOut([{ id: 'F1', action: 'defend', argument: 'caps at 5' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          const retry = /r$/.test(opts.waveId);
+          // gemini: wave-1 REAL but unparseable, repair promoted   → a REPAIR row.
+          // gpt:    wave-1 PROMOTED, relaunch promoted + timed out → a RELAUNCH row.
+          if (opts.model === 'gemini') {
+            const l = retry ? promotedLeg('gemini', inReasoning, opts.waveId)
+              : leg('gemini', REAL_BUT_UNPARSEABLE, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          const l = retry ? promotedTimeout('gpt', inReasoning, opts.waveId)
+            : promotedLeg('gpt', inReasoning, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(
+        `${HEAD}; gemini's repair answered only in its reasoning channel`
+        + "; gpt's relaunch answered only in its reasoning channel again");
+    });
+
+    test('TWO relaunches use the plural relaunch form', async () => {
+      const tmp = mkTmp('run-debate-fr3-two-relaunch-');
+      const input = manyRaiserInput(['gemini', 'gpt']);
+      const inReasoning = defenseOut([{ id: 'F1', action: 'defend', argument: 'caps at 5' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          const l = /r$/.test(opts.waveId)
+            ? promotedTimeout(opts.model, inReasoning, opts.waveId)
+            : promotedLeg(opts.model, inReasoning, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(
+        `${HEAD}; the relaunches of gemini and gpt answered only in their reasoning channels again`);
+    });
   });
 });
 describe('runDebate — cost ceiling is a WHOLE-ROUND gate before the re-vote wave (spec §5.7)', () => {

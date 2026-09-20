@@ -33,29 +33,55 @@ const { emitStageStarted, emitStageTerminal } = require('../observe/events');
 const now = () => new Date().toISOString();
 
 /**
- * #257 R-X46 (fix round 1) — the clause that names WHOSE repair answered only in
- * its reasoning channel.
+ * #257 R-X46 — the clause that names WHOSE retry answered only in its reasoning
+ * channel, and WHAT KIND of retry it was.
  *
- * `debate-degraded` is ONE note for the whole round, so the round-1 wording
+ * `debate-degraded` is ONE note for the whole round, so the original wording
  * ("its repair") was unreadable the moment two defences were in it: the reader
  * could not tell which raiser's work the sentence was about — the same silence
- * R-X36 exists to remove. `runDebate` therefore hands over the affected ALIASES
- * rather than a boolean, and this renders them.
+ * R-X36 exists to remove (fix round 1). Fix round 3 then fixed the other half:
+ * calling a RELAUNCH a "repair" is precisely the misnaming the council raised as
+ * A3/C2, and which R-X45 removed from the runStats record — the prose must not
+ * re-introduce it. The kind rides beside the alias, read off the row's own
+ * role-deciding mark, so the sentence and the row can never disagree.
  *
- * Oxford-free (`a, b and c`), matching the house style of the rest of the
- * degrade prose. Returns '' for an empty/absent list, which is what keeps every
- * other degraded round's `why` byte-identical (named mutants
- * "DEBATEPROMOTEDREPAIRSILENT", "DEBATEPROMOTEDREPAIRUNNAMED").
- * @param {Array<string>} [aliases] bench aliases whose repair came back promoted
- * @returns {string} '' or a leading-'; ' clause
+ * A relaunch clause says "again" because that is what happened: a promoted
+ * defence or re-vote was RE-ASKED with its original briefing (R-X33) and
+ * answered in its reasoning channel a second time.
+ *
+ * Entries are grouped by kind, each group rendered with the singular or the
+ * Oxford-free plural (`a, b and c`) form, and the groups concatenated — each
+ * clause already opens with '; ', so the kinds join with '; ' by construction.
+ * Group order is FIRST APPEARANCE in the round, not a fixed alphabet: the prose
+ * then follows the round's own order rather than an arbitrary one.
+ *
+ * Returns '' for an empty/absent list, which is what keeps every other degraded
+ * round's `why` byte-identical (named mutants "DEBATEPROMOTEDREPAIRSILENT",
+ * "DEBATEPROMOTEDREPAIRUNNAMED", "RELAUNCHCALLEDREPAIR").
+ * @param {Array<{alias: string, kind: string}>} [entries] one per retry row that
+ *   came back promoted; `kind` is 'repair' or 'relaunch'
+ * @returns {string} '' or one leading-'; ' clause per kind
  */
-function promotedRepairClause(aliases) {
-  if (!Array.isArray(aliases) || aliases.length === 0) { return ''; }
-  if (aliases.length === 1) {
-    return `; ${aliases[0]}'s repair answered only in its reasoning channel`;
+function promotedRepairClause(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) { return ''; }
+  const byKind = new Map();
+  for (const e of entries) {
+    if (!e || !e.alias) { continue; }
+    const kind = e.kind === 'relaunch' ? 'relaunch' : 'repair';
+    if (!byKind.has(kind)) { byKind.set(kind, []); }
+    byKind.get(kind).push(e.alias);
   }
-  const list = `${aliases.slice(0, -1).join(', ')} and ${aliases[aliases.length - 1]}`;
-  return `; the repairs of ${list} answered only in their reasoning channels`;
+  let out = '';
+  for (const [kind, aliases] of byKind) {
+    // 'relaunch' → 'relaunches'; 'repair' → 'repairs'.
+    const plural = kind === 'relaunch' ? 'relaunches' : 'repairs';
+    const again = kind === 'relaunch' ? ' again' : '';
+    out += aliases.length === 1
+      ? `; ${aliases[0]}'s ${kind} answered only in its reasoning channel${again}`
+      : `; the ${plural} of ${aliases.slice(0, -1).join(', ')} and ${aliases[aliases.length - 1]}`
+        + ` answered only in their reasoning channels${again}`;
+  }
+  return out;
 }
 
 async function runDebateStage(ctx, { provisional, provisionalInput, overBudget }) {
