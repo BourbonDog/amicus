@@ -2549,6 +2549,111 @@ SECOND LINE
   });
 
   /**
+   * #257 R-X49 (council round 5, C2 — gpt, major, confirmed 3-0) — THE SEVENTH
+   * STAND-DOWN STATE. The shape above ends `relaunch-unparseable` whatever the
+   * repair did, and chair HQ2 named the cost: "How can an operator tuning prompt
+   * budgets distinguish between a model that cannot follow the JSON schema and a
+   * model that refused to provide an answer text block entirely?" Those are two
+   * different fixes — a prompt/schema problem and a reasoning-budget problem —
+   * and the state machine already had a slot for WHICH ending, so this is the
+   * missing value rather than a new mechanism.
+   *
+   * R-X36's `repair-promoted` arm cannot carry it: that sentence opens `its own
+   * answer was real but did not parse`, and THIS judge's own answer was its
+   * deliberation. Hence a state of its own, and one more `why` to keep
+   * byte-identical.
+   *
+   * NAMED MUTANT — RELAUNCHREPAIRPROMOTEDHIDDEN: drop `isPromotedLeg(solo.leg)`
+   * (or the whole second gate) from the promoted-judge tracker in
+   * run-stage2-judge.js. Reds the first test below — the ending falls back to
+   * `relaunch-unparseable`, exactly the conflation R-X49 removes.
+   */
+  const REPAIR_DELIBERATION = 'Let me re-read the two reviews before I answer.';
+  // The relaunch's OWN answer: REAL text in the output channel, with no block —
+  // it is what the one LC-12 repair carries, verbatim.
+  const RELAUNCH_PROSE = 'Weighed Review A against Review B at length; no trailing JSON.';
+  const relaunchThenCtx = (secondSolo) => {
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        promotedJudgeLeg('I should weigh Review A against Review B…', opts.waveId, 2,
+          { reasoning: 32000, output: 1 }),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        return okWave([solos.length === 1
+          ? mkLeg('gpt', RELAUNCH_PROSE, 'complete', opts.waveId, 1)
+          : secondSolo(opts.waveId)]);
+      },
+    });
+    return { ctx, solos };
+  };
+
+  test('#257 R-X49: a promoted judge whose relaunch was real and whose repair came back PROMOTED gets its own stand-down sentence', async () => {
+    // THE ADVERSARIAL SHAPE, as everywhere else in #257: the promoted repair's
+    // reasoning CONTAINS a valid fenced block. What disqualifies it is the
+    // channel it came back on, not whether it happens to parse.
+    const { ctx, solos } = relaunchThenCtx((waveId) => ({
+      ...mkLeg('gpt', `${REPAIR_DELIBERATION}\n\n${RELAUNCH_BLOCK}`, 'complete', waveId, 1),
+      promoted: true, finish: 'stop',
+      usage: { tokens: { reasoning: 4000, output: 1 }, cost: { amount: 0.02, source: 'reported' } },
+    }));
+    const { judgeResults, extraRows } = await runStage2(ctx,
+      { reviews: stage1Reviews(), labels, globalFindings });
+
+    // Both asks ran, and the repair carried the RELAUNCH's text (LC-12), never
+    // the deliberation of either promoted leg.
+    expect(solos.map(s => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    expect(solos[1].prompt).toContain(RELAUNCH_PROSE);
+    expect(solos[1].prompt).not.toContain(REPAIR_DELIBERATION);
+
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.ok).toBe(false);                 // the promoted repair's block is no adjudication
+    expect(gpt.died).toBe(false);
+    expect(gpt.fromReasoning).toBe(true);       // the judge's OWN answer was its deliberation
+
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].kind).toBe('info');
+    expect(notes[0].what).toBe('judge gpt answered in its reasoning channel');
+    expect(notes[0].why).toBe('its own answer was its deliberation, not a judgement; relaunched '
+      + "once with the original briefing, and the relaunch's answer did not parse and its repair "
+      + 'answered in its reasoning channel; the deliberation itself was read by nobody '
+      + '(32000 reasoning / 1 output tokens)');
+    expect(notes[0].data).toEqual({ judge: 'gpt', seat: 'gpt', reasoningTokens: 32000,
+      outputTokens: 1, attempts: 2, relaunched: true, repairPromotedAttempt: 2 });
+    expect('rescued' in notes[0].data).toBe(false);
+    expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeUndefined();
+
+    // The machine record the prose now agrees with: the relaunch's row is a
+    // relaunch, the repair's row says `promoted: true`, and neither moved.
+    expect(extraRows.map(r => [r.waveId, r.role]))
+      .toEqual([['abc123-q1', 'relaunch'], ['abc123-q2', 'repair']]);
+    expect(extraRows[1]).toMatchObject({ model: 'gpt', promoted: true,
+      conformance: 'unstructured' });
+    expect('promoted' in extraRows[0]).toBe(false);
+  });
+
+  test("#257 R-X49 CONTROL: when the repair's own answer is real, the ending is 'relaunch-unparseable', byte-identical to today", async () => {
+    const { ctx } = relaunchThenCtx((waveId) =>
+      mkLeg('gpt', 'still no stage-2 block', 'complete', waveId, 1));
+    const { judgeResults } = await runStage2(ctx,
+      { reviews: stage1Reviews(), labels, globalFindings });
+
+    expect(judgeResults.find(j => j.judge === 'gpt').ok).toBe(false);
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].why).toBe('its own answer was its deliberation, not a judgement; relaunched '
+      + "once with the original briefing, and the relaunch's answer did not parse after its one "
+      + 'repair; the deliberation itself was read by nobody (32000 reasoning / 1 output tokens)');
+    expect(notes[0].data).toEqual({ judge: 'gpt', seat: 'gpt', reasoningTokens: 32000,
+      outputTokens: 1, attempts: 2, relaunched: true });
+    expect('repairPromotedAttempt' in notes[0].data).toBe(false);
+  });
+
+  /**
    * #257 R-X32 — THE ONE REPAIR THE RELAUNCH IS STILL OWED. A relaunch that
    * answers with REAL text that does not parse is an ordinary unstructured
    * judgement: LC-12's verbatim arm is truthful about it, so the second and

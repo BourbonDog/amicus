@@ -14,6 +14,12 @@
  *   · R-X36 (B1) — a NON-promoted judge whose ordinary `-q<N>` repair comes
  *     back promoted, and which then ends unusable, is announced on the existing
  *     `judge-reasoning-only` channel instead of ending silently.
+ * And one in round 5:
+ *   · R-X49 (C2) — a PROMOTED judge whose relaunch answered for real and whose
+ *     one repair of that text came back promoted stands down in a state of its
+ *     own, `relaunch-repair-promoted`, instead of being folded into
+ *     `relaunch-unparseable`: a schema failure and a missing answer text block
+ *     are two different fixes.
  *
  * ⚠️ The JSDoc leads this file, ahead of `'use strict'` and with no `// <path>`
  * line above it, matching `promoted.js:1-10`: `scripts/generate-docs.js` reads
@@ -98,7 +104,7 @@ async function adjudicateJudgeLeg(ctx, o, leg, env) {
   // spread the same fact over a `relaunch` enum, `attempts`, and a three-conjunct
   // `while` guard that `promotedJudgeNote` then had to guess the cause back out
   // of. It is set at each point the cause becomes KNOWN and read in exactly two
-  // places: the loop condition below, and the note. Its six values and their
+  // places: the loop condition below, and the note. Its seven values and their
   // sentences are documented on `run-stage2-notes.js :: promotedJudgeNote`.
   let standDown = null;
   // #257 R-X36: the attempt number of a `-q<N>` repair that came back promoted,
@@ -107,6 +113,9 @@ async function adjudicateJudgeLeg(ctx, o, leg, env) {
   // repair whose row already says `promoted: true`. Only an unusable ending turns
   // it into a stand-down. The FIRST such attempt is the one named: it is the one
   // whose block the reader would otherwise wonder about.
+  // #257 R-X49: a PROMOTED judge's relaunch-repair records here too, where the
+  // only value it can take is 2 — attempt 1 of such a judge is the relaunch, not
+  // a repair. The two gates below are separate and both pinned.
   let repairPromoted = null;
   // #257 R-X45: the two wave ids the RESCUED record names, each set at the point
   // it becomes known rather than re-derived downstream. `relaunchWaveId` is the
@@ -158,6 +167,14 @@ async function adjudicateJudgeLeg(ctx, o, leg, env) {
     // named mutant "FIRSTPROMOTEDREPAIRLOST" drops `&& repairPromoted === null`,
     // naming the LAST promoted repair instead of the first.
     if (!isPromotedLeg(leg) && isPromotedLeg(solo.leg) && repairPromoted === null) { repairPromoted = attempts; }
+    // #257 R-X49 (council round 5, C2): the same fact for a PROMOTED judge. Its
+    // attempt 2 is the relaunch's one LC-12 repair (attempt 1 is the relaunch,
+    // handled above), so a promoted one is a different ending from a repair that
+    // answered for real and simply did not parse — chair HQ2's operator must be
+    // able to tell a schema failure from a missing answer text block. Recorded
+    // here, read at the stand-down resolution below; a rescued judge never reaches
+    // it (named mutant "RELAUNCHREPAIRPROMOTEDHIDDEN").
+    if (isPromotedLeg(leg) && attempts === 2 && isPromotedLeg(solo.leg)) { repairPromoted = 2; }
     parsed = parseJudgeOutput(out, parseCtx);
     // Every -q<N> launch gets a row — INCLUDING a failed repair (null/'error' leg ⇒ never-invent
     // defaults); pushed AFTER the re-parse to stamp the repair LEG's own measured outcome (PR 199 D1, v4.9 V18 refined).
@@ -182,13 +199,17 @@ async function adjudicateJudgeLeg(ctx, o, leg, env) {
     // #257 C4: the loop is over and nothing usable came of it. Any cause the
     // loop itself observed is already set; what is left are the endings only the
     // attempt count separates — and, for a judge whose OWN answer was real, a
-    // repair that came back promoted (R-X36). A dead leg never entered the loop
+    // repair that came back promoted (R-X36), and for a PROMOTED judge, which
+    // CHANNEL its one repair answered on (R-X49: `repairPromoted === 2`, the only
+    // value the gate above can record for it). A dead leg never entered the loop
     // and has its own louder channel below, so it is excluded rather than
     // labelled 'not-relaunched' with nothing to say it.
     if (!legDied && !standDown) {
       standDown = isPromotedLeg(leg)
         ? (attempts === 0 ? 'not-relaunched'
-          : attempts === 2 ? 'relaunch-unparseable' : 'relaunch-unrepaired')
+          : attempts === 2
+            ? (repairPromoted === 2 ? 'relaunch-repair-promoted' : 'relaunch-unparseable')
+            : 'relaunch-unrepaired')
         : (repairPromoted === null ? null : 'repair-promoted');
     }
     // #202: THE MISSING THIRD CASE. A dead judge leg still comes back as a leg
@@ -210,7 +231,7 @@ async function adjudicateJudgeLeg(ctx, o, leg, env) {
     // seat's row via `conformance: 'unstructured'`, and it is repairable.
     // #257 R-X32: a stood-down promoted judge is announced too (named mutant "STANDDOWNSILENT") — the rescued arm is below.
     // #257 R-X36: …and so is a judge whose own answer was real but whose repair answered in ITS reasoning channel (named mutant "REPAIRPROMOTEDSILENT").
-    if (legDied) { ctx.degrade.note(judgeDeadNote({ judge, seat, leg, judgesCount: judges.length, runId: o.runId })); } else if (isPromotedLeg(leg)) { ctx.degrade.note(promotedJudgeNote(judge, seat, leg, { attempts, rescued: false, standDown })); } else if (standDown === 'repair-promoted') { ctx.degrade.note(promotedJudgeNote(judge, seat, leg, { attempts, rescued: false, standDown, repairPromotedAttempt: repairPromoted })); }
+    if (legDied) { ctx.degrade.note(judgeDeadNote({ judge, seat, leg, judgesCount: judges.length, runId: o.runId })); } else if (isPromotedLeg(leg)) { ctx.degrade.note(promotedJudgeNote(judge, seat, leg, { attempts, rescued: false, standDown, repairPromotedAttempt: repairPromoted })); } else if (standDown === 'repair-promoted') { ctx.degrade.note(promotedJudgeNote(judge, seat, leg, { attempts, rescued: false, standDown, repairPromotedAttempt: repairPromoted })); }
     judgeResults.push({ judge, seat, ok: false, order: null, orderSeats: null, adjudications: null,
       // #251 item 3: the ONE `legDied` predicate above, carried forward rather
       // than re-derived downstream. run.js's thin-cross-review note needs to

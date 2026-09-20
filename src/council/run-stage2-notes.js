@@ -88,6 +88,8 @@ function judgeDeadNote({ judge, seat, leg, judgesCount, runId }) {
  *   · 'relaunch-promoted'   — the relaunch answered in its reasoning channel AGAIN.
  *   · 'relaunch-died'       — it came back with no usable text at all.
  *   · 'relaunch-unparseable'— it answered for real and the one repair also failed.
+ *   · 'relaunch-repair-promoted' — it answered for real and that one repair answered
+ *                             in ITS reasoning channel (R-X49, council round 5).
  *   · 'relaunch-unrepaired' — it answered for real and the cost ceiling arrived
  *                             before that repair could run (review I1).
  *   · 'not-relaunched'      — no relaunch ran: the cost ceiling arrived first.
@@ -104,9 +106,11 @@ function judgeDeadNote({ judge, seat, leg, judgesCount, runId }) {
  *   repairPromotedAttempt?: ?number, relaunchWaveId?: ?string, usedWaveId?: ?string}} [opts]
  *   `attempts` is the `-q<N>` counter the caller already tracks (1 = the
  *   relaunch, 2 = its one repair); `rescued` says whether an adjudication was
- *   used in the end; `repairPromotedAttempt` belongs to the R-X36 arm alone and
- *   is the attempt number of the repair that came back promoted — NOT
- *   `attempts`, which is how many ran in total. #257 R-X45: `relaunchWaveId` and
+ *   used in the end; `repairPromotedAttempt` is the attempt number of the `-q<N>`
+ *   repair that came back promoted — NOT `attempts`, which is how many ran in
+ *   total. It belongs to R-X36's arm and, under R-X49, to
+ *   'relaunch-repair-promoted', where it is the relaunch's one repair (2).
+ *   #257 R-X45: `relaunchWaveId` and
  *   `usedWaveId` belong to the RESCUED arm — the `-q<N>` id of the relaunch that
  *   was asked, and of the ask whose text was adjudicated. They are the wave ids,
  *   not a count, because the `-q` counter is run-wide rather than per judge.
@@ -149,6 +153,14 @@ function promotedJudgeNote(judge, seat, leg, { attempts = 0, rescued = false, st
     : ({ 'relaunch-promoted': `${relaunched}the relaunch answered in its reasoning channel again`,
       'relaunch-died': `${relaunched}the relaunch produced no usable text`,
       'relaunch-unparseable': `${relaunched}the relaunch's answer did not parse after its one repair`,
+      // R-X49 (council round 5, C2): the ending above cannot also stand for this
+      // one. Chair HQ2: a reader tuning prompt budgets must be able to tell a
+      // model that cannot follow the JSON schema from one that produced no answer
+      // text block at all — two different fixes, and the arm above names only the
+      // first. R-X36's `repair-promoted` sentence cannot be borrowed either: it
+      // opens `its own answer was real`, and this judge's own answer was its
+      // deliberation (named mutant "SEVENTHARMDROPPED").
+      'relaunch-repair-promoted': `${relaunched}the relaunch's answer did not parse and its repair answered in its reasoning channel`,
       // Review I1: the repair is NOT guaranteed to have run — `ctx.overBudget()`
       // is re-checked between the relaunch and it (run-stage2-judge.js's `while`),
       // which is why this is a state of its own rather than the arm above read
@@ -174,8 +186,13 @@ function promotedJudgeNote(judge, seat, leg, { attempts = 0, rescued = false, st
     // `, finish '<f>'` when the leg reports a finish — pinned by the `finish 'length'`
     // case in run-stage2-notes.test.js. R-X45 adds only these `data` fields, a fact
     // the prose never carried (named mutant "RELAUNCHWAVEIDDROPPED").
+    // R-X49: `repairPromotedAttempt` rides here too — the SAME field the R-X36
+    // arm above carries, so an operator filtering run.json for "which ask answered
+    // in the reasoning channel" reads one key, not two. Emit-when-set like its
+    // neighbours, so every other arm's `data` is byte-identical.
     data: { judge, seat: seat ? seat.id : null, reasoningTokens: reasoning, outputTokens: output,
       attempts, ...(relaunchRan ? { relaunched: true } : {}), ...(rescued ? { rescued: true } : {}),
+      ...(repairPromotedAttempt ? { repairPromotedAttempt } : {}),
       ...(relaunchWaveId ? { relaunchWaveId } : {}), ...(usedWaveId ? { usedWaveId } : {}) } };
 }
 

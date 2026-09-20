@@ -96,11 +96,11 @@ describe('judgeDeadNote — #202’s record, moved verbatim (#257 headroom)', ()
  * how each of those endings is said out loud, and it fires on EVERY one of them:
  * a silent path fails the amicus bar as hard as a crash.
  *
- * SEVEN ARMS, all pinned byte-exact below — `rescued` × {attempt 1, attempt 2},
- * and not-rescued × the five stand-down states ('relaunch-promoted',
- * 'relaunch-died', 'relaunch-unparseable', 'relaunch-unrepaired',
- * 'not-relaunched'), plus R-X36's 'repair-promoted' at the end, whose subject is
- * the REPAIR rather than the judge's own answer. C4 (council round 3) made that
+ * EIGHT ARMS, all pinned byte-exact below — `rescued` × {attempt 1, attempt 2},
+ * and not-rescued × the six stand-down states ('relaunch-promoted',
+ * 'relaunch-died', 'relaunch-unparseable', 'relaunch-repair-promoted' (R-X49),
+ * 'relaunch-unrepaired', 'not-relaunched'), plus R-X36's 'repair-promoted' at the
+ * end, whose subject is the REPAIR rather than the judge's own answer. C4 (council round 3) made that
  * cause ONE explicit state set by the caller, in place of the `relaunch` enum
  * this function used to re-derive it from together with `attempts`. `kind` stays
  * 'info' on all of them: a stood-down judge is already counted by
@@ -200,6 +200,58 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
     expect(note.effect).toBe(LOST);
     expect(note.data).toEqual({ judge: 'gpt', seat: null, reasoningTokens: 5, outputTokens: 2,
       attempts: 2, relaunched: true });
+    // R-X49's DISCRIMINATOR, from the other side: this ending is the one where
+    // the repair's own text was real and simply did not parse, so the record
+    // carries no `repairPromotedAttempt` at all.
+    expect('repairPromotedAttempt' in note.data).toBe(false);
+  });
+
+  /**
+   * #257 R-X49 (council round 5, C2 — gpt, major, 3-0). THE SEVENTH STAND-DOWN
+   * STATE. Chair HQ2: "If a judge's relaunch yields real but unparseable text,
+   * and the subsequent repair yields promoted reasoning, the final state is
+   * `relaunch-unparseable`. How can an operator tuning prompt budgets distinguish
+   * between a model that cannot follow the JSON schema and a model that refused
+   * to provide an answer text block entirely?" They cannot — and the two have
+   * different fixes, which is the same wrong-cause defect #202, R-X13 and R-X36
+   * were each raised to remove. R-X36's arm above cannot be reused for it: that
+   * one's opening clause is `its own answer was real`, and this judge's own
+   * answer was its deliberation.
+   *
+   * NAMED MUTANT — SEVENTHARMDROPPED: remove the `'relaunch-repair-promoted'`
+   * entry from the stand-down table in run-stage2-notes.js. Reds this test — the
+   * `|| 'not relaunched …'` fallback would then misname the ending as one where
+   * no relaunch ever ran.
+   */
+  test("STOOD DOWN — R-X49 'relaunch-repair-promoted': the relaunch answered for real and its one repair answered in ITS reasoning channel", () => {
+    const note = promotedJudgeNote('gpt', SEAT, promotedLeg({ reasoning: 32000, output: 1 }),
+      { attempts: 2, rescued: false, standDown: 'relaunch-repair-promoted',
+        repairPromotedAttempt: 2 });
+    expect(note).toEqual({
+      kind: 'info',
+      channel: 'judge-reasoning-only',
+      // `what` does not fork: the judge's OWN answer was still its deliberation.
+      what: 'judge gpt answered in its reasoning channel',
+      why: HEAD + RELAUNCHED + "the relaunch's answer did not parse and its repair answered "
+        + 'in its reasoning channel; ' + unread(32000, 1),
+      effect: LOST,
+      data: { judge: 'gpt', seat: 'gpt-1', reasoningTokens: 32000, outputTokens: 1,
+        attempts: 2, relaunched: true, repairPromotedAttempt: 2 },
+    });
+    // NOT the 'relaunch-unparseable' sentence — the whole point of the state.
+    expect(note.why).not.toContain('did not parse after its one repair');
+  });
+
+  test('R-X49: `repairPromotedAttempt` is emit-when-set — every other arm is byte-identical', () => {
+    // The field the R-X36 arm already uses, carried onto the promoted-ORIGINAL
+    // record for the one ending that has one. A caller that passes none (every
+    // other arm, and every pre-R-X49 record) gets a `data` with no such key.
+    const unparseable = promotedJudgeNote('gpt', SEAT, promotedLeg({ reasoning: 5, output: 2 }),
+      { attempts: 2, rescued: false, standDown: 'relaunch-unparseable' });
+    expect('repairPromotedAttempt' in unparseable.data).toBe(false);
+    const rescued = promotedJudgeNote('gpt', SEAT, promotedLeg({ reasoning: 90, output: 0 }),
+      { attempts: 2, rescued: true });
+    expect('repairPromotedAttempt' in rescued.data).toBe(false);
   });
 
   test("STOOD DOWN — 'relaunch-unrepaired': the ceiling arrived BEFORE the relaunch's repair", () => {
