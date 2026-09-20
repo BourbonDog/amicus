@@ -79,7 +79,7 @@ function isOutputLengthDeath({ finish, hasText }) {
  * The reason string. Every clause is an observation: `finish` and the two
  * counts are the engine's own record of the message — and the counts clause says
  * `token usage not reported` rather than minting a number the engine never gave
- * us, both when either count is not a finite number (#257 R-X44, round 4 D2) and
+ * us, both when either count is not a non-negative integer (#257 R-X44, round 4 D2; the spelling is R-X50's) and
  * when NO count in the record is positive (R-X44(c): see `reportedTokens` above —
  * this is the arm the product actually reaches). A REPORTED zero, beside a
  * positive count, stays a zero. #257 R-X50: the per-count test is
