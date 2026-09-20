@@ -12,11 +12,33 @@ describe('council/promoted — the one vocabulary for a promoted leg (#257)', ()
     }
   });
 
-  test('promotedFacts reads the leg usage tokens and finish, defaulting to 0 / null', () => {
+  /**
+   * R-X44 (council round 4, D2 major, both Confirmed 3-0): a count that was not
+   * REPORTED reads `null`, never a fabricated `0` — a leg whose usage the engine
+   * never recorded is not the same fact as a leg that genuinely used zero
+   * tokens. A REPORTED zero (an integer >= 0) stays `0`, because a reported
+   * zero is a fact, not a floor. Named mutant ZEROFABRICATED: restore `: 0` in
+   * place of `: null` in both ternaries — the absent-usage assertions below go
+   * red.
+   */
+  test('promotedFacts reads the leg usage tokens and finish; an unreported count is null, never a fabricated 0 (R-X44)', () => {
     expect(promotedFacts({ promoted: true, usage: { tokens: { reasoning: 40332, output: 1 } }, finish: 'stop' }))
       .toEqual({ reasoning: 40332, output: 1, finish: 'stop' });
-    expect(promotedFacts({ promoted: true })).toEqual({ reasoning: 0, output: 0, finish: null });
-    expect(promotedFacts({ promoted: true, usage: null, finish: 42 })).toEqual({ reasoning: 0, output: 0, finish: null });
+    // No usage at all.
+    expect(promotedFacts({ promoted: true })).toEqual({ reasoning: null, output: null, finish: null });
+    // `usage` present but not usable, and a `finish` of the wrong type.
+    expect(promotedFacts({ promoted: true, usage: null, finish: 42 })).toEqual({ reasoning: null, output: null, finish: null });
+    // `usage.tokens` present but empty.
+    expect(promotedFacts({ promoted: true, usage: { tokens: {} } })).toEqual({ reasoning: null, output: null, finish: null });
+    // Only one side reported.
+    expect(promotedFacts({ promoted: true, usage: { tokens: { reasoning: 40332 } } }))
+      .toEqual({ reasoning: 40332, output: null, finish: null });
+    // A REPORTED zero on both sides stays zero — it is a fact, not a floor.
+    expect(promotedFacts({ promoted: true, usage: { tokens: { reasoning: 0, output: 0 } } }))
+      .toEqual({ reasoning: 0, output: 0, finish: null });
+    // Not a non-negative integer (negative, non-integer) is not a report either.
+    expect(promotedFacts({ promoted: true, usage: { tokens: { reasoning: -1, output: 1.5 } } }))
+      .toEqual({ reasoning: null, output: null, finish: null });
   });
 
   test('promotedFacts is null for a leg that is not promoted', () => {
@@ -171,6 +193,27 @@ describe('council/promoted — the one vocabulary for a promoted leg (#257)', ()
     expect(reasoningOnlyClause({})).not.toBe(reasoningOnlyClause(true));
   });
 
+  /**
+   * R-X44 (Chair HQ2): `reasoningOnlyClause({})` used to render the fabricated
+   * `(0 reasoning / 0 output tokens)` for a leg whose usage was never recorded.
+   * R-X39 (round 3) already ruled that a truthy value in the `promoted` slot
+   * names the cause and is never swallowed — so the clause is NOT the empty
+   * string here, and it is not `reasoningOnlyClause(true)`'s bare sentence
+   * either (that would misreport a facts object as the boolean shape). What
+   * changes is only the NUMBER: the parenthetical now says the counts were
+   * never reported.
+   */
+  test('reasoningOnlyClause names the cause with "token usage not reported" when the facts carry no counts (R-X44)', () => {
+    expect(reasoningOnlyClause({}))
+      .toBe(' — it answered only in its reasoning channel (token usage not reported), which is not a review');
+    // A promoted leg with no usage at all — the real shape a caller passes.
+    expect(reasoningOnlyClause(promotedFacts({ promoted: true })))
+      .toBe(' — it answered only in its reasoning channel (token usage not reported), which is not a review');
+    expect(reasoningOnlyClause(true))
+      .toBe(' — it answered only in its reasoning channel, which is not a review');
+    for (const x of [null, undefined, '', 0, false, [], 'true']) { expect(reasoningOnlyClause(x)).toBe(''); }
+  });
+
   test('reasoningOnlyClause wording, with and without finish', () => {
     expect(reasoningOnlyClause({ reasoning: 40332, output: 1, finish: 'stop' }))
       .toBe(" — it answered only in its reasoning channel (40332 reasoning / 1 output tokens, finish 'stop'), which is not a review");
@@ -189,6 +232,25 @@ describe('council/promoted — the one vocabulary for a promoted leg (#257)', ()
       .toBe("40332 reasoning / 1 output tokens, finish 'stop'");
     expect(tokenSplit({ reasoning: 7, output: 0, finish: null })).toBe('7 reasoning / 0 output tokens');
     for (const x of [null, undefined, '', 0, false, [], 'facts']) { expect(tokenSplit(x)).toBe(''); }
+  });
+
+  /**
+   * R-X44: `tokenSplit` renders the counts only when BOTH are integers —
+   * otherwise the literal `token usage not reported`, never `null reasoning /
+   * null output tokens`. The finish clause is unchanged and still appends in
+   * both cases — a missing token count says nothing about whether the provider
+   * reported a finish reason. A REPORTED zero on both sides still renders the
+   * numbers: a reported zero is a fact.
+   */
+  test('tokenSplit renders "token usage not reported" when a count is missing, not a fabricated number (R-X44)', () => {
+    expect(tokenSplit({ reasoning: null, output: null, finish: 'stop' }))
+      .toBe("token usage not reported, finish 'stop'");
+    expect(tokenSplit({ reasoning: 40332, output: null, finish: null }))
+      .toBe('token usage not reported');
+    expect(tokenSplit({ reasoning: null, output: 0, finish: null }))
+      .toBe('token usage not reported');
+    expect(tokenSplit({ reasoning: 0, output: 0, finish: null }))
+      .toBe('0 reasoning / 0 output tokens');
   });
 
   /**

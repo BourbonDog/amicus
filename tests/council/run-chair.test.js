@@ -396,11 +396,11 @@ describe('#257: a promoted chair leg is no synthesis (R-X22)', () => {
       status: 'complete', summary: REASONING_TEXT, promoted: true, finish: 'stop',
       usage: { tokens: { reasoning: 40332, output: 1 } },
     })).toEqual({ outcome: 'no-output', reason: PROMOTED_REASON });
-    // No usage and no finish: promotedFacts floors both counters at 0 and the
-    // finish segment is dropped entirely.
+    // No usage and no finish: promotedFacts reports neither counter (R-X44 — null,
+    // never a fabricated 0) and the finish segment is dropped entirely.
     expect(classifyChairAttempt({ status: 'complete', summary: REASONING_TEXT, promoted: true }))
       .toEqual({ outcome: 'no-output', reason: 'answered only in its reasoning channel '
-        + '(0 reasoning / 0 output tokens); no synthesis to read' });
+        + '(token usage not reported); no synthesis to read' });
     // The control: a leg that is not promoted classifies exactly as it always has.
     expect(classifyChairAttempt({ status: 'complete', summary: 'Synthesis.' }))
       .toEqual({ outcome: 'completed', reason: null });

@@ -115,7 +115,12 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
   const SEAT = { id: 'gpt-1', alias: 'gpt' };
   const HEAD = 'its own answer was its deliberation, not a judgement; ';
   const RELAUNCHED = 'relaunched once with the original briefing, and ';
-  const unread = (r, o) => `the deliberation itself was read by nobody (${r} reasoning / ${o} output tokens)`;
+  // R-X44: mirrors promoted.js's tokenSplit — the counts render only when
+  // both are reported (integers); otherwise the literal `token usage not
+  // reported`, never a fabricated `null reasoning / null output tokens`.
+  const unread = (r, o) => `the deliberation itself was read by nobody (${
+    Number.isInteger(r) && Number.isInteger(o) ? `${r} reasoning / ${o} output tokens` : 'token usage not reported'
+  })`;
   const COUNTS = 'the adjudication counts; nothing else changes';
   const LOST = 'the judge is not counted; the cross-review proceeds with the judges that '
     + 'answered, and thin-cross-review fires below two';
@@ -226,11 +231,12 @@ describe('promotedJudgeNote — the note for a judge that answered in reasoning'
   test('the options object defaults to the never-relaunched arm', () => {
     const bare = promotedJudgeNote('qwen', null, { status: 'complete', promoted: true });
     expect(bare.why).toBe(HEAD + 'not relaunched — the cost ceiling was reached first; '
-      + unread(0, 0));
-    expect(bare.data).toEqual({ judge: 'qwen', seat: null, reasoningTokens: 0, outputTokens: 0,
+      + unread(null, null));
+    // R-X44: a leg with no usage counts reads null (not reported), never a
+    // fabricated 0 — the `data` field is a machine field, so the null rides
+    // there directly. An unbound seat is still null, unchanged by R-X32.
+    expect(bare.data).toEqual({ judge: 'qwen', seat: null, reasoningTokens: null, outputTokens: null,
       attempts: 0 });
-    // A leg with no usage counts reads zero rather than undefined, and an
-    // unbound seat is null — both unchanged by R-X32.
     expect(bare).toEqual(promotedJudgeNote('qwen', null,
       { status: 'complete', promoted: true }, {}));
   });

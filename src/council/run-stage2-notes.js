@@ -29,7 +29,11 @@ const { collapseExcerpt } = require('../utils/text-sanitize');
 // requires nothing), so this module stays cycle-free. Reading the token counts
 // through `promotedFacts` rather than off `leg.usage.tokens` by hand is what
 // keeps this module and ./promoted agreeing about the same field (R-X13).
-const { promotedFacts } = require('./promoted');
+// R-X44: `tokenSplit` renders the still-unread sentence's parenthetical too, so
+// an unreported count reads "token usage not reported" here exactly as it does
+// in the Stage-1 notes and the chair walk, rather than this module hand-rolling
+// its own copy that would have interpolated the literal word "null".
+const { promotedFacts, tokenSplit } = require('./promoted');
 
 /**
  * #202's judge-death record, moved VERBATIM out of `run-stage2.js`'s leg loop
@@ -126,8 +130,12 @@ function promotedJudgeNote(judge, seat, leg, { attempts = 0, rescued = false, st
   // A non-promoted leg cannot reach here (the call site gates on isPromotedLeg),
   // so the fallback is defensive only — it keeps the sentence renderable rather
   // than throwing inside an announcement.
-  const { reasoning, output } = promotedFacts(leg) || { reasoning: 0, output: 0 };
-  const unread = `the deliberation itself was read by nobody (${reasoning} reasoning / ${output} output tokens)`;
+  const facts = promotedFacts(leg) || { reasoning: null, output: null, finish: null };
+  const { reasoning, output } = facts;
+  // R-X44: `tokenSplit` decides "token usage not reported" vs the numbers, so a
+  // judge leg whose usage was never recorded reads that here too — `data`
+  // below still carries the raw (possibly null) counts, a machine field.
+  const unread = `the deliberation itself was read by nobody (${tokenSplit(facts)})`;
   const relaunched = 'relaunched once with the original briefing, and ';
   // One sentence per ENDING, naming what actually happened rather than the one
   // outcome the spec first imagined.

@@ -59,6 +59,15 @@ const FINISH_LONE_UNDERSCORE = /(?<![A-Za-z0-9])_|_(?![A-Za-z0-9])/g;
  * document; null for a leg that is not promoted so callers can spread
  * `...(facts ? { promoted: facts } : {})`.
  *
+ * `reasoning` and `output` are null when the count was not REPORTED — absent
+ * `usage`, absent `usage.tokens`, or a value that is not a non-negative
+ * integer — never a fabricated `0` (R-X44, council round 4, D2 major, both
+ * Confirmed 3-0: "promotedFacts floors absent or invalid usage tokens to 0, so
+ * every announcement asserts a confident '(0 reasoning / 0 output tokens)' for
+ * a promoted leg whose usage was not recorded"). A REPORTED zero stays `0` —
+ * a reported zero is a fact, not the same thing as an unrecorded one.
+ * `tokenSplit` below is where that distinction actually reaches prose.
+ *
  * `finish` is PROVIDER text, and every PROSE surface interpolates it RAW: the
  * five Stage-1 announcements, the `Notice:` lines run-degrade.js writes to
  * stderr, the degrade text carried in run.json / verdict.json, and the MARKDOWN
@@ -133,8 +142,8 @@ function promotedFacts(leg) {
       .replace(FINISH_LONE_UNDERSCORE, '')
     : '';
   return {
-    reasoning: Number.isInteger(t.reasoning) && t.reasoning >= 0 ? t.reasoning : 0,
-    output: Number.isInteger(t.output) && t.output >= 0 ? t.output : 0,
+    reasoning: Number.isInteger(t.reasoning) && t.reasoning >= 0 ? t.reasoning : null,
+    output: Number.isInteger(t.output) && t.output >= 0 ? t.output : null,
     finish: finish || null,
   };
 }
@@ -142,14 +151,25 @@ function promotedFacts(leg) {
 /**
  * The token split every announcement of a promoted leg quotes:
  * `<r> reasoning / <o> output tokens[, finish '<f>']`. ONE home (council r2) —
- * the clause below and chair-fallback.js's chair reason both read it, so the
- * wording cannot drift between the Stage-1 notes and the chair walk. The EMPTY
- * STRING for anything that is not a facts object, matching the clause.
+ * the clause below, run-stage2-notes.js's still-unread sentence and
+ * chair-fallback.js's chair reason all read it, so the wording cannot drift
+ * between the Stage-1 notes, the Stage-2 judge notes and the chair walk. The
+ * EMPTY STRING for anything that is not a facts object, matching the clause.
+ *
+ * R-X44 (Chair HQ2): the counts render ONLY when BOTH `reasoning` and `output`
+ * are integers (a REPORTED count, possibly zero); otherwise the literal
+ * `token usage not reported` — never `null reasoning / null output tokens`,
+ * and never a fabricated number either. The finish clause is unchanged and
+ * still appends in both cases: whether a `finish` reached the leg is
+ * independent of whether the token usage did.
  */
 function tokenSplit(facts) {
   if (!facts || typeof facts !== 'object' || Array.isArray(facts)) { return ''; }
   const finish = facts.finish ? `, finish '${facts.finish}'` : '';
-  return `${facts.reasoning} reasoning / ${facts.output} output tokens${finish}`;
+  const counts = Number.isInteger(facts.reasoning) && Number.isInteger(facts.output)
+    ? `${facts.reasoning} reasoning / ${facts.output} output tokens`
+    : 'token usage not reported';
+  return `${counts}${finish}`;
 }
 
 /** The sentence both arms of the clause share, so the two cannot drift apart. */
