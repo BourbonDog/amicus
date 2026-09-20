@@ -21,8 +21,8 @@ const { sumWaveUsage } = require('../utils/pricing');
 // Cost-row role tag (Plan 2 final review F1, extended v4.7 D6): #83 gave
 // judges their own runStats row, so a bench model can now appear twice
 // (seat + judge), indistinguishable by `model` alone. v4.7's row-per-launch
-// producers (chair-attempt/repair/superseded) create the exact same
-// collision for their model. Tag ONLY these four roles — old verdicts have
+// producers (chair-attempt/repair/superseded — and, since issue 257 R-X45, relaunch) create the exact same
+// collision for their model. Tag ONLY these five roles — old verdicts have
 // none of them, so chair/critic/lens/seat rows stay byte-identical to their
 // historical rendering (report.test.js:189-199 pins the judge case exactly).
 // Object.create(null): a plain `{...}` literal inherits Object.prototype, so a role
