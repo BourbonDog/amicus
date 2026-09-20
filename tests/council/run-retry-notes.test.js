@@ -466,6 +466,16 @@ describe('#257 R-X42 every retry-note arm bounds its reason; data stays raw', ()
     expect(n.data.reason).toBe(RAW);
   });
 
+  // Round-1 ruling 2: bounding an absent reason yields '', and makeDegrade rejects a blank
+  // `why` — so this arm takes the SAME MINOR-7c fallback the dead-wave arm has always had.
+  // Never `why: ''`, and never the literal string "undefined" either.
+  test('skippedWaveNote: a falsy reason reads "no reason recorded", never an empty why', () => {
+    for (const reason of [null, undefined, '', '   ']) {
+      expect(skippedWaveNote({ waveId: 'r1-s1', models: ['glm'], reason }).why)
+        .toBe('no reason recorded');
+    }
+  });
+
   test('retryLegStillDeadNote, the WAVE arm: bounded in the why, raw on data.firstFailure', () => {
     const ff = { class: 'wave', waveId: 'r1-s1', reason: RAW };
     const n = note(ff, { status: 'timeout', error: null });

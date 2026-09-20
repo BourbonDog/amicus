@@ -158,8 +158,58 @@ describe("kind 'info' + channel 'output-truncated' (#218 PR 3)", () => {
     expect(formatDegrade(r)).toBe("Note: seat kimi's review was cut at its output reservation — the provider stopped for length (finish 'length') after 31000 reasoning / 700 output tokens; the review ends where the reservation ended. The review is in the packet as far as it got, and its header in the chair packet says it was cut; nothing else changes. Try: raise outputBudget in config.json (docs/configuration.md, Output budget).\n");
     expect(r.data).toEqual({ seat: 'kimi', finish: 'length', reasoningTokens: 31000, outputTokens: 700 });
   });
-  test('a leg with no usage still formats with zero counts', () => {
-    expect(makeDegrade(truncatedReviewNote('glm', { finish: 'length' })).why).toContain('after 0 reasoning / 0 output tokens;');
+  // #257 R-X44(b) (round-4 fix round 1): a leg with NO usage record has no token counts to
+  // report, and 'after 0 reasoning / 0 output tokens' was a measurement the engine never made.
+  // Named mutant "TRUNCATEDZEROS": restore the `|| 0` floor.
+  test('a leg with no usage says the usage was not reported — it never mints zeros', () => {
+    const r = makeDegrade(truncatedReviewNote('glm', { finish: 'length' }));
+    expect(r.why).toBe("the provider stopped for length (finish 'length') — token usage not reported; "
+      + 'the review ends where the reservation ended');
+    expect(r.data).toEqual({ seat: 'glm', finish: 'length', reasoningTokens: null, outputTokens: null });
+  });
+  // The PROSE is all-or-nothing — half a split is not a split a reader can use — while `data`
+  // is per-field: an unusable count is `null`, a usable one is itself. Never 0 for either.
+  test.each([
+    ['reasoning missing', { output: 700 }, null, 700],
+    ['output missing', { reasoning: 31000 }, 31000, null],
+    ['a non-integer count', { reasoning: 31000.5, output: 700 }, null, 700],
+    ['a negative count', { reasoning: -1, output: 700 }, null, 700],
+    ['a NaN count', { reasoning: NaN, output: 0 }, null, 0],
+    ['a string count', { reasoning: '31000', output: 700 }, null, 700],
+  ])('one unusable count (%s) makes the whole split unreported', (_n, tokens, wantR, wantO) => {
+    const r = makeDegrade(truncatedReviewNote('glm', { finish: 'length', usage: { tokens } }));
+    expect(r.why).toContain("(finish 'length') — token usage not reported;");
+    expect(r.data).toEqual({ seat: 'glm', finish: 'length', reasoningTokens: wantR, outputTokens: wantO });
+  });
+  test('REPORTED zeros stay zeros — the note is byte-identical to the pre-R-X44 wording', () => {
+    const r = makeDegrade(truncatedReviewNote('glm', { finish: 'length', usage: { tokens: { reasoning: 0, output: 0 } } }));
+    expect(r.why).toBe("the provider stopped for length (finish 'length') after 0 reasoning / 0 output tokens; "
+      + 'the review ends where the reservation ended');
+    expect(r.data).toEqual({ seat: 'glm', finish: 'length', reasoningTokens: 0, outputTokens: 0 });
+  });
+
+  /**
+   * #257 R-X44(b) — ONE spelling of the not-reported literal across every home that mints it.
+   *
+   * ⚠️ READ BEFORE CHANGING. The ruling asks for a strict equality against
+   * `council/promoted.js :: tokenSplit` for an absent split. That file is owned by fix G1 in
+   * another worktree and its not-reported rendering has NOT landed here: MEASURED on this
+   * branch, `tokenSplit({ reasoning: null, output: null, finish: null })` still returns
+   * `'null reasoning / null output tokens'`. So the third home is pinned to the two-value set
+   * below — which is green before AND after G1 lands, and RED the moment any home invents a
+   * THIRD wording, which is the drift the ruling exists to stop. When G1 integrates, drop the
+   * pre-fix member and this becomes the strict equality as ruled.
+   */
+  test('R-X44(b) cross-module: the not-reported literal has ONE spelling in every home', () => {
+    const { formatOutputLengthReason } = require('../../src/utils/output-length');
+    const { tokenSplit } = require('../../src/council/promoted');
+    const NOT_REPORTED = 'token usage not reported';
+    expect(truncatedReviewNote('glm', { finish: 'length' }).why)
+      .toContain(`(finish 'length') — ${NOT_REPORTED};`);
+    expect(formatOutputLengthReason({ tokens: null, budget: null }))
+      .toContain(`— ${NOT_REPORTED}; outputBudget`);
+    expect([NOT_REPORTED, 'null reasoning / null output tokens'])
+      .toContain(tokenSplit({ reasoning: null, output: null, finish: null }));
   });
 });
 
