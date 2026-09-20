@@ -171,13 +171,13 @@ async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedI
   if (isAbortExit(r2.exitCode)) { return { aborted: r2.exitCode }; }
   const leg2 = r2.leg && r2.leg.status === 'complete' ? r2.leg : null;
   parsed = leg2 && !isPromotedLeg(leg2) ? parseRevote(leg2.summary, expectedIds) : parsed; // #257 R-X23 (named mutant "REVOTEREPAIRPROMOTEDUSED")
-  const conformance = parsed.ok ? 'repaired' : 'unstructured';
+  const conformance = parsed.ok ? 'repaired' : 'unstructured'; const promotedRetry = r2.leg && isPromotedLeg(r2.leg) ? { alias: judge, kind: isPromotedLeg(leg) ? 'relaunch' : 'repair' } : null; // #257 R-X48: run-debate.js:91's marker, re-vote side — the round note is built from THIS, never re-derived from whichever row the branch below happens to leave. `leg` is a parameter here and is never reassigned, so the wave-1 leg is readable from either arm. Named mutants "DOUBLEPROMOTEDUNNAMED", "PROMOTEDRETRYKINDLOST".
   // Symmetric with runDefenseSolo's `if (leg2) { leg = leg2; }` — otherwise
   // revote-<model>.md and the runStats row keep the PRE-repair output.
   return leg2 && (!isPromotedLeg(leg2) || isPromotedLeg(leg)) // #257 R-X46 (D6), the re-vote half of run-debate.js's condition: supersede only when the retry leg is REAL or the wave-1 leg was itself promoted, so a promoted repair never replaces — and R-X30 never silences — real text it failed to repair. Named mutant "REVOTEPROMOTEDREPAIRSUPERSEDES" (restore the bare `leg2 ?`).
-    ? { aborted: null, parsed, conformance, outLeg: leg2,
+    ? { aborted: null, parsed, conformance, outLeg: leg2, promotedRetry,
         supersededRow: legRow(judge, leg, 'unstructured'), repairRow: null }
-    : { aborted: null, parsed, conformance, outLeg: leg,
+    : { aborted: null, parsed, conformance, outLeg: leg, promotedRetry,
         supersededRow: null, repairRow: legRow(judge, r2.leg, 'unstructured', isPromotedLeg(leg)) }; // #257 R-X45: a promoted re-vote's retry was a RELAUNCH (R-X33) — when it produces no usable leg its row says so, not 'repair' (named mutant "REVOTERELAUNCHROLEREPAIR")
 }
 
@@ -223,7 +223,7 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
   const byJudge = {}, legs = [];
   // v4.7 D2/E4: mirrors runDefenseSolo's supersededLeg/repairLeg — one list each,
   // accumulated across every judge in this wave (most judges contribute neither).
-  const supersededLegs = [], repairLegs = [];
+  const supersededLegs = [], repairLegs = [], promotedRetries = []; // #257 R-X48: the third list is the round NOTE's, and no branch of the retry decides membership of it.
   const rawLegs = (res.wave && res.wave.legs) || [];
   // §3.4's roster-padding pattern now lives in `stage1-bind.js ::
   // bindPaddedWave` (v4.8 SI-27) — why the roster is padded rather than
@@ -247,7 +247,7 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
       if (rep.aborted) { return { aborted: rep.aborted }; }
       ({ parsed, conformance, outLeg } = rep);
       if (rep.supersededRow) { supersededLegs.push(rep.supersededRow); }
-      if (rep.repairRow) { repairLegs.push(rep.repairRow); }
+      if (rep.repairRow) { repairLegs.push(rep.repairRow); } if (rep.promotedRetry) { promotedRetries.push(rep.promotedRetry); }
     }
     // ⚠️ Two DIFFERENT values on the same iteration: `byJudge`'s key is the SEAT
     // (applyDebate joins it against `(a.seat || a.judge)`), while the leg's
@@ -294,7 +294,7 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
       conformance, summary: outLeg.summary || '', waveId: outLeg.waveId, seat,
       ...(outLeg.model ? { resolvedModel: outLeg.model } : {}), ...(outLeg.promoted === true ? { promoted: true } : {}) }); // #257 R-X26 (named mutant "REVOTELITERALPROMOTEDDROPPED")
   }
-  return { byJudge, legs, supersededLegs, repairLegs };
+  return { byJudge, legs, supersededLegs, repairLegs, promotedRetries };
 }
 
 module.exports = { legOpts, legRow, runRevoteWave };

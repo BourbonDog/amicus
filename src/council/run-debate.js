@@ -73,8 +73,8 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
   // (usable or not: a promoted repair leg is complete but UNPARSEABLE, and `leg = leg2` below
   // still makes it the recorded leg, carrying `promoted: true` — #257 R-X26), or the failed
   // repair attempt itself when the repair did not complete — retained so runDebate can turn it
-  // into an extra debate-defense runStats row. Both null when no repair is attempted at all.
-  let supersededLeg = null, repairLeg = null;
+  // into an extra debate-defense runStats row. Both null when no repair is attempted at all. #257 R-X48: `promotedRetry` below is the ROUND NOTE's record and is NOT one of those rows — it is set at :91 regardless of which branch the retry leg takes.
+  let supersededLeg = null, repairLeg = null, promotedRetry = null;
   if (leg && !parsed.ok) {
     const repairId = `${waveId}r`;
     runState.appendStageWave(ctx.o.runDir, 'debate-defense', repairId);
@@ -88,7 +88,7 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
     if (isAbortExit(res2.exitCode)) { return { raiser: raiserKey, aborted: res2.exitCode }; }
     const leg2 = res2.leg && res2.leg.status === 'complete' ? res2.leg : null;
     parsed = leg2 && !isPromotedLeg(leg2) ? parseDebateDefense(leg2.summary, expectedIds) : parsed; // #257 R-X23 (named mutant "DEFENSEREPAIRPROMOTEDUSED")
-    conformance = parsed.ok ? 'repaired' : 'unstructured';
+    conformance = parsed.ok ? 'repaired' : 'unstructured'; promotedRetry = res2.leg && isPromotedLeg(res2.leg) ? { alias: raiserAlias, kind: isPromotedLeg(leg) ? 'relaunch' : 'repair' } : null; // #257 R-X48: the EXPLICIT marker the round note is built from, set where the fact is KNOWN — this RETRY answered only in its reasoning channel, complete or not, superseding or not. ⚠️ It MUST stay ABOVE the next line: `leg` is still the WAVE-1 leg here, and that is what decides `kind` — a promoted wave-1's retry was a RELAUNCH with the original brief (R-X33), anything else a repair. Named mutants "DOUBLEPROMOTEDUNNAMED", "PROMOTEDRETRYKINDLOST" (tests/council/run-debate.test.js).
     if (leg2 && (!isPromotedLeg(leg2) || isPromotedLeg(leg))) { supersededLeg = legRow(raiserAlias, leg, 'unstructured'); leg = leg2; } // #257 R-X46 (D6): supersede ONLY when the retry leg is real, or when the wave-1 leg was itself promoted. The third case — a defence that answered with REAL prose that merely did not parse, whose one repair came back PROMOTED — used to make that non-answer the kept leg, and R-X30 then stood its artifact down, so the seat's real text was written nowhere at all. Now the wave-1 text stays kept ('unstructured', its rebuttal artifact written as before #257 because the kept leg is not promoted) and the promoted repair is the repair row, which carries `promoted: true` off its own leg (R-X26). Named mutant "DEFENSEPROMOTEDREPAIRSUPERSEDES" (restore the bare `if (leg2)`).
     else { repairLeg = legRow(raiserAlias, res2.leg, 'unstructured', isPromotedLeg(leg)); } // #257 R-X45: a promoted defence's retry was a RELAUNCH (R-X33) — its row says so (named mutant "DEBATERELAUNCHROLEREPAIR")
   }
@@ -102,7 +102,7 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
       // debate.js :: mk forwards it — it is the one leg-sourced field that does).
       ...(leg.promoted === true ? { promoted: true } : {}),
       ...(leg.model ? { resolvedModel: leg.model } : {}) } : stub,
-    supersededLeg, repairLeg };
+    supersededLeg, repairLeg, promotedRetry };
 }
 
 /**
@@ -192,7 +192,7 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
   const stampedInput = { ...tallyInput, findings: tallyInput.findings.map(f => ({ ...f, previousTier: previousTier[f.id] })) };
 
   // ---- Re-vote mini-wave (disputing judges only) ----
-  let revoteByJudge = {}, revoteLegs = [], revoteSuperseded = [], revoteRepairs = [];
+  let revoteByJudge = {}, revoteLegs = [], revoteSuperseded = [], revoteRepairs = [], revotePromoted = [];
   const defendedOrAmended = bundleFor(defenseResults, tallyInput);
   // Seat ids (D6: one entry per disputing SEAT, so a twin bench launches two legs
   // where one launched before). runRevoteWave needs the seat OBJECTS too — for the
@@ -215,7 +215,7 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
     revoteByJudge = rv.byJudge;
     revoteLegs = rv.legs;
     revoteSuperseded = rv.supersededLegs;
-    revoteRepairs = rv.repairLegs;
+    revoteRepairs = rv.repairLegs; revotePromoted = rv.promotedRetries; // #257 R-X48: the ROWS and the round-note MARKERS are two different lists — the second is never derived from the first.
     // revote-<model>.md per surviving judge leg, mirroring rebuttal-<model>.md
     // (spec §5.1 'raw outputs revote-<model>.md').
     materializeDebate(ctx.o.runDir, revoteLegs, 'revote');
@@ -294,7 +294,7 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
 
   return { debatedInput, debateFindings, debateSummary, addendumOutcomes,
     defenseLegs: defenseResults.map(d => d.leg), revoteLegs, verdictChanges,
-    degraded, aborted: null, revoteLaunched, promotedRepairs: [...new Map([...defenseResults.map(d => d.repairLeg), ...revoteRepairs].filter(r => r && r.promoted === true).map(r => [(r.relaunch === true ? 'relaunch\0' : 'repair\0') + r.model, { alias: r.model, kind: r.relaunch === true ? 'relaunch' : 'repair' }])).values()] }; // #257 R-X46: R-X36's rule applied to the debate — a `promoted: true` row is never the ONLY record of itself, so the round's note names it. MEASURED off the retry rows rather than re-derived: a row is here exactly when the retry leg itself carried `promoted`. The gate that decides which retries reach this list is `leg2 = res2.leg && res2.leg.status === 'complete' ? … : null`, NOT the leg's error-ness — `promoted` is minted on a completed, TIMED-OUT or aborted leg (council-tally.schema.json's own `promoted` description) and only never on `status: 'error'`. So case (iii) is the common member, but a promoted retry that TIMED OUT lands here too, including one whose wave-1 leg was also promoted (a `role: 'relaunch'` row). The clause is true of every one of them — each did answer only in its reasoning channel, and each row carries `promoted`, which is what R-X36's rule asks — so the list is deliberately NOT narrowed to case (iii); it is "every retry that answered in its reasoning channel". Fix round 3: each entry therefore carries its KIND beside the alias, read off `r.relaunch` — the SAME mark `debate.js :: mk` stamps `role: 'relaunch'` from — so run-debate-stage.js's clause names a relaunch a relaunch and never re-introduces the A3/C2 misnaming R-X45 removed from the record. De-duplicated per (kind, alias): a twin bench gives two seats one alias. run-debate-stage.js renders the clause. Fix round 1: the ALIASES, not a boolean — the note is one per ROUND, so "its repair" stops being readable the moment two defences are in it. `legRow`'s `model` IS the alias (raiserAlias / judge), de-duplicated because a twin bench gives two seats one alias.
+    degraded, aborted: null, revoteLaunched, promotedRepairs: [...new Map([...defenseResults.map(d => d.promotedRetry), ...revotePromoted].filter(Boolean).map(r => [r.kind + '\0' + r.alias, r])).values()] }; // #257 R-X48 (council round 5 — C1 major, A1 minor, D3 minor, one gap raised three ways): the round's note names EVERY retry that answered in its reasoning channel, whichever BRANCH its leg took. Built from the EXPLICIT `promotedRetry` markers minted at run-debate.js:91 and run-debate-revote.js:174 — NEVER inferred from the retry ROWS, which is what this line did through fix round 3 and what made membership depend on the branch: a promoted relaunch of an ALREADY-promoted defence or re-vote that COMPLETES takes the supersede arm (R-X46 case ii) and leaves no repair row at all, so it was silent, while the symmetric case (a REAL wave-1 whose promoted repair completes, case iii) WAS named. One fact about one seat, accounted two ways, with the double-promoted seat left visible only through its row's machine `promoted: true` — exactly what R-X36's rule (a `promoted: true` row is never the ONLY record of itself) forbids. Round 4 proved only the TIMED-OUT double-promoted case reachable and missed the complete one; a marker set where the fact is KNOWN removes the derivation altogether. The ROWS do not change: case (ii) still supersedes and its rebuttal/revote row still carries `promoted`. Each marker carries its KIND beside the alias — 'relaunch' when the WAVE-1 leg was promoted (its retry was a relaunch with the ORIGINAL briefing, R-X33), 'repair' otherwise — so run-debate-stage.js :: promotedRepairClause names a relaunch a relaunch and never re-introduces the A3/C2 misnaming R-X45 removed from the record. De-duplicated per (kind, alias): a twin bench gives two seats one alias, and `legRow`'s `model`/the marker's `alias` are both alias-valued. ⚠️ The separator is the TWO-CHARACTER source escape `\0`, never a raw NUL byte — round 4 shipped two raw ones on this line once. run-debate-stage.js renders the clause; the aggregation stays here.
 }
 
 module.exports = { runDebate, nothingToDebate, disputingJudges, debateTargets };

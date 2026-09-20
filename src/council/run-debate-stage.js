@@ -144,10 +144,13 @@ async function runDebateStage(ctx, { provisional, provisionalInput, overBudget }
           what: 'the debate round did not complete cleanly',
           // #257 R-X46: R-X36's rule, applied to the debate — a `promoted: true`
           // row is never the only record of itself. When a defence's or re-vote's
-          // repair came back promoted (case iii: the wave-1 REAL text was kept
-          // rather than superseded), the prose NAMES whose it was (fix round 1;
-          // see promotedRepairClause above). The clause is '' for every other
-          // degraded round, so every other `why` is byte-identical.
+          // RETRY came back promoted the prose NAMES whose it was (fix round 1;
+          // see promotedRepairClause above). R-X48: that is EVERY such retry,
+          // whichever branch its leg took — run-debate.js builds `promotedRepairs`
+          // from explicit markers, not from the rows, so the double-promoted
+          // COMPLETE relaunch (R-X46 case ii, which supersedes and leaves no
+          // repair row) is named too. The clause is '' for every other degraded
+          // round, so every other `why` is byte-identical.
           why: 'one or more defense or re-vote legs died or returned unstructured output'
             + promotedRepairClause(dbg.promotedRepairs),
           effect: 'affected findings keep their provisional tier; will exit degraded (2)',

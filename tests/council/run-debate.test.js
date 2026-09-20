@@ -1686,6 +1686,167 @@ describe('runDebate — a promoted repair never supersedes real text (#257 R-X46
       expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(
         `${HEAD}; the relaunches of gemini and gpt answered only in their reasoning channels again`);
     });
+
+    /**
+     * #257 R-X48 (council round 5 — C1 major 3-0, A1 minor 3-0, D3 minor 3-0:
+     * one gap raised three ways) — A PROMOTED RETRY IS NAMED WHICHEVER BRANCH
+     * ITS LEG TOOK.
+     *
+     * Fix round 3 read the clause's entries off the retry ROWS, so WHICH retries
+     * reached the note depended on which BRANCH the retry leg took. A promoted
+     * relaunch of an already-promoted defence or re-vote that COMPLETES takes the
+     * supersede arm (R-X46 case ii) and leaves `repairLeg` / `repairRow` null, so
+     * the round's prose said nothing about it — while the symmetric case (a REAL
+     * wave-1 whose promoted repair completes, case iii) WAS named. The same fact
+     * about the same seat, accounted two different ways, with the double-promoted
+     * seat visible only through its row's machine `promoted: true` — exactly what
+     * R-X36's rule forbids. Round 4's fix round 3 proved only the TIMED-OUT
+     * double-promoted case reachable; the COMPLETE one was missed.
+     *
+     * The fix is an explicit `promotedRetry: { alias, kind }` marker, set where
+     * the fact is KNOWN — in `runDefenseSolo` and `repairRevoteLeg`, off the
+     * retry leg itself, complete or not, superseding or not — and never inferred
+     * from a row. The rows do not change: the double-promoted complete case still
+     * supersedes and its rebuttal/revote row still carries `promoted: true`.
+     *
+     * NAMED MUTANT — DOUBLEPROMOTEDUNNAMED: derive `promotedRepairs` from the
+     * rows again (fix round 3's expression). Reds the two COMPLETE
+     * double-promoted tests below.
+     * NAMED MUTANT — PROMOTEDRETRYKINDLOST: always mint `kind: 'repair'`. Reds
+     * every relaunch test below.
+     */
+    test('DEFENCE: a COMPLETE promoted relaunch of a promoted defence is NAMED — and still supersedes', async () => {
+      const tmp = mkTmp('run-debate-rx48-defence-');
+      const input = manyRaiserInput(['gemini']);
+      const inReasoning = defenseOut([{ id: 'F1', action: 'defend', argument: 'caps at 5' }]);
+      const ctx = ctxFor(tmp, {
+        // Both legs promoted and BOTH complete → R-X46 case (ii): the relaunch
+        // supersedes, so the row-derived list saw nothing at all.
+        launchSolo: async (opts) => {
+          const l = promotedLeg('gemini', inReasoning, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      const res = await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      // The ROWS are unchanged (R-X46 case ii) — this fix is prose-only.
+      const rows = res.debatedInput.runStats.filter(r => r.model === 'gemini');
+      expect(rows.find(r => r.role === 'rebuttal')).toMatchObject({ waveId: 'r-d1r', promoted: true });
+      expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-d1', promoted: true });
+      expect(rows.some(r => r.role === 'repair' || r.role === 'relaunch')).toBe(false);
+      // …and the prose now names it, as the RELAUNCH it was (R-X33).
+      const why = ctx.degrade.all().find(n => n.channel === 'debate-degraded').why;
+      expect(why).toBe(`${HEAD}; gemini's relaunch answered only in its reasoning channel again`);
+      expect(why).not.toContain('repair');
+    });
+
+    test('RE-VOTE: a COMPLETE promoted relaunch of a promoted re-vote is NAMED — and still supersedes', async () => {
+      const tmp = mkTmp('run-debate-rx48-revote-');
+      const input = provisionalInput();
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (opts.waveId === 'r-d1') {
+            const l = leg('gemini', defended, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          // gpt's relaunch: promoted AGAIN and COMPLETE → the supersede arm.
+          const l = promotedLeg('gpt', gptFlip, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => ({ exitCode: 0, wave: wave([
+          promotedLeg('gpt', gptFlip, 'r-rv', 1),
+          leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+      });
+      ctx.o.debate = true;
+      const res = await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      const rows = res.debatedInput.runStats.filter(r => r.model === 'gpt');
+      expect(rows.find(r => r.role === 'revote')).toMatchObject({ waveId: 'r-rv-gptr', promoted: true });
+      expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-rv', promoted: true });
+      expect(rows.some(r => r.role === 'repair' || r.role === 'relaunch')).toBe(false);
+      const why = ctx.degrade.all().find(n => n.channel === 'debate-degraded').why;
+      expect(why).toBe(`${HEAD}; gpt's relaunch answered only in its reasoning channel again`);
+      expect(why).not.toContain('repair');
+    });
+
+    test('RE-VOTE control: a TIMED-OUT promoted relaunch is still named a relaunch (unchanged)', async () => {
+      const tmp = mkTmp('run-debate-rx48-revote-timeout-');
+      const input = provisionalInput();
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (opts.waveId === 'r-d1') {
+            const l = leg('gemini', defended, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          const l = promotedTimeout('gpt', gptFlip, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => ({ exitCode: 0, wave: wave([
+          promotedLeg('gpt', gptFlip, 'r-rv', 1),
+          leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(
+        `${HEAD}; gpt's relaunch answered only in its reasoning channel again`);
+    });
+
+    test('RE-VOTE control: a promoted repair of REAL wave-1 text is still named a repair (case iii)', async () => {
+      const tmp = mkTmp('run-debate-rx48-revote-repair-');
+      const input = provisionalInput();
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (opts.waveId === 'r-d1') {
+            const l = leg('gemini', defended, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          const l = promotedLeg('gpt', gptFlip, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        // gpt's wave-1 re-vote is REAL prose that merely did not parse.
+        launchWave: async () => ({ exitCode: 0, wave: wave([
+          leg('gpt', REAL_BUT_UNPARSEABLE, 'r-rv', 1),
+          leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      const why = ctx.degrade.all().find(n => n.channel === 'debate-degraded').why;
+      expect(why).toBe(`${HEAD}; gpt's repair answered only in its reasoning channel`);
+      expect(why).not.toContain('relaunch');
+    });
+
+    test('DEFENCE control: a retry that answered in PROSE is not named — the why is byte-identical', async () => {
+      const tmp = mkTmp('run-debate-rx48-real-retry-');
+      const input = manyRaiserInput(['gemini']);
+      const ctx = ctxFor(tmp, {
+        // Wave 1 AND its repair both answer with REAL prose that simply does not
+        // parse: the round degrades, but no leg answered in a reasoning channel,
+        // so the clause stays empty and the `why` is byte-identical.
+        launchSolo: async (opts) => {
+          const l = leg('gemini', REAL_BUT_UNPARSEABLE, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(HEAD);
+    });
   });
 });
 describe('runDebate — cost ceiling is a WHOLE-ROUND gate before the re-vote wave (spec §5.7)', () => {
