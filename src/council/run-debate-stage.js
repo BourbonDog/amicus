@@ -42,8 +42,13 @@ const now = () => new Date().toISOString();
  * R-X36 exists to remove (fix round 1). Fix round 3 then fixed the other half:
  * calling a RELAUNCH a "repair" is precisely the misnaming the council raised as
  * A3/C2, and which R-X45 removed from the runStats record — the prose must not
- * re-introduce it. The kind rides beside the alias, read off the row's own
- * role-deciding mark, so the sentence and the row can never disagree.
+ * re-introduce it. The kind rides beside the alias on the `promotedRetry` MARKER
+ * that `runDefenseSolo` / `repairRevoteLeg` set where the fact is known — off the
+ * WAVE-1 leg's own promotion, at the retry site — so the sentence and the row can
+ * never disagree because the sentence no longer reads the row at all (#257 R-X48).
+ * It DID read the row until R-X48, off the row's `relaunch` transport mark, and
+ * that is exactly why R-X46 case ii — a promoted relaunch that COMPLETES, so it
+ * supersedes and leaves NO retry row — went unnamed for a whole round.
  *
  * A relaunch clause says "again" because that is what happened: a promoted
  * defence or re-vote was RE-ASKED with its original briefing (R-X33) and
@@ -58,8 +63,10 @@ const now = () => new Date().toISOString();
  * Returns '' for an empty/absent list, which is what keeps every other degraded
  * round's `why` byte-identical (named mutants "DEBATEPROMOTEDREPAIRSILENT",
  * "DEBATEPROMOTEDREPAIRUNNAMED", "RELAUNCHCALLEDREPAIR").
- * @param {Array<{alias: string, kind: string}>} [entries] one per retry row that
- *   came back promoted; `kind` is 'repair' or 'relaunch'
+ * @param {Array<{alias: string, kind: string}>} [entries] the round's
+ *   `promotedRetry` MARKERS — one per RETRY that came back promoted, whichever
+ *   branch its leg took (several of them leave no row at all), never one per
+ *   row; `kind` is 'repair' or 'relaunch'
  * @returns {string} '' or one leading-'; ' clause per kind
  */
 function promotedRepairClause(entries) {
@@ -144,7 +151,7 @@ async function runDebateStage(ctx, { provisional, provisionalInput, overBudget }
           what: 'the debate round did not complete cleanly',
           // #257 R-X46: R-X36's rule, applied to the debate — a `promoted: true`
           // row is never the only record of itself. When a defence's or re-vote's
-          // RETRY came back promoted the prose NAMES whose it was (fix round 1;
+          // RETRY came back promoted, the prose NAMES whose it was (fix round 1;
           // see promotedRepairClause above). R-X48: that is EVERY such retry,
           // whichever branch its leg took — run-debate.js builds `promotedRepairs`
           // from explicit markers, not from the rows, so the double-promoted

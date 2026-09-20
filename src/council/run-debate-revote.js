@@ -151,7 +151,7 @@ function reVoteUnboundNote(waveId, judge, key, leg) {
  * `conformance`, `outLeg` (the new leg when it completed, else the original) —
  * plus exactly one non-null row: `supersededRow` (completed retry — the pre-retry
  * leg's row) or `repairRow` (dead retry — the failed attempt's own row), for the
- * caller to push. A user abort returns `{ aborted: <exitCode> }` alone, propagated.
+ * caller to push — AND `promotedRetry` (#257 R-X48), which rides BOTH arms precisely because it is not a row: it is the round note's record that this RETRY answered only in its reasoning channel, and the commonest such retry (a promoted relaunch that COMPLETES) supersedes and leaves no row at all. A user abort returns `{ aborted: <exitCode> }` alone, propagated.
  */
 async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedIds, bundle }) {
   // One repair, solo, to that judge. The id is built from the SEAT key so
@@ -171,7 +171,7 @@ async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedI
   if (isAbortExit(r2.exitCode)) { return { aborted: r2.exitCode }; }
   const leg2 = r2.leg && r2.leg.status === 'complete' ? r2.leg : null;
   parsed = leg2 && !isPromotedLeg(leg2) ? parseRevote(leg2.summary, expectedIds) : parsed; // #257 R-X23 (named mutant "REVOTEREPAIRPROMOTEDUSED")
-  const conformance = parsed.ok ? 'repaired' : 'unstructured'; const promotedRetry = r2.leg && isPromotedLeg(r2.leg) ? { alias: judge, kind: isPromotedLeg(leg) ? 'relaunch' : 'repair' } : null; // #257 R-X48: run-debate.js:91's marker, re-vote side — the round note is built from THIS, never re-derived from whichever row the branch below happens to leave. `leg` is a parameter here and is never reassigned, so the wave-1 leg is readable from either arm. Named mutants "DOUBLEPROMOTEDUNNAMED", "PROMOTEDRETRYKINDLOST".
+  const conformance = parsed.ok ? 'repaired' : 'unstructured'; const promotedRetry = r2.leg && isPromotedLeg(r2.leg) ? { alias: judge, kind: isPromotedLeg(leg) ? 'relaunch' : 'repair' } : null; // #257 R-X48: `run-debate.js :: runDefenseSolo`'s marker, re-vote side — the round note is built from THIS, never re-derived from whichever row the branch below happens to leave. `leg` is a parameter here and is never reassigned, so the wave-1 leg is readable from either arm. Named mutants "DOUBLEPROMOTEDUNNAMED", "PROMOTEDRETRYKINDLOST".
   // Symmetric with runDefenseSolo's `if (leg2) { leg = leg2; }` — otherwise
   // revote-<model>.md and the runStats row keep the PRE-repair output.
   return leg2 && (!isPromotedLeg(leg2) || isPromotedLeg(leg)) // #257 R-X46 (D6), the re-vote half of run-debate.js's condition: supersede only when the retry leg is REAL or the wave-1 leg was itself promoted, so a promoted repair never replaces — and R-X30 never silences — real text it failed to repair. Named mutant "REVOTEPROMOTEDREPAIRSUPERSEDES" (restore the bare `leg2 ?`).

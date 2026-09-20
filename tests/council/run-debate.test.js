@@ -1593,9 +1593,13 @@ describe('runDebate — a promoted repair never supersedes real text (#257 R-X46
      * defence's or re-vote's retry is a RELAUNCH with the original briefing
      * (R-X33), and calling it a repair is exactly the misnaming the council
      * raised as A3/C2 and R-X45 removed from the RECORD — the prose must not
-     * re-introduce it. The kind is read off the row's own role-deciding mark, the
-     * same `relaunch` transport field `debate.js :: mk` stamps `role: 'relaunch'`
-     * from, so the sentence and the row can never disagree.
+     * re-introduce it. Fix round 3 read the kind off the row's own role-deciding
+     * mark — the same `relaunch` transport field `debate.js :: mk` stamps
+     * `role: 'relaunch'` from. R-X48 moved it onto the `promotedRetry` MARKER,
+     * read off the WAVE-1 leg's promotion at the retry site, so the sentence and
+     * the row can never disagree because the sentence no longer reads the row.
+     * The rows still carry `relaunch`, and `mk` still reads it for `role`; only
+     * the PROSE stopped deriving anything from them.
      *
      * THE REACHABLE RELAUNCH ROW (found by the round-2 review): wave 1 is a
      * PROMOTED defence, its relaunch comes back promoted AND does not complete —
@@ -1603,7 +1607,10 @@ describe('runDebate — a promoted repair never supersedes real text (#257 R-X46
      * `repairLeg`. `promoted` is minted on a completed, TIMED-OUT or aborted leg
      * (council-tally.schema.json), never on `status: 'error'` — so a timed-out
      * promoted relaunch is a real row carrying `promoted: true`, and R-X36's rule
-     * says it is never the only record of itself. It is announced, as a relaunch.
+     * says it is never the only record of itself. It is announced, as a relaunch —
+     * since R-X48 because its MARKER says so, not because this row exists. Round 2
+     * found this row reachable; its COMPLETE sibling, which leaves no row, stayed
+     * unnamed until round 5 (see the R-X48 block below).
      *
      * NAMED MUTANT — RELAUNCHCALLEDREPAIR: render the repair wording for every
      * entry regardless of kind (round 2's behaviour). Reds all three below.
@@ -1845,6 +1852,92 @@ describe('runDebate — a promoted repair never supersedes real text (#257 R-X46
       ctx.o.debate = true;
       await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
         overBudget: () => false });
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(HEAD);
+    });
+
+    /**
+     * #257 R-X48 fix round 1 (task review I2) — THE RE-VOTE'S NEGATIVE PATHS ARE
+     * PINNED EXACTLY AS THE DEFENCE'S ARE.
+     *
+     * The marker's guard is `r2.leg && isPromotedLeg(r2.leg)`. Dropping the
+     * promotion half of it — `const promotedRetry = r2.leg ? … : null`, i.e.
+     * naming EVERY re-vote retry — survived the whole debate suite untouched
+     * (measured by the task review: 0 failed, 160 passed), while the identical
+     * mutant on the defence side reds the DEFENCE control above. So a re-vote
+     * retry that answered in REAL PROSE could start being recorded as having
+     * "answered only in its reasoning channel" — a false statement in the
+     * degradation record, which is the defect class this whole issue chain
+     * exists to remove — with no test noticing.
+     *
+     * The two tests below are paths (iv) and (v) of the R-X46/R-X48 taxonomy, on
+     * the re-vote side: (iv) a PROMOTED wave-1 whose relaunch answers for real,
+     * (v) a REAL wave-1 whose repair answers for real. Neither may be named, and
+     * the `why` must be byte-identical to a plain degraded round in both.
+     *
+     * NAMED MUTANT — REVOTEMARKERUNGUARDED: `const promotedRetry = r2.leg ? …`
+     * at run-debate-revote.js :: repairRevoteLeg. Reds both tests below.
+     */
+    test('RE-VOTE control (iv): a promoted re-vote whose relaunch answers for REAL is not named', async () => {
+      const tmp = mkTmp('run-debate-rx48-revote-real-relaunch-');
+      const input = provisionalInput();
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+      const REAL_RELAUNCH = 'On reflection I still dispute it, at length, and again without the JSON.';
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (opts.waveId === 'r-d1') {
+            const l = leg('gemini', defended, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          // The relaunch is REAL prose that merely does not parse — it answered,
+          // just not in the asked-for shape. Nothing rode a reasoning channel.
+          const l = leg('gpt', REAL_RELAUNCH, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => ({ exitCode: 0, wave: wave([
+          promotedLeg('gpt', gptFlip, 'r-rv', 1),
+          leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+      });
+      ctx.o.debate = true;
+      const res = await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      // R-X46 case (i): the real relaunch IS the answer, so it supersedes.
+      const rows = res.debatedInput.runStats.filter(r => r.model === 'gpt');
+      expect(rows.find(r => r.role === 'revote')).toMatchObject(
+        { waveId: 'r-rv-gptr', conformance: 'unstructured' });
+      expect('promoted' in rows.find(r => r.role === 'revote')).toBe(false);
+      expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-rv', promoted: true });
+      // The round still degrades — but no retry answered in a reasoning channel.
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(HEAD);
+    });
+
+    test('RE-VOTE control (v): a REAL re-vote whose repair answers for REAL is not named', async () => {
+      const tmp = mkTmp('run-debate-rx48-revote-real-real-');
+      const input = provisionalInput();
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const REAL_REPAIR = 'Second attempt, still prose, still no fenced JSON block anywhere in it.';
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (opts.waveId === 'r-d1') {
+            const l = leg('gemini', defended, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          const l = leg('gpt', REAL_REPAIR, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => ({ exitCode: 0, wave: wave([
+          leg('gpt', REAL_BUT_UNPARSEABLE, 'r-rv', 1),
+          leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+      });
+      ctx.o.debate = true;
+      const res = await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      const rows = res.debatedInput.runStats.filter(r => r.model === 'gpt');
+      expect(rows.find(r => r.role === 'revote')).toMatchObject(
+        { waveId: 'r-rv-gptr', conformance: 'unstructured' });
+      expect(rows.some(r => r.promoted === true)).toBe(false);
       expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(HEAD);
     });
   });
