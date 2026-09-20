@@ -9229,7 +9229,9 @@ Deferred — one line each, none blocks anything:
 - [ ] #257 (council r3, F3 concern 4) — `src/council/run-stage2-notes.js :: judgeDeadNote` still
   caps its leg error at a bare literal `200` (`:59`, #219), so a judge dying `OUTPUT_LENGTH` or at
   the no-output backstop loses its amicus-minted remedy in that prose — measured, the shortest
-  `OUTPUT_LENGTH` format is 265 characters and the longest minted reason is 518. R-X38's ruling (a
+  `OUTPUT_LENGTH` format is 265 characters and the longest minted reason was 518 at round 3 — and
+  is **620** for the pinned rows since round 4 (R-X43; supremum **627**), which only widens the gap
+  this 200-char cap opens. R-X38's ruling (a
   cap bounds provider noise and must pass every minted reason whole) applies here unchanged; it is
   its own change because it moves a pinned Stage-2 string.
 - [x] #257 (council r3, F3 concern 3) — `src/utils/output-length.js :: formatOutputLengthReason`
