@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const s2 = require('../../src/council/briefings-stage2');
 const { parseJudgeOutput } = require('../../src/council/parse-stage2');
+const { codeOnly } = require('../helpers/code-only');
 
 const REVIEWS = [
   { label: 'Review A', text: 'A prose review.' },
@@ -254,9 +255,14 @@ describe('repair prompts', () => {
     // would sit there green forever and the next reader would believe it runs.
     // NAMED MUTANT — ARMREADDED-STAGE2: paste the R-X29 `promoted === true` arm
     // back into judgeRepairPromptWith. Reds this test.
+    // #257 R-X41 (B1): same class of pin as briefings-debate.test.js's sibling
+    // check — a design comment documenting the withdrawn arm (as
+    // briefings-debate.js's own header already does) may legitimately quote
+    // this phrase without the arm having reappeared. codeOnly() strips
+    // comments first so only real code can still fail this.
     const src = fs.readFileSync(
       path.join(__dirname, '..', '..', 'src', 'council', 'briefings-stage2.js'), 'utf-8');
-    expect(src).not.toContain('written in the reasoning channel');
+    expect(codeOnly(src)).not.toContain('written in the reasoning channel');
   });
 
   test('#257 R-X34: a `promoted` key from a stale caller changes nothing', () => {

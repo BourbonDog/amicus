@@ -10,9 +10,12 @@
  *
  * Extracted VERBATIM from result-schema.js :: buildRunResult (#257 — that file
  * sat at the 300-line gate and its last rider line already carried three
- * fields). Key ORDER is the contract: ttftMs, finish, variant,
- * variantUnverified, backstop, promoted — the order the wave document has
- * always written. `promoted` (#257) is emit-when-true, like variantUnverified.
+ * fields). Key ORDER is the contract for the LEG DOCUMENT: ttftMs, finish,
+ * variant, variantUnverified, backstop, promoted — the order the wave
+ * document has always written. The runStats ROW (council/run-stats-entry.js)
+ * is a separate projection with its own order (there `promoted` rides after
+ * `ttftMs` and before `usage`); neither order is the other's contract.
+ * `promoted` (#257) is emit-when-true, like variantUnverified.
  */
 
 'use strict';

@@ -7,6 +7,7 @@ const { runCouncil, pickFallbackChair } = require('../../src/council/run');
 const runState = require('../../src/council/run-state');
 const { scriptedLaunchers, happyScript, baseOptions, mkLeg, okWave } =
   require('./helpers/fake-launchers');
+const { codeOnly } = require('../helpers/code-only');
 // #257 R-X22: the attempt classifier is a walk-internal taxonomy that run.js
 // deliberately does NOT re-export (pinned in tests/council/chair-fallback.test.js),
 // so the unit pins below read it from the module that owns it.
@@ -443,6 +444,13 @@ describe('#257: a promoted chair leg is no synthesis (R-X22)', () => {
    * own text must not appear in this file at all.
    * Named mutant SPLITINLINED: paste the fragment back inline, unchanged. Red
    * set: this test (and this test only — that is the whole point of it).
+   *
+   * #257 R-X41 (B1): the ' reasoning / ' fragment is message PROSE (part of
+   * tokenSplit's composed text, promoted.js:152), not a code token — a design
+   * comment could legitimately quote it while explaining what tokenSplit
+   * produces. codeOnly() strips comments first so only an actual inline
+   * re-spelling (real code) fails this; the SPLITINLINED mutant below is
+   * still real code, so it still reds.
    */
   test('chair-fallback.js CALLS tokenSplit and does not re-spell the fragment (council r2)', () => {
     const src = fs.readFileSync(
@@ -450,7 +458,7 @@ describe('#257: a promoted chair leg is no synthesis (R-X22)', () => {
     expect(src).toContain('tokenSplit(');
     // The fragment's own text. Present here = a second home for it, whatever it
     // currently reads, and the two announcements are free to drift again.
-    expect(src).not.toContain(' reasoning / ');
+    expect(codeOnly(src)).not.toContain(' reasoning / ');
   });
 });
 

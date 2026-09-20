@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const d = require('../../src/council/briefings-debate');
 const s2 = require('../../src/council/briefings-stage2');
+const { codeOnly } = require('../helpers/code-only');
 
 const DATE = '2026-07-19';
 
@@ -127,10 +128,16 @@ describe('repair prompts', () => {
   // pasting the arm back a test failure rather than a silent re-landing.
   // NAMED MUTANT — ARMREADDED-DEBATE: restore the `promoted === true ? … :`
   // ternary in briefings-debate.js's `repair()`. Reds this test, nothing else.
+  // #257 R-X41 (B1): a source-text NEGATIVE pin inspects CODE, not comments —
+  // the module's own header legitimately quotes this withdrawn phrase while
+  // explaining R-X34/R-X29, and the phrase surviving there (line-wrapped or
+  // not) is documentation, not the arm reappearing. codeOnly() strips
+  // comments before the check so only an actual re-added ternary (real code,
+  // never stripped) can still fail it.
   test('#257 R-X34: the reasoning-channel arm is GONE from the source, not merely uncalled', () => {
     const src = fs.readFileSync(
       path.join(__dirname, '..', '..', 'src', 'council', 'briefings-debate.js'), 'utf-8');
-    expect(src).not.toContain('written in the reasoning channel');
+    expect(codeOnly(src)).not.toContain('written in the reasoning channel');
     // The one empty-arm sentence survives, in one spelling, as the only `absent` case.
     expect(src).toContain('response was empty — there is no prior text to correct.');
   });

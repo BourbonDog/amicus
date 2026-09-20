@@ -12,6 +12,7 @@ const { buildAliasStateScript } = require('../../electron/setup-ui-alias-state')
 const { buildAliasScript } = require('../../electron/setup-ui-alias-script');
 const { NEW_ROUTES_GROUP_LABEL } = require('../../electron/setup-ui-alias-groups');
 const { createFakeDocument } = require('../helpers/fake-dom');
+const { codeOnly } = require('../helpers/code-only');
 
 const HOUR = 60 * 60 * 1000;
 const DEFAULTS = { gemini: 'google/gemini-x', glm: 'openrouter/z-ai/glm-5.3' };
@@ -554,11 +555,22 @@ describe('acting on a proposal (everything is STAGED — R-P3-1)', () => {
 });
 
 describe('page hygiene', () => {
+  // #257 R-X41: these three are PROSE-eligible, not code tokens — this exact
+  // fragility is already live in a sibling file. setup-ui-alias-groups.js's
+  // own header comment explains the routing-policy ban by quoting the
+  // forbidden call VERBATIM ("would put `slice('openrouter/'.length)` back
+  // into the page"), and setup-ui-alias-review.js's own module docblock
+  // documents "never innerHTML" the same way. A design comment inside this
+  // generated fragment doing the same thing would be legitimate documentation,
+  // not the routing policy or the unsafe DOM write reappearing — codeOnly()
+  // strips comments first so only actual executable code (a real .innerHTML
+  // assignment, a real slice/prefix check) can still fail this.
   it('the fragment carries no routing policy and no innerHTML', () => {
     const src = buildAliasReviewScript();
-    expect(src).not.toContain('innerHTML');
-    expect(src).not.toContain("slice('openrouter/'.length)");
-    expect(src).not.toContain('openrouter/');
+    const code = codeOnly(src);
+    expect(code).not.toContain('innerHTML');
+    expect(code).not.toContain("slice('openrouter/'.length)");
+    expect(code).not.toContain('openrouter/');
     expect(src).toContain("invoke('sidecar:get-alias-review')");
   });
   it('the text sub-fragment (setup-ui-alias-review-text.js) is concatenated in (mutant: forget the concatenation)', () => {
