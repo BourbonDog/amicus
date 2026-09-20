@@ -158,6 +158,61 @@ describe('run-stats-entry — promoted rides the row (#257)', () => {
 });
 
 /**
+ * #257 R-X45 (fix round 2, review S2) — `rescued` rides THE ONE ROW BUILDER.
+ *
+ * It was first spread onto the judge row by `run-assemble.js` after the builder
+ * returned, which put it last — while `tally.js`'s re-projection placed it
+ * between `promoted` and `usage`. Two producers, two slots, two pins that froze
+ * the divergence. Emitting it HERE, in the builder's own slot immediately after
+ * `promoted`, makes the two agree by construction rather than by agreement.
+ *
+ * EXPLICIT-ONLY, like `summary`: it is NOT sourced from the leg. The leg a
+ * rescued judge row is attributed to is the PROMOTED one (#83), so a leg-sourced
+ * default would be exactly backwards.
+ *
+ * NAMED MUTANT — RESCUEDORDERDRIFT (run-assemble.js): spread it onto the built
+ * row instead of passing it in. Reds runstats-byte-order.test.js :: G7f.
+ */
+describe('run-stats-entry — rescued rides the row, in promoted\'s slot (#257 R-X45)', () => {
+  const leg = { model: 'openai/gpt-5', status: 'complete', durationMs: 50,
+    usage: { input: 3 }, waveId: 'r1-s2', promoted: true };
+
+  test('emit-when-TRUE: the literal true emits, every other value emits nothing', () => {
+    expect(rse.buildRunStatsEntry({ leg, model: 'alpha', role: 'judge', rescued: true }).rescued).toBe(true);
+    for (const notTrue of [undefined, false, null, 0, '', 'true', 1]) {
+      expect(`rescued=${String(notTrue)} -> `
+        + `${'rescued' in rse.buildRunStatsEntry({ leg, model: 'alpha', role: 'judge', rescued: notTrue })}`)
+        .toBe(`rescued=${String(notTrue)} -> false`);
+    }
+  });
+
+  test('the SLOT: immediately after `promoted`, immediately before `usage`', () => {
+    const keys = Object.keys(rse.buildRunStatsEntry({ leg, model: 'alpha', role: 'judge', rescued: true }));
+    expect(keys.indexOf('rescued')).toBe(keys.indexOf('promoted') + 1);
+    expect(keys.indexOf('usage')).toBe(keys.indexOf('rescued') + 1);
+    // The slot holds even with no `promoted` on the leg — it is still the key
+    // immediately before `usage`, which is what tally.js's allowlist also does.
+    const plainLeg = { ...leg, promoted: undefined };
+    const k2 = Object.keys(rse.buildRunStatsEntry({ leg: plainLeg, model: 'alpha', role: 'judge', rescued: true }));
+    expect(k2.indexOf('usage')).toBe(k2.indexOf('rescued') + 1);
+  });
+
+  test('NOT leg-sourced: a promoted leg alone never mints it (the attributed leg is the promoted one)', () => {
+    expect('rescued' in rse.buildRunStatsEntry({ leg, model: 'alpha', role: 'judge' })).toBe(false);
+    expect('rescued' in rse.buildRunStatsEntry({ leg: { ...leg, rescued: true }, model: 'alpha', role: 'judge' })).toBe(false);
+  });
+
+  test('byte-exact, every optional field at once including rescued', () => {
+    expect(JSON.stringify(rse.buildRunStatsEntry({
+      leg: { ...leg, ttftMs: 4321 }, model: 'alpha', role: 'judge', conformance: 'repaired',
+      rescued: true,
+    }))).toBe('{"model":"alpha","role":"judge","wasChair":false,"conformance":"repaired",'
+      + '"waveId":"r1-s2","resolvedModel":"openai/gpt-5","status":"complete","durationMs":50,'
+      + '"ttftMs":4321,"promoted":true,"rescued":true,"usage":{"input":3}}');
+  });
+});
+
+/**
  * PR #207 council round 3, B3 — ONE predicate, spelled once, at every gate.
  *
  * There are five `ttftMs` sites in src/: the probe that computes it

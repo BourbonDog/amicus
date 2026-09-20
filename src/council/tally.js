@@ -197,8 +197,12 @@ function tally(input) {
       ...(r.promoted === true ? { promoted: true } : {}),
       // #257 R-X45: `rescued` travels wherever `promoted` travels — D1's reader is a
       // verdict.json consumer, and this allowlist is the only road there (buildVerdict
-      // copies runStats verbatim). Same slot, same emit-when-TRUE gate as the line above,
-      // so a truthy stand-in is dropped here too (named mutant "RESCUEDNOTPROJECTED").
+      // copies runStats verbatim). Same emit-when-TRUE gate as the line above, so a
+      // truthy stand-in is dropped here too; and the SAME SLOT as its producer, which
+      // emits it from this position too (run-stats-entry.js :: buildRunStatsEntry) —
+      // that is what keeps a judge row the same shape on both sides of this
+      // re-projection (the G7b invariant, pinned for this row by G7f).
+      // Named mutant "RESCUEDNOTPROJECTED".
       ...(r.rescued === true ? { rescued: true } : {}),
       usage: r.usage || null,
     })),

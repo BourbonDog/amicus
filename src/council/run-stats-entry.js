@@ -52,6 +52,12 @@
  * leaves every row byte-for-byte unchanged (pins G4a/G4b/G4c,
  * tests/council/runstats-byte-order.test.js).
  *
+ * `rescued` (#257 R-X45) is EXPLICIT-ONLY and emit-when-TRUE, like `summary`: the
+ * Stage-2 judge loop is its only producer (run-assemble.js's judge row), and the
+ * leg such a row is attributed to is the PROMOTED one (#83), so it is never read
+ * off the leg. Its slot is deliberately the one `tally.js`'s re-projection
+ * allowlist uses — see the comment at the spread itself.
+ *
  * `ttftMs` (v4.9 W13 Task A) is time-to-first-token for this row's leg, read off
  * the leg document and emitted only when it is a NON-NEGATIVE INTEGER — the
  * shape council-tally.schema.json declares, and (PR #207 round 3, B3) a stricter
@@ -62,7 +68,7 @@
  * neither `0` (a real measurement) nor `null`.
  */
 function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified,
-  repairRefused, seat, summary }) {
+  repairRefused, seat, summary, rescued }) {
   // v4.9 W13 Task A: the TTFT probe's last hop, read off the LEG document the
   // same way `waveId` and `resolvedModel` below are. DEVIATION from the plan's
   // literal "thread from the leg at the callers": ten call sites across seven
@@ -112,6 +118,19 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     // #257: the engine answered only in its reasoning channel — carried off the leg document like
     // ttftMs above, emit-when-TRUE (the literal), so every row without it is byte-identical.
     ...(leg && leg.promoted === true ? { promoted: true } : {}),
+    // #257 R-X45: the seat this row describes was rescued by a `relaunch` row after
+    // its own leg answered only in its reasoning channel — the field that tells a
+    // rescued judge's row, which legitimately carries `promoted: true` above, from a
+    // judge that delivered no review at all. Emit-when-TRUE (the literal), so every
+    // row without it is byte-identical. THIS SLOT is load-bearing: it is the one
+    // `tally.js`'s re-projection allowlist also uses (between `promoted` and
+    // `usage`), so the tally-input row and the tally.json/verdict.json row cannot
+    // disagree about the row's shape — the G7b invariant, pinned for this row by
+    // G7f (tests/council/runstats-byte-order.test.js).
+    // EXPLICIT-ONLY, like `summary` and unlike `promoted`: it is deliberately NOT
+    // read off the leg, because the leg a rescued judge row is attributed to is the
+    // PROMOTED one (#83) — a leg-sourced default would be exactly backwards.
+    ...(rescued === true ? { rescued: true } : {}),
     usage: (leg && leg.usage) || null,
   };
 }

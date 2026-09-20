@@ -348,13 +348,16 @@ describe('W11 byte-order goldens — claudeRunStatsRow (run-assemble)', () => {
 });
 
 describe('#257 R-X45 — the rescued judge row (run-assemble)', () => {
-  // The judge row is the ONE row whose `rescued` marker is not leg-sourced, so it
-  // is spread onto the BUILT row instead of being taught to buildRunStatsEntry
-  // (which stays require-free and leg-driven). That spread's slot is the END of
-  // the row — after `usage` — and this is that slot's pin: the entry's own key
-  // order is untouched, and `rescued` is simply appended.
+  // The judge row is the ONE producer of `rescued`. Fix round 2 (review S2): it is
+  // emitted by the ONE row builder, in buildRunStatsEntry's own slot immediately
+  // after `promoted` and before `usage` — the SAME slot tally.js's re-projection
+  // uses — so the producer and the re-projection cannot disagree about where it
+  // sits. (It was first spread onto the built row, which put it last and made the
+  // row change shape across the re-projection; G7f below is the round-trip pin.)
+  // It stays EXPLICIT-ONLY: the leg a rescued judge row is attributed to is the
+  // PROMOTED one (#83), so a leg-sourced default would be exactly backwards.
   //
-  // NAMED MUTANT — JUDGEROWRESCUEDDROPPED: delete the spread in run-assemble.js.
+  // NAMED MUTANT — JUDGEROWRESCUEDDROPPED: delete the `rescued:` argument in run-assemble.js.
   const judgeRow = (rescued) => {
     const input = require('../../src/council/run-assemble').buildTallyInput({
       runId: 'r1', date: 'd', bench: ['alpha'], chair: 'deepseek', reviews: [],
@@ -367,15 +370,16 @@ describe('#257 R-X45 — the rescued judge row (run-assemble)', () => {
     return input.runStats.find(r => r.role === 'judge');
   };
 
-  test('G4e — `rescued` is the LAST key, after `usage`, and the rest is the entry\'s own order', () => {
+  test('G4e — `rescued` sits between `promoted` and `usage`, the one slot tally.js also uses', () => {
     expect(JSON.stringify(judgeRow(true))).toBe(
       '{"model":"alpha","role":"judge","wasChair":false,"conformance":"repaired",'
       + '"waveId":"r1-s2","resolvedModel":"openai/gpt-5","status":"complete","durationMs":50,'
-      + '"promoted":true,"usage":{"input":3},"rescued":true}');
-    // The SLOT, not merely the presence.
+      + '"promoted":true,"rescued":true,"usage":{"input":3}}');
+    // The SLOT, not merely the presence. One position, asserted the same way on
+    // both sides of the re-projection (G7f, tally.test.js) — never two.
     const keys = Object.keys(judgeRow(true));
-    expect(keys[keys.length - 1]).toBe('rescued');
-    expect(keys.indexOf('usage')).toBe(keys.indexOf('rescued') - 1);
+    expect(keys.indexOf('rescued')).toBe(keys.indexOf('promoted') + 1);
+    expect(keys.indexOf('usage')).toBe(keys.indexOf('rescued') + 1);
   });
 
   test('G4f — a judge row with no rescue is byte-identical to the pre-ruling row', () => {
@@ -519,6 +523,53 @@ describe('W11 — the reach of fold diff #1 (consumer checks)', () => {
         promoted: true },
       model: 'glm', role: 'seat', conformance: 'clean' });
     expect(Object.keys(inputRow)).toEqual(Object.keys(record([inputRow]).runStats[0]));
+  });
+
+  /**
+   * #257 R-X45 (fix round 2, review S2) — G7b's invariant on THE ONE ROW SHAPE IT
+   * NEVER EXERCISED: the Stage-2 JUDGE row, which is `rescued`'s only producer.
+   *
+   * G7b builds its row through `debateRunStatsRows` and G7e through
+   * `buildRunStatsEntry` directly; neither goes through `run-assemble.js ::
+   * buildTallyInput`'s judge loop, so when `rescued` was spread onto the BUILT row
+   * there — landing last, after `usage` — while `tally.js` re-projected it between
+   * `promoted` and `usage`, the row changed shape across the boundary and nothing
+   * saw it. This drives the REAL round trip: buildTallyInput → tally().
+   *
+   * The fix that makes it hold is structural rather than a second agreement to
+   * maintain: `rescued` is now emitted by the ONE row builder, in
+   * buildRunStatsEntry's own slot, so the producer and the re-projection cannot
+   * disagree about where it sits.
+   *
+   * NAMED MUTANT — RESCUEDORDERDRIFT: in run-assemble.js, stop passing
+   * `rescued` into the builder and spread it onto the result instead
+   * (`}), ...(j.rescued === true ? { rescued: true } : {}) });`) — the pre-fix
+   * shape. Reds this test.
+   */
+  test('G7f — a RESCUED judge row keeps its key order across tally\'s re-projection (#257 R-X45)', () => {
+    const asm = require('../../src/council/run-assemble');
+    const inputRow = asm.buildTallyInput({
+      runId: 'r1', date: 'd', bench: ['alpha'], chair: 'deepseek', reviews: [],
+      judgeResults: [{ judge: 'alpha', ok: true, conformance: 'repaired', adjudications: [],
+        rescued: true, usedWaveId: 'r1-q1',
+        leg: { model: 'openai/gpt-5', status: 'complete', durationMs: 50,
+          usage: { input: 3 }, waveId: 'r1-s2', promoted: true } }],
+      chairStats: null, claudeReview: null,
+    }).runStats.find(r => r.role === 'judge');
+
+    expect(inputRow.rescued).toBe(true);
+    // THE INVARIANT: the row that reaches tally.json / verdict.json is the same
+    // shape as the row tally-input.json holds.
+    expect(Object.keys(inputRow)).toEqual(Object.keys(record([inputRow]).runStats[0]));
+    // …and, stated positively, the one slot both sides agree on.
+    const keys = Object.keys(inputRow);
+    expect(keys.indexOf('rescued')).toBe(keys.indexOf('promoted') + 1);
+    expect(keys.indexOf('usage')).toBe(keys.indexOf('rescued') + 1);
+    // Bytes, not just key names.
+    expect(JSON.stringify(record([inputRow]).runStats[0]))
+      .toBe('{"model":"alpha","role":"judge","wasChair":false,"conformance":"repaired",'
+        + '"waveId":"r1-s2","resolvedModel":"openai/gpt-5","status":"complete","durationMs":50,'
+        + '"promoted":true,"rescued":true,"usage":{"input":3}}');
   });
 
   test('G7c — every debate role still stays OUT of the ledger join', () => {

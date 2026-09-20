@@ -96,9 +96,11 @@ function bindStage2Seats(ctx, { reviews, judges, s2Legs, runId }) {
  *   `extraLabeled` (v4.1 §4.4) are labeled reviews sourced from a FILE rather than
  *   a leg (the Claude review): they join the judged BUNDLE, never the judge ROSTER.
  * @returns {Promise<{aborted: number|null, judgeResults: Array, extraRows: Array}>}
- *   `extraRows` (v4.7 D2, mirroring runStage1's channel) is one `role:'repair'`
- *   row per `-q<N>` judge-repair solo (error status when the repair itself
- *   failed) — the judge's own judgeResults entry keeps attributing its ORIGINAL
+ *   `extraRows` (v4.7 D2, mirroring runStage1's channel) is one row per `-q<N>`
+ *   judge follow-up solo (error status when that solo itself failed), `role:'repair'`
+ *   — or, since #257 R-X45, `role:'relaunch'` when the solo was attempt 1 of a
+ *   PROMOTED judge, which is a fresh ask carrying the original bundle rather than a
+ *   correction of anything — the judge's own judgeResults entry keeps attributing its ORIGINAL
  *   Stage-2 wave leg throughout (the #83 comment below), so a repair never
  *   overwrites the primary judge row; it only adds this separate one.
  */
