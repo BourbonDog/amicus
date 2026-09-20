@@ -24,20 +24,19 @@ All notable changes to Amicus are documented here. Format follows
   only in the reasoning channel and was not rescued`. A promoted judge whose relaunch answered for
   real but did not parse, and whose repair then answered in its reasoning channel, stands down as
   `relaunch-repair-promoted` and the note says so — a schema failure and a refusal to produce text
-  are different fixes. No `judge-<seat>.md` is written from a
-  promoted leg; the relaunch's real text is the judge artifact. The relaunch is recorded as one: a
-  `role: 'relaunch'` runStats row (a promoted judge's first relaunch; a promoted defence's or
-  re-vote's relaunch that produced nothing usable), a rescued judge's row and its tally/verdict
-  copies carry `rescued: true` beside `promoted: true`, and the `judge-reasoning-only` note's
-  `data` names `relaunchWaveId` and `usedWaveId`; `conformance` keeps its three values and means
-  how many asks it took to parse. A promoted repair of a real defence or re-vote never replaces
-  the real text it failed to repair, and the debate note names whose repair — or relaunch —
-  answered in its reasoning channel. The debate note names a promoted retry whichever branch its
-  leg took — a promoted defence or re-vote whose relaunch came back promoted again is named even
-  when that relaunch superseded the first leg. A judge whose own answer was real but unparseable
-  and whose
-  repair comes back in the reasoning channel is announced too, on the same channel, with a `Note:`
-  that names the repair rather than the judge's answer.
+  are different fixes. No `judge-<seat>.md` is written from a promoted leg; the relaunch's real
+  text is the judge artifact. The relaunch is recorded as one: a `role: 'relaunch'` runStats row (a
+  promoted judge's first relaunch; a promoted defence's or re-vote's relaunch that produced nothing
+  usable), a rescued judge's row and its tally/verdict copies carry `rescued: true` beside
+  `promoted: true`, and the `judge-reasoning-only` note's `data` names `relaunchWaveId` and
+  `usedWaveId`; `conformance` keeps its three values and means how many asks it took to parse. A
+  promoted repair of a real defence or re-vote never replaces the real text it failed to repair,
+  and the debate note names whose repair — or relaunch — answered in its reasoning channel. The
+  debate note names a promoted retry whichever branch its leg took — a promoted defence or re-vote
+  whose relaunch came back promoted again is named even when that relaunch superseded the first
+  leg. A judge whose own answer was real but unparseable and whose repair comes back in the
+  reasoning channel is announced too, on the same channel, with a `Note:` that names the repair
+  rather than the judge's answer.
   Every reader of a leg in the council now treats a promoted leg as no deliverable: Stage-1
   reviews (not materialized; the once-only retry fires); the Stage-1 `-p<N>` and Stage-2 `-q<N>`
   repair solos (a promoted repair is a failed repair attempt inside the existing bound); the chair

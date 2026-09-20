@@ -1516,11 +1516,12 @@ answered with real but unparseable text and its one repair came back promoted, t
 stays the kept leg — `conformance: 'unstructured'`, and its `rebuttal-<seat>.md` /
 `revote-<seat>.md` written as before — while the promoted repair is a `repair` row carrying
 `promoted: true`, not a `superseded` row over real text the reader would then never see. The
-round's one `debate-degraded` `Note:` names every affected raiser, and what kind of retry it was,
+round's one `debate-degraded` `Note:` names every affected seat — the raiser on a defence retry,
+the judge on a re-vote retry — and what kind of retry it was,
 by appending to the existing `why` (`one or more defense or re-vote legs died or returned
 unstructured output`):
 
-- one raiser — `; <alias>'s repair answered only in its reasoning channel`
+- one seat — `; <alias>'s repair answered only in its reasoning channel`
 - several — `; the repairs of <a> and <b> answered only in their reasoning channels`
   (Oxford-free `a, b and c` beyond two)
 - a retry of a *promoted* defence or re-vote is a relaunch, so it reads
@@ -1530,9 +1531,11 @@ unstructured output`):
 Kinds are grouped, the groups follow the round's own first-appearance order, and with no promoted
 retry at all the clause is empty and the `why` is byte-identical to any other degraded round.
 Membership is decided by the RETRY, not by the row it happens to leave (**#257 R-X48**):
-`runDefenseSolo` and `repairRevoteLeg` mint an explicit `promotedRetry` marker — the raiser's
-alias beside the kind, `relaunch` when the wave-1 leg was promoted and `repair` otherwise —
-whenever the retry leg is promoted, and the note is built from those markers. A promoted defence
+`runDefenseSolo` and `repairRevoteLeg` mint an explicit `promotedRetry` marker — the retrying
+seat's alias beside the kind, `relaunch` when the wave-1 leg was promoted and `repair` otherwise —
+whenever the retry leg is promoted, and the note is built from those markers. (That alias is the
+DEFENCE's raiser on a defence retry and the JUDGE on a re-vote retry — the seat whose retry
+answered in its reasoning channel, whichever side of the debate it sat on.) A promoted defence
 or re-vote whose relaunch comes back promoted **and complete** supersedes its first leg under
 R-X46 and therefore leaves no retry row at all; it is named all the same. Until R-X48 that one
 case was silent while its timed-out sibling was named, because the clause was derived from the
