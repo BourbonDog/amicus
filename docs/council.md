@@ -799,9 +799,10 @@ and `revote` (a `--debate` round's defense/re-vote legs; v4.1, pre-dating row-pe
 `relaunch` (**#257 R-X45**, new — a follow-up ask that RE-asks a promoted seat with its original
 briefing instead of correcting it: the attempt-1 `-q<N>` of a promoted Stage-2 judge — every one
 of them, whether its adjudication was used in the end or not — and a promoted defence's or
-re-vote's relaunch that produced nothing usable. A relaunch that *succeeds* is not one of these
-rows: it becomes the `rebuttal`/`revote` row and supersedes the promoted first leg, exactly as a
-successful repair does. The `-q<N>` / `…r` id space is unchanged — the id says "a follow-up ask
+re-vote's relaunch that produced nothing usable. A *debate* relaunch that succeeds is not one of
+these rows: it becomes the `rebuttal`/`revote` row and supersedes the promoted first leg, exactly
+as a successful repair does (a judge's relaunch always leaves a row, used or not). The `-q<N>` /
+`…r` id space is unchanged — the id says "a follow-up ask
 of this seat", the ROLE says which kind of ask it was). All
 six still cost money and land in `runStats`, so they raise the run's totals everywhere those are
 summed. In `council report`'s cost table only
@@ -1455,7 +1456,9 @@ seat that delivered nothing — and `rescued` travels through `tally.js` into `t
 `usedWaveId` (the ask whose text was adjudicated — the two differ when the relaunch's own answer
 needed its one repair); its `what` and `why` are unchanged. `conformance` is the
 ASKS-TO-PARSE axis and nothing else: `clean` = the first ask parsed, `repaired` = a later ask
-parsed, `unstructured` = no ask parsed. So a relaunch-rescued judge is `repaired` because a later
+parsed, `unstructured` = no ask parsed (a row for a leg that never returned carries `clean` by
+default — there was no ask to parse; read `status` with it). So a relaunch-rescued judge is
+`repaired` because a later
 ask parsed, and a stood-down promoted judge is `unstructured` because none did; the CAUSE lives
 on the row's `role`/`promoted` and in the note, never on `conformance`, whose three values are
 unchanged. The record therefore tells a relaunch from a repair on its own — the `Note:`'s prose

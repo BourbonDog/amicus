@@ -60,15 +60,16 @@ All notable changes to Amicus are documented here. Format follows
   characters, a cap
   measured to pass every reason amicus itself mints; every retry announcement bounds the engine's
   reason text the same way on every arm, and the operator's
-  `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` value is quoted bounded (96 characters) so the longest
-  reason amicus can mint is a measured 620 characters, 180 under the 800 cap — while
+  `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` value is quoted bounded (96 characters), so the longest
+  reason amicus can mint is now a computable worst case rather than a sample — a measured 620
+  characters on the corpus's pinned rows, 627 over all legal inputs, 173 under the 800 cap — while
   `data.reason` keeps the verbatim text.
   A promoted leg whose provider reported no token usage says `token usage not reported` in every
   announcement instead of a fabricated `0 reasoning / 0 output tokens` — a usage record with no
   positive count is not a report, since a promoted leg produced the reasoning it promoted and a
   length stop consumed its reservation — and the same rule governs the OUTPUT_LENGTH reason and
   the output-truncated note; the leg document and the spend ledger still carry the summed zeros
-  (filed).
+  (filed in `BACKLOG.md` under #257 — `pricing.js :: sumPerMessageUsage`).
   The fact rides every leg document (`promoted: true`, emit-when-true, declared in
   `run.schema.json`, the tally schema and, on its open leg objects, `wave.schema.json`).
   Measured motive: PR #254 round 1, where 40,332 reasoning
