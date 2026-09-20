@@ -89,7 +89,7 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
     const leg2 = res2.leg && res2.leg.status === 'complete' ? res2.leg : null;
     parsed = leg2 && !isPromotedLeg(leg2) ? parseDebateDefense(leg2.summary, expectedIds) : parsed; // #257 R-X23 (named mutant "DEFENSEREPAIRPROMOTEDUSED")
     conformance = parsed.ok ? 'repaired' : 'unstructured';
-    if (leg2) { supersededLeg = legRow(raiserAlias, leg, 'unstructured'); leg = leg2; }
+    if (leg2 && (!isPromotedLeg(leg2) || isPromotedLeg(leg))) { supersededLeg = legRow(raiserAlias, leg, 'unstructured'); leg = leg2; } // #257 R-X46 (D6): supersede ONLY when the retry leg is real, or when the wave-1 leg was itself promoted. The third case — a defence that answered with REAL prose that merely did not parse, whose one repair came back PROMOTED — used to make that non-answer the kept leg, and R-X30 then stood its artifact down, so the seat's real text was written nowhere at all. Now the wave-1 text stays kept ('unstructured', its rebuttal artifact written as before #257 because the kept leg is not promoted) and the promoted repair is the repair row, which carries `promoted: true` off its own leg (R-X26). Named mutant "DEFENSEPROMOTEDREPAIRSUPERSEDES" (restore the bare `if (leg2)`).
     else { repairLeg = legRow(raiserAlias, res2.leg, 'unstructured', isPromotedLeg(leg)); } // #257 R-X45: a promoted defence's retry was a RELAUNCH (R-X33) — its row says so (named mutant "DEBATERELAUNCHROLEREPAIR")
   }
   // A dead leg (no complete summary) OR an 'unstructured' conformance after the one
@@ -294,7 +294,7 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
 
   return { debatedInput, debateFindings, debateSummary, addendumOutcomes,
     defenseLegs: defenseResults.map(d => d.leg), revoteLegs, verdictChanges,
-    degraded, aborted: null, revoteLaunched };
+    degraded, aborted: null, revoteLaunched, repairPromoted: [...defenseResults.map(d => d.repairLeg), ...revoteRepairs].some(r => r && r.promoted === true) }; // #257 R-X46: R-X36's rule applied to the debate — a `promoted: true` row is never the ONLY record of itself, so the round's note names it. MEASURED off the repair rows rather than re-derived: under the R-X46 condition above, a repair row can carry `promoted` only in case (iii) (the wave-1 leg was real, its repair was not), because `promoted` is emit-when-true and never minted on an error leg (spec R12). run-debate-stage.js appends the clause.
 }
 
 module.exports = { runDebate, nothingToDebate, disputingJudges, debateTargets };

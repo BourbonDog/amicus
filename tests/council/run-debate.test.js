@@ -753,13 +753,19 @@ describe('runDebate — a promoted defense is unparseable (#257 R-X23)', () => {
     expect(result.degraded).toBe(true);
     expect(result.defenseLegs[0].conformance).toBe('unstructured');
     expect(seen).toEqual(['r-d1', 'r-d1r']);
-    // The promoted repair still SUPERSEDES the original, exactly as today.
+    // #257 R-X46 (D6) OVERTURNS the shape this test used to pin. The promoted
+    // repair no longer supersedes the wave-1 REAL text it failed to repair: the
+    // wave-1 leg stays the kept one, nothing is superseded, and the promoted
+    // repair is recorded as the repair row it was. The outcome is unchanged —
+    // nothing parsed, so every original still stands. The full three-case record
+    // (and the note that names the promoted repair) is the R-X46 block below.
     const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
-    expect(rows.find(r => r.role === 'rebuttal')).toMatchObject({ waveId: 'r-d1r', conformance: 'unstructured' });
-    expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-d1', conformance: 'unstructured' });
-    // #257 R-X30: the promoted REPAIR is the leg that was kept, so it is the one standing down —
-    // no rebuttal artifact, even though the superseded original was never promoted.
-    expect(fs.existsSync(path.join(tmp, 'rebuttal-gemini.md'))).toBe(false);
+    expect(rows.find(r => r.role === 'rebuttal')).toMatchObject({ waveId: 'r-d1', conformance: 'unstructured' });
+    expect(rows.some(r => r.role === 'superseded')).toBe(false);
+    expect(rows.find(r => r.role === 'repair')).toMatchObject({ waveId: 'r-d1r', conformance: 'unstructured', promoted: true });
+    // …and R-X30 no longer stands the artifact down, because the KEPT leg is not
+    // promoted: the raiser's real prose reaches rebuttal-gemini.md.
+    expect(fs.readFileSync(path.join(tmp, 'rebuttal-gemini.md'), 'utf-8')).toBe('prose only, no json block');
     expect(tally(result.debatedInput).findings.find(f => f.id === 'A1').tier).toBe('Disputed');
   });
 
@@ -1289,6 +1295,220 @@ describe('runDebate — a promoted defence/re-vote relaunch is recorded as one (
       .toMatchObject({ role: 'seat', conformance: 'clean' });
     const { buildCostModel } = require('../../src/council/report-cost');
     expect(buildCostModel([row], undefined).rows[0].model).toBe('gemini (relaunch)');
+  });
+});
+
+/**
+ * #257 R-X46 (council round 4, finding D6) — A PROMOTED REPAIR NEVER SUPERSEDES
+ * THE REAL TEXT IT FAILED TO REPAIR.
+ *
+ * `if (leg2)` treated ANY complete retry leg as the kept one. Combined with
+ * R-X30 (a promoted kept leg gets no rebuttal/revote artifact), that lost a
+ * seat's work outright in one shape: a defence that answered with REAL prose
+ * which merely did not parse, whose ONE repair came back promoted. The promoted
+ * repair became the kept leg, so R-X30 skipped the artifact, and the wave-1 real
+ * text was written nowhere at all.
+ *
+ * The three cases, and what each does now:
+ *   (i)   wave-1 PROMOTED + real relaunch      → supersede (unchanged: the
+ *         relaunch IS the answer, and the promoted leg was never one);
+ *   (ii)  wave-1 promoted + promoted relaunch  → supersede (unchanged: nothing
+ *         real is being dropped — neither leg ever answered);
+ *   (iii) wave-1 REAL-but-unparseable + PROMOTED repair → the wave-1 text STAYS
+ *         the kept leg (conformance 'unstructured', its artifact written exactly
+ *         as it was before #257, because the kept leg is not promoted), and the
+ *         promoted repair is recorded as the repair row — which carries
+ *         `promoted: true` off its own leg document (R-X26).
+ *
+ * R-X36's rule applies to the prose too: a `promoted: true` row is never the only
+ * record of itself, so the round's `debate-degraded` note names the promoted repair.
+ *
+ * NAMED MUTANT — DEFENSEPROMOTEDREPAIRSUPERSEDES: restore the bare `if (leg2)`
+ * at run-debate.js. Reds (iii) below.
+ * NAMED MUTANT — REVOTEPROMOTEDREPAIRSUPERSEDES: restore the bare `leg2 ?` at
+ * run-debate-revote.js :: repairRevoteLeg. Reds the re-vote (iii).
+ * NAMED MUTANT — DEBATEPROMOTEDREPAIRSILENT: drop the `dbg.repairPromoted` clause
+ * in run-debate-stage.js. Reds the note test.
+ */
+describe('runDebate — a promoted repair never supersedes real text (#257 R-X46)', () => {
+  const promotedLeg = (model, summary, waveId, slot = 1) => ({ ...leg(model, summary, waveId, slot),
+    promoted: true, durationMs: 4200, usage: { tokens: { output: 0, reasoning: 1900 } } });
+  const REAL_BUT_UNPARSEABLE = 'I defended the finding at length in prose; the JSON never appeared.';
+
+  test('(iii) DEFENCE: the wave-1 real text stays the kept leg, the promoted repair is the repair row, and the artifact is written', async () => {
+    const tmp = mkTmp('run-debate-rx46-defense-');
+    const input = provisionalInput();
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1r') {
+          const l = promotedLeg('gemini', inReasoning, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        const l = leg('gemini', REAL_BUT_UNPARSEABLE, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    // The KEPT leg is wave 1's, with wave 1's text and wave id.
+    expect(result.defenseLegs[0]).toMatchObject({ model: 'gemini', waveId: 'r-d1',
+      conformance: 'unstructured', summary: REAL_BUT_UNPARSEABLE });
+    expect('promoted' in result.defenseLegs[0]).toBe(false);
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows.find(r => r.role === 'rebuttal')).toMatchObject(
+      { waveId: 'r-d1', conformance: 'unstructured' });
+    // NOTHING was superseded — the real text was not replaced by a non-answer.
+    expect(rows.some(r => r.role === 'superseded')).toBe(false);
+    // The promoted repair is recorded as what it was, and its row names the cause.
+    expect(rows.find(r => r.role === 'repair')).toMatchObject(
+      { waveId: 'r-d1r', conformance: 'unstructured', status: 'complete', promoted: true });
+    // D6's actual loss: the seat's real prose now reaches the artifact surface
+    // (R-X30 skips only a PROMOTED kept leg, and the kept leg is not promoted).
+    expect(fs.readFileSync(path.join(tmp, 'rebuttal-gemini.md'), 'utf-8')).toBe(REAL_BUT_UNPARSEABLE);
+    // The outcome is unchanged: nothing parsed, so every original still stands.
+    expect(result.debateSummary.noResponse).toBe(1);
+    expect(result.degraded).toBe(true);
+  });
+
+  test('(i) DEFENCE control: a promoted wave-1 whose relaunch is REAL still supersedes, byte-identical to today', async () => {
+    const tmp = mkTmp('run-debate-rx46-defense-i-');
+    const input = provisionalInput();
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const repaired = defenseOut([{ id: 'A1', action: 'amend', claim: 'retry caps at 5', argument: 'measured' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1r') {
+          const l = leg('gemini', repaired, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        const l = promotedLeg('gemini', inReasoning, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => ({ wave: wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv')]), exitCode: 0 }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows.find(r => r.role === 'rebuttal')).toMatchObject({ waveId: 'r-d1r', conformance: 'repaired' });
+    expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-d1', promoted: true });
+    expect(rows.some(r => r.role === 'repair' || r.role === 'relaunch')).toBe(false);
+    expect(fs.readFileSync(path.join(tmp, 'rebuttal-gemini.md'), 'utf-8')).toBe(repaired);
+  });
+
+  test('(ii) DEFENCE control: promoted wave-1 AND promoted relaunch still supersedes — nothing real is dropped', async () => {
+    const tmp = mkTmp('run-debate-rx46-defense-ii-');
+    const input = provisionalInput();
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        const l = promotedLeg('gemini', inReasoning, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows.find(r => r.role === 'rebuttal')).toMatchObject({ waveId: 'r-d1r', promoted: true });
+    expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-d1', promoted: true });
+    expect(rows.some(r => r.role === 'repair' || r.role === 'relaunch')).toBe(false);
+    // Both legs are deliberation, so R-X30 still writes no artifact at all.
+    expect(fs.existsSync(path.join(tmp, 'rebuttal-gemini.md'))).toBe(false);
+  });
+
+  test('(iii) RE-VOTE: the wave-1 real text stays the kept leg and its revote artifact is written', async () => {
+    const tmp = mkTmp('run-debate-rx46-revote-');
+    const input = provisionalInput();
+    const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1') {
+          const l = leg('gemini', defended, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        // gpt's re-vote repair comes back PROMOTED, adversarially parseable inside.
+        const l = promotedLeg('gpt', gptFlip, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => ({ exitCode: 0, wave: wave([
+        leg('gpt', REAL_BUT_UNPARSEABLE, 'r-rv', 1),
+        leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const gptLeg = result.revoteLegs.find(l => l.model === 'gpt');
+    expect(gptLeg).toMatchObject({ waveId: 'r-rv', conformance: 'unstructured', summary: REAL_BUT_UNPARSEABLE });
+    expect('promoted' in gptLeg).toBe(false);
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gpt');
+    expect(rows.find(r => r.role === 'revote')).toMatchObject({ waveId: 'r-rv', conformance: 'unstructured' });
+    expect(rows.some(r => r.role === 'superseded')).toBe(false);
+    expect(rows.find(r => r.role === 'repair')).toMatchObject(
+      { waveId: 'r-rv-gptr', conformance: 'unstructured', promoted: true });
+    expect(fs.readFileSync(path.join(tmp, 'revote-gpt.md'), 'utf-8')).toBe(REAL_BUT_UNPARSEABLE);
+    // gpt's re-vote never parsed, so its Stage-2 dispute still stands.
+    const doc = JSON.parse(fs.readFileSync(path.join(tmp, 'debate.json'), 'utf-8'));
+    expect(doc.revotes.some(r => r.judge === 'gpt')).toBe(false);
+  });
+
+  test('(i)/(ii) RE-VOTE control: a PROMOTED wave-1 re-vote is still superseded by its relaunch', async () => {
+    const tmp = mkTmp('run-debate-rx46-revote-ctl-');
+    const input = provisionalInput();
+    const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1') {
+          const l = leg('gemini', defended, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        const l = promotedLeg('gpt', gptFlip, opts.waveId);   // case (ii): both promoted
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => ({ exitCode: 0, wave: wave([
+        promotedLeg('gpt', gptFlip, 'r-rv', 1),
+        leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gpt');
+    expect(rows.find(r => r.role === 'revote')).toMatchObject({ waveId: 'r-rv-gptr', promoted: true });
+    expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-rv', promoted: true });
+    expect(rows.some(r => r.role === 'repair' || r.role === 'relaunch')).toBe(false);
+  });
+
+  // R-X36's rule, applied to the debate: a `promoted: true` row is never the ONLY
+  // record of itself. The round-level note is where the debate speaks, so the
+  // clause rides its `why` — and only when a promoted repair actually ran.
+  test('the round note NAMES the promoted repair, and every other why stays byte-identical', async () => {
+    const { runDebateStage } = require('../../src/council/run-debate-stage');
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const run = async (repairLegFor) => {
+      const tmp = mkTmp('run-debate-rx46-note-');
+      const input = provisionalInput();
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          const l = opts.waveId === 'r-d1r' ? repairLegFor(opts.waveId)
+            : leg('gemini', REAL_BUT_UNPARSEABLE, opts.waveId);
+          return { wave: wave(l ? [l] : []), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+      return ctx.degrade.all().filter(n => n.channel === 'debate-degraded');
+    };
+
+    // Case (iii): the repair came back promoted.
+    const promotedNotes = await run((w) => promotedLeg('gemini', inReasoning, w));
+    expect(promotedNotes).toHaveLength(1);
+    expect(promotedNotes[0].why).toBe('one or more defense or re-vote legs died or returned '
+      + 'unstructured output; its repair answered only in its reasoning channel');
+    expect(promotedNotes[0].what).toBe('the debate round did not complete cleanly');
+
+    // The CONTROL: an ordinary dead repair, same degraded round, byte-identical prose.
+    const deadNotes = await run(() => null);
+    expect(deadNotes).toHaveLength(1);
+    expect(deadNotes[0].why).toBe(
+      'one or more defense or re-vote legs died or returned unstructured output');
   });
 });
 describe('runDebate — cost ceiling is a WHOLE-ROUND gate before the re-vote wave (spec §5.7)', () => {

@@ -90,7 +90,14 @@ async function runDebateStage(ctx, { provisional, provisionalInput, overBudget }
         ctx.degrade.note({
           channel: 'debate-degraded',
           what: 'the debate round did not complete cleanly',
-          why: 'one or more defense or re-vote legs died or returned unstructured output',
+          // #257 R-X46: R-X36's rule, applied to the debate — a `promoted: true`
+          // row is never the only record of itself. When a defence's or re-vote's
+          // repair came back promoted (case iii: the wave-1 REAL text was kept
+          // rather than superseded), the prose names it. The clause is '' for
+          // every other degraded round, so every other `why` is byte-identical
+          // (named mutant "DEBATEPROMOTEDREPAIRSILENT").
+          why: 'one or more defense or re-vote legs died or returned unstructured output'
+            + (dbg.repairPromoted ? '; its repair answered only in its reasoning channel' : ''),
           effect: 'affected findings keep their provisional tier; will exit degraded (2)',
         });
       }

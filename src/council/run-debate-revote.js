@@ -174,7 +174,7 @@ async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedI
   const conformance = parsed.ok ? 'repaired' : 'unstructured';
   // Symmetric with runDefenseSolo's `if (leg2) { leg = leg2; }` — otherwise
   // revote-<model>.md and the runStats row keep the PRE-repair output.
-  return leg2
+  return leg2 && (!isPromotedLeg(leg2) || isPromotedLeg(leg)) // #257 R-X46 (D6), the re-vote half of run-debate.js's condition: supersede only when the retry leg is REAL or the wave-1 leg was itself promoted, so a promoted repair never replaces — and R-X30 never silences — real text it failed to repair. Named mutant "REVOTEPROMOTEDREPAIRSUPERSEDES" (restore the bare `leg2 ?`).
     ? { aborted: null, parsed, conformance, outLeg: leg2,
         supersededRow: legRow(judge, leg, 'unstructured'), repairRow: null }
     : { aborted: null, parsed, conformance, outLeg: leg,
