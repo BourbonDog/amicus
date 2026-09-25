@@ -1609,7 +1609,7 @@ describe('runDebate — a promoted repair never supersedes real text (#257 R-X46
      * promoted relaunch is a real row carrying `promoted: true`, and R-X36's rule
      * says it is never the only record of itself. It is announced, as a relaunch —
      * since R-X48 because its MARKER says so, not because this row exists. Round 2
-     * found this row reachable; its COMPLETE sibling, which leaves no row, stayed
+     * found this row reachable; its COMPLETE sibling, which leaves no retry row, stayed
      * unnamed until round 5 (see the R-X48 block below).
      *
      * NAMED MUTANT — RELAUNCHCALLEDREPAIR: render the repair wording for every

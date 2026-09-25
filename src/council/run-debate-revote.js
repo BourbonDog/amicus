@@ -151,7 +151,7 @@ function reVoteUnboundNote(waveId, judge, key, leg) {
  * `conformance`, `outLeg` (the new leg when it completed, else the original) —
  * plus exactly one non-null row: `supersededRow` (completed retry — the pre-retry
  * leg's row) or `repairRow` (dead retry — the failed attempt's own row), for the
- * caller to push — AND `promotedRetry` (#257 R-X48), which rides BOTH arms precisely because it is not a row: it is the round note's record that this RETRY answered only in its reasoning channel, and the commonest such retry (a promoted relaunch that COMPLETES) supersedes and leaves no row at all. A user abort returns `{ aborted: <exitCode> }` alone, propagated.
+ * caller to push — AND `promotedRetry` (#257 R-X48), which rides BOTH arms precisely because it is not a row: it is the round note's record that this RETRY answered only in its reasoning channel, and the commonest such retry (a promoted relaunch that COMPLETES) supersedes and leaves no `repairRow`. A user abort returns `{ aborted: <exitCode> }` alone, propagated.
  */
 async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedIds, bundle }) {
   // One repair, solo, to that judge. The id is built from the SEAT key so

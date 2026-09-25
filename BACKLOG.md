@@ -9228,10 +9228,10 @@ Deferred — one line each, none blocks anything:
   failure's ONLY in ANSI or control characters is not suppressed and the same reason renders twice.
   One-line cure: compare the collapsed forms.
 - [ ] #257 (council r3, F3 concern 4) — `src/council/run-stage2-notes.js :: judgeDeadNote` still
-  caps its leg error at a bare literal `200` (`:59`, #219), so a judge dying `OUTPUT_LENGTH` or at
+  caps its leg error at a bare literal `200` (`:63`, #219), so a judge dying `OUTPUT_LENGTH` or at
   the no-output backstop loses its amicus-minted remedy in that prose — measured, the shortest
-  `OUTPUT_LENGTH` format is 265 characters and the longest minted reason was 518 at round 3 — and
-  is **620** for the pinned rows since round 4 (R-X43; supremum **627**), which only widens the gap
+  `OUTPUT_LENGTH` format is 231 characters and the longest minted reason was 518 at round 3 — and
+  is **620** for the pinned rows since round 4 (R-X43; supremum **660** since R-X50), which only widens the gap
   this 200-char cap opens. R-X38's ruling (a
   cap bounds provider noise and must pass every minted reason whole) applies here unchanged; it is
   its own change because it moves a pinned Stage-2 string.

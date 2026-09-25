@@ -65,7 +65,7 @@ const now = () => new Date().toISOString();
  * "DEBATEPROMOTEDREPAIRUNNAMED", "RELAUNCHCALLEDREPAIR").
  * @param {Array<{alias: string, kind: string}>} [entries] the round's
  *   `promotedRetry` MARKERS — one per RETRY that came back promoted, whichever
- *   branch its leg took (several of them leave no row at all), never one per
+ *   branch its leg took (a complete relaunch leaves no retry row), never one per
  *   row; `kind` is 'repair' or 'relaunch'
  * @returns {string} '' or one leading-'; ' clause per kind
  */
