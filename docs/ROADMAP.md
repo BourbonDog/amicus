@@ -13,17 +13,18 @@ lives under **Backlog (tracked, not scheduled)** with everything else that is re
 Nothing about the content changed and no judgment about its value is implied; only its status. When
 an org buyer and the org to support them exist, it earns a number then.
 
-Amicus is at **v4.13.0** (2026-09-18). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.14.0** (2026-09-25). Each 4.x rev below leads with the benefit, not the
 plumbing; the v4.9.x patch releases carry no section of their own, because each corrected a
 defect rather than adding scope — where one added a surface (v4.9.4's `--thinking` refusals and
 `output-budget` doctor row, v4.9.5's Electron digest gate, v4.9.6's artifact custody, v4.9.7's dual name-table rescue boundary, v4.9.8's per-run seat tool allowlist and its unverified/refused seat census) it did so to
 make an existing promise true, not to widen it. v4.10.0 added a surface (`amicus aliases`) and
 v4.11.0 finished it (owner mode, the setup window's Needs-review section, the once-a-day notice),
-v4.12.0 added one of its own (the CI council's credit preflight), and v4.13.0 changed what a
-shipped one does (the no-output backstop asks the engine before it kills), so each gets a
-section. See `CHANGELOG.md` for what each one contained.
+v4.12.0 added one of its own (the CI council's credit preflight), v4.13.0 changed what a
+shipped one does (the no-output backstop asks the engine before it kills), and v4.14.0 changed
+what a council accepts as a review (an answer given only in the reasoning channel is not one),
+so each gets a section. See `CHANGELOG.md` for what each one contained.
 
-**Status:** v4.0 through **v4.13.0** have **shipped**, plus the v4.9.1–v4.9.8 patch releases —
+**Status:** v4.0 through **v4.14.0** have **shipped**, plus the v4.9.1–v4.9.8 patch releases —
 everything on this page is a record of what landed, not a plan. Composition — the scope that
 carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
 release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
@@ -610,6 +611,39 @@ measured did not remove the tail.
 > extension is refused and recorded, and the status read is bounded by the leg time. The
 > judge-death regime since v4.9.8 stays open and weekday-collinear; nothing here claims to explain
 > it.
+
+## v4.14 — "A deliberation is not a review" *(a seat that answers only in its reasoning channel — #257)* — ✅ SHIPPED v4.14.0, 2026-09-25
+**Benefit:** a council no longer adjudicates a model's deliberation as its answer. When a seat,
+judge, chair, defence or re-vote answers only in its reasoning channel, the council says so and
+treats the leg as no deliverable: it asks again once, with the original briefing, and a seat that
+answers the same way twice is a lost seat, announced, rather than a 149 KB "review" crowding the
+judges' bundle.
+
+- **★ A reasoning-only answer is no deliverable, at every reader** — the engine's mirror still
+  promotes the reasoning to the leg's output, so a solo `amicus start` keeps showing an answer, and
+  every leg document now carries `promoted: true`. A council refuses it everywhere it reads a leg:
+  a Stage-1 seat takes its once-only retry and, if it answers the same way, is lost (a `Notice:`,
+  exit 2, `seatLoss` under `--critic`, and the census counts it unreviewed); the `-p<N>`/`-q<N>`
+  repair solos count it a failed attempt; a Stage-2 judge, defence or re-vote is relaunched once
+  with its original briefing and never repaired against its deliberation, and a judge that still
+  cannot answer stands down with a note that says why; the chair retries and falls back as for a
+  chair with no output. Every announcement names the cause, with the token counts when the
+  provider reported them; a relaunch is recorded as a relaunch, not a repair, and a rescued judge's
+  row says `rescued`. (#257) *(L)*
+- **Announcements that stay bounded and honest** — the Stage-1 dead-leg and retry prose bound the
+  engine's error text at 800 characters on one line with no control characters, and quote the
+  operator's output-token flag bounded, so the longest reason amicus can mint is a computed worst
+  case (620 characters on the pinned rows, 660 over all legal inputs) rather than a sample; a
+  provider-controlled `finish` is reduced to identifier characters before any prose quotes it; and
+  a leg whose provider reported no token usage says `token usage not reported` instead of a
+  fabricated `0 reasoning / 0 output tokens`. (#257) *(M)*
+> Why here: the council workflow installs `amicus@latest` and never runs PR code, so every council
+> round on #270 ran 4.13.0, and round 5 met the case live. deepseek's retry finished with
+> 4,095 reasoning and 3 output tokens, its "review" was its deliberation, 4.13.0 counted the seat
+> healed, and a repair pass turned the deliberation into three findings. From this release a
+> council marks that leg `promoted: true`, loses the seat and exits 2. The flip side is by design:
+> a seat that answers only in its reasoning channel on every call loses every council it sits on.
+> Re-seat it; a pre-flight warning for such a seat is filed, not built.
 
 ## Backlog (tracked, not scheduled)
 
