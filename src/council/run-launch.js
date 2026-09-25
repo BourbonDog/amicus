@@ -20,6 +20,7 @@ const path = require('path');
 // require-free; re-exported below — run-stage2.js and workspace/artifact-guard.js
 // import it from here.
 const { sanitizeName, artifactName } = require('./seats');
+const { isPromotedLeg } = require('./promoted');
 
 /**
  * Did a launch exit because a SIGNAL killed it (130 = SIGINT, 143 = SIGTERM)
@@ -220,7 +221,8 @@ function createLaunchers(deps = {}) {
 /**
  * Write one review file per surviving Stage-1 leg (skill layout). Dead legs and
  * empty summaries are skipped — the caller applies the wave-degrade rules to
- * what remains, which is why a BOUND seat can still end up dead here.
+ * what remains, which is why a BOUND seat can still end up dead here. A promoted leg
+ * (#257) is skipped too: `complete` with text, but the text is its reasoning.
  *
  * With `seatOf` the filename is the SEAT's (artifactName), byte-identical to the
  * alias name for every bench that has ever run, and what stops two twins from
@@ -240,6 +242,12 @@ function materializeReviews(runDir, legs, seatOf) {
     if (!leg || leg.status !== 'complete') { continue; }
     const text = leg.summary;
     if (!text || !String(text).trim()) { continue; }
+    // #257: a promoted leg is `complete` with text, and the text is not a review — it is the
+    // model's deliberation, promoted to output because no answer text ever arrived. Skipping it
+    // HERE is what routes it into the once-only retry (run-stages.js's deadLegs0 is "every leg
+    // this function rejected", and run-retry.js's `usable` set is this same function over the
+    // retry wave). Named mutant "PROMOTEDKEPT" (tests/council/run-launch.test.js).
+    if (isPromotedLeg(leg)) { continue; }
     const modelInput = leg.modelInput || leg.model;
     const seat = (seatOf && seatOf.get(leg)) || null;
     const name = seat ? artifactName(seat, 'review') : `review-${sanitizeName(modelInput)}.md`;
@@ -260,8 +268,12 @@ function materializeReviews(runDir, legs, seatOf) {
  * byte-identical to `<prefix>-<sanitizeName(model)>.md` for every bench without
  * a repeated alias, and what stops two twins from clobbering one file. Without
  * it the alias name is kept — today's exact behaviour.
+ *
+ * A promoted entry (#257) is skipped for the same reason materializeReviews skips one:
+ * the text is the seat's deliberation, so writing it would publish a rebuttal or a
+ * re-vote deliverable made of reasoning nobody chose to say.
  * @param {string} runDir
- * @param {Array<{model: string, summary: string, seat?: ?object}>} legs
+ * @param {Array<{model: string, summary: string, seat?: ?object, promoted?: boolean}>} legs
  * @param {string} prefix 'rebuttal' | 'revote'
  * @returns {Array<{model: string, file: string}>}
  */
@@ -269,6 +281,10 @@ function materializeDebate(runDir, legs, prefix) {
   const out = [];
   for (const leg of legs) {
     if (!leg || !leg.summary || !leg.summary.trim()) { continue; }
+    // #257 R-X30: a promoted defence or re-vote is its raiser's reasoning, not a rebuttal — no
+    // artifact (the reasoning stays in the leg's session summary.md and wave.json); named mutant
+    // "DEBATEPROMOTEDMATERIALIZED" (tests/council/run-launch.test.js).
+    if (isPromotedLeg(leg)) { continue; }
     const name = leg.seat ? artifactName(leg.seat, prefix) : `${prefix}-${sanitizeName(leg.model)}.md`;
     const file = path.join(runDir, name);
     fs.writeFileSync(file, leg.summary, { mode: 0o600 });

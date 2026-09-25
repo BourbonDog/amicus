@@ -33,12 +33,22 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   'seat-unbound',
   // #202: a Stage-2 JUDGE leg that came back dead — bound to its seat, so
   // neither `seat-unbound` nor an orphan, and until now it had no channel at all
-  // and no case in run-stage2.js. Deliberately its own channel rather than
+  // and no case in the Stage-2 judge loop (run-stage2-judge.js). Deliberately its own channel rather than
   // `dead-leg`: that one is the Stage-1 BENCH roster's, feeds the retry pass and
   // the seat-loss surface, and a judge death reused on it would be counted as a
   // lost reviewer by consumers that only ever meant seats (verdict-seat-loss.js
   // already gates the Stage-2 notes out of `seat-unbound` for the same reason).
   'stage2-judge',
+  // #257 (R-X32): a Stage-2 judge answered only in its reasoning channel. Its own
+  // block is NEVER used — it is relaunched once with the original bundle — and the
+  // note fires on EVERY path that relaunch can take: rescued by the relaunch itself
+  // (attempt 1) or by the relaunch's one repair (attempt 2), or stood down (the
+  // relaunch was promoted again, died, still did not parse after its one repair, or
+  // never ran because the cost ceiling arrived first). Kind 'info' on all of them —
+  // a stood-down judge is already counted by thin-cross-review, so this channel
+  // never moves the exit code — and the `why` names which
+  // (run-stage2-notes.js :: promotedJudgeNote).
+  'judge-reasoning-only',
   // #242 / spec §5 (v4.9.8): render-time rows the report derives from runStats
   // (council/report-lost-rows.js) — never emitted by the sink, so neither can
   // flip `degraded` or the exit code. `unverified-repair`: a seat's findings

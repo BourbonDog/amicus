@@ -779,7 +779,7 @@ under "Stage-2 → tally assembly recipe"). It needs **all five top-level keys**
 | `findings[]` | array | One entry per finding across all reviews: `{id, raiser, severity}` (`claim` may ride along but isn't required by the tally engine). `id` is the run-global label (e.g. `A1`, `B2`) assigned during Stage-2 assembly, not the reviewer's local integer id. `raiserSeat?` (**v4.8**) — the raising **seat's** id (`deepseek#1`), emit-only-when-it-differs-from-the-alias, so a bench with no repeated alias never carries it. `raiser` stays the alias in every case. |
 | `adjudications[]` | array | One entry per (judge × finding): `{findingId, judge, verdict}`, `verdict ∈ {agree, dispute, neutral}`. `seat?` (**v4.8**) — the judging **seat's** id, on the same emit-when-different terms as `findings[].raiserSeat`; `judge` stays the alias. Include every judge's verdict on every finding, **including the raiser's own adjudication of its own finding** — the engine excludes it automatically when scoring (don't pre-filter it). ⚠️ **v4.8: that exclusion is seat-conditional.** When a vote *and* its finding both carry a seat id, the engine compares **seats** (`v.seat !== f.raiserSeat`), so on a bench that repeats an alias a twin's genuine vote on its twin's finding is now counted instead of discarded. When either side carries no seat id — a legacy document, a hand-assembled one, or a real run whose leg failed to bind to its seat — it falls back to comparing **aliases**, which is the pre-v4.8 behaviour and still drops that twin's vote. Never fill in a seat id you did not observe just to unlock the seat compare. ⚠️ **`""` is not a model id.** The schema accepts an empty string for `raiser` and for `judge`, but the engine cannot identify a vote it has no name for: when a finding's `raiser` is empty or missing, every vote whose `judge` is also empty or missing is excluded from `basis` and counted in `findings[].unattributedPeerDrops`. A **seat id on both sides overrides this** — it is a stronger identity than either name, so a seated vote is scored (or excluded as the raiser's own) regardless of what `raiser` and `judge` say. Send the real alias, or expect the vote not to be scored. |
 | `rankings[]` | array | One entry per judge: `{judge, order}`. `order` is that judge's `FINAL RANKING:` block translated to model ids, e.g. `["gpt", "deepseek"]` (ties may use a nested array, e.g. `[["gpt","deepseek"], "mistral"]`). `seat?` (**v4.8**) — the judge's own seat id, on the same emit-when-different terms as `adjudications[].seat`; `judge` stays the alias. `orderSeats?` (**v4.8**) — the seat-valued parallel of `order`, slot for slot (a tied slot is a nested array there too): each slot is a seat id where the ranked model's seat is known, `null` where it is not, and the whole key is emitted only when at least one slot is non-null. **Two consumers read it.** Street cred keys on `orderSeats` when present and falls back to the alias otherwise — the mechanism that lets a twin bench's two street-cred rows diverge instead of collapsing into one. **v4.8** — the **chair packet** is the second: its peer-rankings block zips `orderSeats` onto `order` slot for slot, so the chair reads seat ids where the run knows them and the ranked alias where it does not. A tied slot is zipped element by element, and a `null` slot renders the alias rather than the word `null`. |
-| `runStats[]` | array | One row per paid launch (v4.7 spec §5 D1/D2 — no longer capped at one row per model; see the role roster below): `{model, role, wasChair, conformance, status, durationMs, usage, waveId?, resolvedModel?, seat?}` — plus `findingsUnverified?: true` / `repairRefused?: {code, detail}` (the two halves of the repair contract's outcome, see the repair paragraph under `amicus council validate`) and `ttftMs?` (v4.9 W13). `seat?` (**v4.8**) is the row's seat **id**, emit-only-when-it-differs-from-that-seat's-own-alias — so only a bench that repeats an alias carries it. Only the two producers that *have* a seat pass one: the primary reviewing-seat rows and the dead-seat rows. A `judge`, `chair-attempt`, `repair` or `superseded` row never carries it (all four are excluded from the ledger join, so a seat stamp there could never win it), and neither do the off-bench chair rows or the synthetic `claude` row, which have no seat at all. Two seats of one alias that **both** died usually get **two** rows: each carries its own `seat` id where the run bound that seat's leg, and **no** `seat` where it could not — an unidentified dead seat is counted but never named. They still collapse into a **single** row in two cases, both of them seats the run genuinely cannot tell apart: both legs missing a task id, and a run with no seat table behind it — the deliberate floor, since inventing an identity there would be a guess. A retry wave that came back with **fewer legs than it launched** was a third such case and is **no longer**: v4.8 T-A4 made the retry reconcile count a key's SLOTS rather than test its presence, so both twins get a row (measured end to end through `runStage1`: 1 primary dead-seat row before, 2 after, with the superseded rows unchanged at 2 — one of the two rows carries `usage: null`, and **which one is arbitrary**: neither row names a seat, so the alias's billed total is split across its anonymous rows by row ORDER, never by identity). ⚠️ **Corrected in v4.8** — this cell previously claimed the two *always* collapse into one row carrying no `seat`. That was already wrong for **bound** twins the day it was written (the two-row behaviour landed 2026-08-13, this sentence 2026-08-14), and v4.8 closed the unbound half for every retry outcome, the partial return included (that last one in T-A4). May be `[]`. Any leg with no run document gets `durationMs: null, usage: null` — never invent a value. `waveId` is emit-only-when-set. `resolvedModel?` (v4.7) — the executable id that actually served the row's leg, emit-only-when-set; leg-less rows (the give-up chair row, dead seats with no leg, the claude row) never carry it. `model` stays the council alias. ⚠️ **One row shape carries `usage` with NO `waveId`, `resolvedModel` or `durationMs` (v4.8)**: an unidentified dead seat on an alias the bench repeats, where the run holds a billed retry leg it cannot attribute to either twin. The cost is real and is counted in the run total, but every per-seat execution fact is withheld rather than guessed — so do **not** assume `usage` implies `waveId`, and do not treat a null `durationMs` as "this seat cost nothing". |
+| `runStats[]` | array | One row per paid launch (v4.7 spec §5 D1/D2 — no longer capped at one row per model; see the role roster below): `{model, role, wasChair, conformance, status, durationMs, usage, waveId?, resolvedModel?, seat?}` — plus `findingsUnverified?: true` / `repairRefused?: {code, detail}` (the two halves of the repair contract's outcome, see the repair paragraph under `amicus council validate`) and `ttftMs?` (v4.9 W13), `promoted?: true` (**#257** — this row's leg answered only in its reasoning channel; emit-when-true) and `rescued?: true` (**#257 R-X45** — JUDGE rows only, and only beside `promoted?`: the judge's own leg answered only in its reasoning channel and its `relaunch` row rescued the seat, so the row's `promoted: true` is not a failure to review). Both are emitted by the one row builder, `rescued` in the slot immediately after `promoted` and immediately before `usage` — the same slot `tally.js`'s re-projection uses, so the tally-input row and the `tally.json`/`verdict.json` row are the same shape by construction; `ttftMs`, `promoted` and `rescued` are the three fields `schemas/council-tally.schema.json` declares on a runStats row. `seat?` (**v4.8**) is the row's seat **id**, emit-only-when-it-differs-from-that-seat's-own-alias — so only a bench that repeats an alias carries it. Only the two producers that *have* a seat pass one: the primary reviewing-seat rows and the dead-seat rows. A `judge`, `chair-attempt`, `repair`, `relaunch` or `superseded` row never carries it (all five are excluded from the ledger join, so a seat stamp there could never win it), and neither do the off-bench chair rows or the synthetic `claude` row, which have no seat at all. Two seats of one alias that **both** died usually get **two** rows: each carries its own `seat` id where the run bound that seat's leg, and **no** `seat` where it could not — an unidentified dead seat is counted but never named. They still collapse into a **single** row in two cases, both of them seats the run genuinely cannot tell apart: both legs missing a task id, and a run with no seat table behind it — the deliberate floor, since inventing an identity there would be a guess. A retry wave that came back with **fewer legs than it launched** was a third such case and is **no longer**: v4.8 T-A4 made the retry reconcile count a key's SLOTS rather than test its presence, so both twins get a row (measured end to end through `runStage1`: 1 primary dead-seat row before, 2 after, with the superseded rows unchanged at 2 — one of the two rows carries `usage: null`, and **which one is arbitrary**: neither row names a seat, so the alias's billed total is split across its anonymous rows by row ORDER, never by identity). ⚠️ **Corrected in v4.8** — this cell previously claimed the two *always* collapse into one row carrying no `seat`. That was already wrong for **bound** twins the day it was written (the two-row behaviour landed 2026-08-13, this sentence 2026-08-14), and v4.8 closed the unbound half for every retry outcome, the partial return included (that last one in T-A4). May be `[]`. Any leg with no run document gets `durationMs: null, usage: null` — never invent a value. `waveId` is emit-only-when-set. `resolvedModel?` (v4.7) — the executable id that actually served the row's leg, emit-only-when-set; leg-less rows (the give-up chair row, dead seats with no leg, the claude row) never carry it. `model` stays the council alias. ⚠️ **One row shape carries `usage` with NO `waveId`, `resolvedModel` or `durationMs` (v4.8)**: an unidentified dead seat on an alias the bench repeats, where the run holds a billed retry leg it cannot attribute to either twin. The cost is real and is counted in the run total, but every per-seat execution fact is withheld rather than guessed — so do **not** assume `usage` implies `waveId`, and do not treat a null `durationMs` as "this seat cost nothing". |
 
 **`runStats[].role` roster (v4.7 row-per-launch).** Every leg the run budget counts gets exactly
 one row, so a seat that needed a repair or lost a leg to a retry can now show up more than once.
@@ -795,12 +795,27 @@ give-up chair; the dead leg's own usage on a dead seat/critic/lens).
 `repair` (a Stage-1 `-p`, Stage-2 `-q`, chair-ch4, or debate-born `-d<N>r`/`-rv-…r` solo — a
 failed defense or re-vote repair), and `superseded` (a first leg a later attempt replaced — an
 SL-2 retry or a debate repair) — all three new in v4.7's row-per-launch change — plus `rebuttal`
-and `revote` (a `--debate` round's defense/re-vote legs; v4.1, pre-dating row-per-launch). All
-five still cost money and land in `runStats`, so they raise the run's totals everywhere those are
-summed. In `council report`'s cost table only `judge`/`chair-attempt`/`repair`/`superseded` get a
+and `revote` (a `--debate` round's defense/re-vote legs; v4.1, pre-dating row-per-launch), and
+`relaunch` (**#257 R-X45**, new — a follow-up ask that RE-asks a promoted seat with its original
+briefing instead of correcting it: the attempt-1 `-q<N>` of a promoted Stage-2 judge — every one
+of them, whether its adjudication was used in the end or not — and a promoted defence's or
+re-vote's relaunch that produced nothing usable. A *debate* relaunch that succeeds is not one of
+these rows: it becomes the `rebuttal`/`revote` row and supersedes the promoted first leg, exactly
+as a successful repair does (a judge's relaunch always leaves a row, used or not). The `-q<N>` /
+`…r` id space is unchanged — the id says "a follow-up ask
+of this seat", the ROLE says which kind of ask it was). All
+six still cost money and land in `runStats`, so they raise the run's totals everywhere those are
+summed. In `council report`'s cost table only
+`judge`/`chair-attempt`/`repair`/`relaunch`/`superseded` get a
 suffixed label (`rebuttal`/`revote` render unsuffixed); `council tally` has no per-row cost table
-at all, only an aggregate. And only `chair-attempt`/`repair`/`superseded` are filtered out of the
-Workspace seats panel — `rebuttal`/`revote` rows still render there.
+at all, only an aggregate. A `relaunch` row never joins the model-keyed ledger row, exactly as a
+`repair` row never does: that join is an ALLOWLIST (`ledger.js :: LEDGER_JOIN_ROLES`), so a role
+it does not name is excluded by construction rather than by a skip-list being kept current. And
+only `chair-attempt`/`repair`/`relaunch`/`superseded` are filtered out of the
+Workspace seats panel — measured at
+`electron/workspace-ui/live-seats.js :: seatsFromRunStats`, whose `SEATS_PANEL_EXCLUDED_ROLES`
+names all four, `relaunch` added with the role so the same launch, renamed, does not become a
+phantom seat row the panel never used to show — `rebuttal`/`revote` rows still render there.
 
 `runStats[].waveId` names the exact wave/leg a row was built from, present **iff the row can
 name a billed leg as its OWN** — e.g. the synthetic `claude` row, a give-up chair's error row, and a
@@ -981,8 +996,8 @@ itself is not lost). The MCP equivalent is `amicus_verdict`'s `render: true` + `
 is a **second** call after the first: call once with `record`/`decisions` and no `render` to get
 the decided verdict back as JSON and write it to `<run-folder>/verdict.json` yourself, then call
 again with `render: true` and `outDir: <run-folder>` — this refreshes `<outDir>/report.html` on
-disk and also returns the verdict's Markdown rendering (for `report.md`); it still does not write
-`verdict.json` itself.
+disk and also returns the verdict's Markdown rendering (the Markdown the Claude-authored
+`report.md` embeds — `src/` writes no such file); it still does not write `verdict.json` itself.
 
 **Windows PowerShell 5.1 caveat** (also called out in SKILL.md): redirecting `council tally`'s
 `--json` output with a bare `>` writes UTF-16 under legacy PowerShell 5.1, which then makes
@@ -1402,6 +1417,139 @@ heuristic ends an unfinalized message, the leg logs a warning (warn level) namin
 status it saw. A retry whose next attempt lies beyond the leg deadline ends the leg
 at once as `RETRY_BEYOND_DEADLINE` — unless the last message has already finalized (the
 leg completes normally) or a tool call is live (the bounded tool-settle ceiling governs).
+
+A leg can end `complete` and still deliver nothing a council can read. When the engine's last
+message carries reasoning and **no text part**, the mirror promotes that reasoning into the leg's
+output — the leg ends `status: complete`, no error, with a finish other than `'length'` (typically
+`'stop'`, sometimes absent) — and its document carries
+`promoted: true` (emit-when-true: a leg with real answer text has no such key). Since the next
+minor after 4.13.0 that is not a review (#257): Stage 1 skips the leg instead of materializing it,
+so the seat takes the same once-only retry an empty leg takes, and a retry that answers the same
+way loses the seat — a dead-seat row keeping the leg's true `status: complete`, a `reviewed` count
+that excludes it, a `Notice:`, exit 2, and `seatLoss` when `--critic` was requested. Every announcement names the cause
+(`… with no usable output — it answered only in its reasoning channel (40332 reasoning / 1 output
+tokens, finish 'stop'), which is not a review`) — and when the provider reported no usage for that
+leg, the parenthetical reads `(token usage not reported)` instead of the numbers, never a
+fabricated `(0 reasoning / 0 output tokens)`: a usage record with no positive count at all is an
+absence of observation, not two reported zeros, since a promoted leg produced the reasoning it
+promoted. The chair's `chairAttempts[].reason` reads that one parenthetical
+(`promoted.js :: tokenSplit`) and follows it; the `OUTPUT_LENGTH` reason
+(`utils/output-length.js`) and the `output-truncated` note
+(`run-retry-notes.js :: truncatedReviewNote`) spell the same rule and the same literal
+themselves — `— token usage not reported` in place of ` after <r> reasoning / <o> output tokens`
+— and are pinned equal to it. All three homes also test each COUNT the same way (**#257 R-X50**):
+one predicate, `Number.isInteger(v) && v >= 0` — a fractional or negative count is not a report
+anywhere, rather than a number in one surface and `token usage not reported` in the other two.
+The five-count rule above is unchanged: a usage record with no positive count at all is not a
+report. A reported zero beside a positive count is still a reported zero.
+A Stage-2 judge's retry is a relaunch: a promoted
+judge is never used as it stands — its first `-q<N>` attempt re-asks the original bundle, a
+relaunch that answers with real but unparseable text gets the one remaining repair, and a relaunch
+that answers in its reasoning channel again (or dies) stands the judge down; a `Note:` on the
+`judge-reasoning-only` channel records which, and when fewer than two judges remain usable the
+thin-cross-review reason says `answered only in the reasoning channel and was not rescued`. The
+stand-down cause is ONE explicit state, and it has seven values (plus `null`, which means the
+judge was rescued): `relaunch-promoted`, `relaunch-died`, `relaunch-unparseable`,
+`relaunch-repair-promoted`, `relaunch-unrepaired`, `not-relaunched`, and R-X36's
+`repair-promoted` — the one whose subject is a judge whose own answer was real.
+`relaunch-repair-promoted` is the newest of the seven, and it used to be
+folded into `relaunch-unparseable` (**#257 R-X49**): the relaunch answered for REAL, its text did
+not parse, and its one repair answered in ITS reasoning channel. That ending now says so, byte
+for byte — the `why`'s cause reads `relaunched once with the original briefing, and the
+relaunch's answer did not parse and its repair answered in its reasoning channel`, and the note's
+`data.repairPromotedAttempt` is `2` (the same field R-X36's arm carries, so one key answers
+"which ask answered in the reasoning channel" on either path). A model that cannot follow the
+JSON schema and a model that produced no answer text block at all are different fixes, so they
+are no longer one sentence; `relaunch-unparseable` keeps its own wording and carries no
+`repairPromotedAttempt`. No
+`judge-<seat>.md` is written from a promoted leg; the relaunch's real text is the judge artifact.
+That relaunch is recorded as one (**#257 R-X45**): a `-q<N>` wave whose runStats row is
+`role: 'relaunch'`, not `role: 'repair'` — every attempt-1 relaunch of a promoted judge leaves
+one, whether its adjudication was used in the end or not. When the relaunch rescues the judge,
+the judge's own row carries `rescued: true` beside `promoted: true` — the judge row is attributed
+to the promoted `-s2` leg (#83), so without that marker a fully rescued judge would read as a
+seat that delivered nothing — and `rescued` travels through `tally.js` into `tally.json` and
+`verdict.json`, declared in `schemas/council-tally.schema.json` beside `promoted`. The
+`judge-reasoning-only` `Note:`'s `data` names `relaunchWaveId` (the `-q<N>` that was asked) and
+`usedWaveId` (the ask whose text was adjudicated — the two differ when the relaunch's own answer
+needed its one repair); its `what` and `why` are unchanged. `conformance` is the
+ASKS-TO-PARSE axis and nothing else: `clean` = the first ask parsed, `repaired` = a later ask
+parsed, `unstructured` = no ask parsed (a row for a leg that never returned carries `clean` by
+default — there was no ask to parse; read `status` with it). So a relaunch-rescued judge is
+`repaired` because a later
+ask parsed, and a stood-down promoted judge is `unstructured` because none did; the CAUSE lives
+on the row's `role`/`promoted` and in the note, never on `conformance`, whose three values are
+unchanged. The record therefore tells a relaunch from a repair on its own — the `Note:`'s prose
+is no longer the only thing that does. A promoted `-q<N>` *repair* is still a `role: 'repair'`
+row carrying `promoted: true`: that is attempt 2, the one repair of a relaunch's real text, or
+an ordinary (non-promoted) judge's single repair. Only a relaunch row is `role: 'relaunch'`, and
+it carries `promoted: true` as well when the relaunch itself answered in its reasoning channel.
+A judge whose own answer was real but unparseable and whose repair comes back in the reasoning
+channel gets the same `Note:`, worded for the repair (`judge <alias>'s repair answered in its
+reasoning channel`).
+
+Every council reader of that leg stands it down the same way (#257). A promoted Stage-1
+`-p<N>` or Stage-2 `-q<N>` repair solo is a failed repair attempt inside the existing bound: its
+reasoning is never validated as findings nor parsed as a judgement, nothing extra is announced,
+and its `role: 'repair'` row carries `promoted: true` — `repair`, because a *repair* solo is what
+this is: the attempt-1 `-q<N>` of a promoted judge is a relaunch and its row says `relaunch`
+instead (see the roster above), while attempt 2 and an ordinary judge's one repair stay `repair`.
+A promoted chair leg is no synthesis, so
+the chair-failure walk above runs exactly as for a chair that produced nothing — one retry of the
+same chair, then the street-cred promotion, then give up with `overallVerdict: null` and exit 2 —
+and that attempt is recorded with `outcome: 'no-output'` and a `chairAttempts[].reason` of
+`answered only in its reasoning channel (…); no synthesis to read`, which the `chair-failed`
+announcement prints per attempt when the whole walk gives up. The chair's own ch4 verdict-line
+repair is gated the same way: a promoted repair leg supplies no `VERDICT:` line, so the existing
+no-parseable-line arm of `chair-failed` fires instead —
+`the chair ran but its output carried no parseable VERDICT: line`, or `ANSWER:` on a task run —
+and that repair's row carries `promoted: true`. A promoted debate defence or re-vote is
+unparseable rather than applied: a defence leaves every one of its bundled findings' originals
+standing (`action: 'no-response'`), a re-vote leaves the judge's provisional verdict standing,
+both record `conformance: 'unstructured'`, and the one bounded repair — for a promoted leg, a
+relaunch with its original briefing — is the retry (a relaunch that is promoted again is
+unparseable the same way) — unless the repair parses, in which case it is `repaired` and applied.
+A promoted leg's reasoning is never fed back to be corrected: the relaunch re-asks the original
+defence brief or the shared re-vote bundle, and only a relaunch's real text is ever repaired.
+A promoted **repair** never supersedes real text (**#257 R-X46**). When a defence or re-vote
+answered with real but unparseable text and its one repair came back promoted, the wave-1 text
+stays the kept leg — `conformance: 'unstructured'`, and its `rebuttal-<seat>.md` /
+`revote-<seat>.md` written as before — while the promoted repair is a `repair` row carrying
+`promoted: true`, not a `superseded` row over real text the reader would then never see. The
+round's one `debate-degraded` `Note:` names every affected seat — the raiser on a defence retry,
+the judge on a re-vote retry — and what kind of retry it was,
+by appending to the existing `why` (`one or more defense or re-vote legs died or returned
+unstructured output`):
+
+- one seat — `; <alias>'s repair answered only in its reasoning channel`
+- several — `; the repairs of <a> and <b> answered only in their reasoning channels`
+  (Oxford-free `a, b and c` beyond two)
+- a retry of a *promoted* defence or re-vote is a relaunch, so it reads
+  `; <alias>'s relaunch answered only in its reasoning channel again` and
+  `; the relaunches of <a> and <b> answered only in their reasoning channels again`
+
+Kinds are grouped, the groups follow the round's own first-appearance order, and with no promoted
+retry at all the clause is empty and the `why` is byte-identical to any other degraded round.
+Membership is decided by the RETRY, not by the row it happens to leave (**#257 R-X48**):
+`runDefenseSolo` and `repairRevoteLeg` mint an explicit `promotedRetry` marker — the retrying
+seat's alias beside the kind, `relaunch` when the wave-1 leg was promoted and `repair` otherwise —
+whenever the retry leg is promoted, and the note is built from those markers. (That alias is the
+DEFENCE's raiser on a defence retry and the JUDGE on a re-vote retry — the seat whose retry
+answered in its reasoning channel, whichever side of the debate it sat on.) A promoted defence
+or re-vote whose relaunch comes back promoted **and complete** supersedes its first leg under
+R-X46 and therefore leaves no retry row at all; it is named all the same. Until R-X48 that one
+case was silent while its timed-out sibling was named, because the clause was derived from the
+rows. The four forms above are unchanged and so are the rows — only the SOURCE of the aliases
+moved.
+The promoted leg still gets its own row — `rebuttal`/`revote`, or `superseded` when the repair came
+back with a leg of its own — carrying `promoted: true`, but no `rebuttal-<seat>.md` or
+`revote-<seat>.md` of its own: `materializeDebate` skips a promoted leg as `materializeReviews`
+does, and the reasoning stays in the leg's session `summary.md` and in `wave.json`. The
+fallback-substitution chain is unchanged: a reasoning-only answer is not a capacity signal, so it
+earns no substitute — the council rejects the leg one layer up.
+
+A solo `amicus start` is unchanged — it still prints the promoted reasoning as the answer. See
+[Troubleshooting § A Seat Answered Only in Its Reasoning Channel](./troubleshooting.md#a-seat-answered-only-in-its-reasoning-channel).
 
 ---
 

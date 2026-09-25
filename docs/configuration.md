@@ -104,7 +104,10 @@ Set it by hand-editing `~/.config/amicus/config.json`:
 `amicus doctor`'s `output-budget` row then says what the value reaches: how many of your alias
 routes the catalog can clamp it to, whether an `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` you exported
 yourself is being honoured or overridden, and a malformed value in either place — the engine falls
-back to 32,000 *silently* on those (measured), so the doctor row is where it surfaces.
+back to 32,000 *silently* on those (measured), so the doctor row is where it surfaces. Both that
+row and the `OUTPUT_LENGTH` death reason quote your ambient value **bounded to 96 characters**
+(#257 R-X43 — a longer one is shown truncated with an ellipsis), while the plain-positive-integer
+check that decides which arm they report reads the raw bytes the engine actually saw.
 
 Five things worth knowing before you set it. Every number below was measured on the wire by
 `scripts/probe-max-tokens.js` against the pinned engine, or read in the pinned binary where it says
@@ -177,6 +180,10 @@ P1, PR 2, PR 3 and PR 4).
   for the leg and the budget in force (or the ambient `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` the
   engine was started with, when no budget is set); it used to end `complete` with an empty summary
   or, when the provider streamed the reasoning, with its *thinking* promoted to the review (L2/L4).
+  A message with reasoning, no text and a finish other than `'length'` (typically `'stop'`, sometimes
+  absent) is a different shape — it completes with its reasoning promoted to output, and since the
+  next minor after 4.13.0 a council treats that leg as no deliverable (#257): the once-only retry
+  fires and the leg document carries `promoted: true`.
   A leg whose finalized message carries answer text keeps its review — the answer text (a tool
   loop's earlier answer text included; reasoning an earlier message promoted as a stand-in is
   dropped the moment real answer text arrives) — and a council prints a `Note:` on the

@@ -211,7 +211,7 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   // #83 (v4.6 Plan 2): Stage-2 judge legs are ~38% of a run's cost and had no
   // runStats row at all — per-leg cost was unattributable from the artifact.
   // One row per judge, attributing the judge's ORIGINAL Stage-2 wave leg (never
-  // a repair solo's — run-stage2.js mirrors Stage-1's convention there); a judge
+  // a repair solo's — run-stage2-judge.js mirrors Stage-1's convention there); a judge
   // whose wave leg died still gets an honest error row.
   // v4.8 PR5a T4 (R5-8): the judge row carries its SEAT. PR4c withheld it because
   // `joinsLedger` has no 'judge' member, so nothing consumed it;
@@ -224,7 +224,7 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   for (const j of (judgeResults || [])) {
     runStats.push(buildRunStatsEntry({
       leg: j.leg, model: j.judge, role: 'judge', conformance: j.conformance, seat: j.seat,
-    }));
+      rescued: j.rescued === true })); // #257 R-X45 (D1): a judge RESCUED by its relaunch is attributed to its PROMOTED -s2 leg above, so this row legitimately carries `promoted: true` — `rescued` is the field that tells it from a judge that delivered no review at all. It rides THE ONE ROW BUILDER (an explicit option, not a leg field: the leg this row describes IS the promoted one), which emits it in its own slot between `promoted` and `usage` — the same slot `tally.js`'s allowlist uses, so the tally-input row and the tally.json/verdict.json row are the same shape by construction rather than by agreement (pins G4e/G4f/G7f, tests/council/runstats-byte-order.test.js). Emit-when-TRUE, so every judge row of every run without a rescue is byte-identical. Named mutants "JUDGEROWRESCUEDDROPPED", "RESCUEDORDERDRIFT".
   }
   if (chairStats) { runStats.push(chairStats); }
   return { meta, findings, adjudications, rankings, runStats };

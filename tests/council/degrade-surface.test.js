@@ -139,7 +139,7 @@ test('thin cross-review fires through the REAL runCouncil path, and judges have 
   // counter modeled repeated per-judge solo calls, which is not how Stage 2
   // launches. A judge whose Stage-2 leg is 'complete' with non-empty (even if
   // unparseable) prose enters the bounded 2-attempt repair loop
-  // (run-stage2.js:174-202), so the two "bad" judges' repair solos must ALSO
+  // (run-stage2-judge.js :: adjudicateJudgeLeg), so the two "bad" judges' repair solos must ALSO
   // stay unparseable — a successful repair would make that judge usable and
   // defeat the <2 condition this test pins.
   const stillBad = (o) => okWave([mkLeg(o.model, 'still no parseable block')]);
@@ -175,6 +175,55 @@ test('thin cross-review fires through the REAL runCouncil path, and judges have 
   expect(judgeRows.length).toBeGreaterThanOrEqual(2);
 });
 
+/**
+ * #257 R-X49 (council round 5, C2 — gpt, major, 3-0). The seventh stand-down
+ * state, driven through the REAL runCouncil path so the cause a reader meets in
+ * run.json is the one the state machine set — not one this test re-derived.
+ * Chair HQ2: an operator tuning prompt budgets must be able to tell a model that
+ * cannot follow the JSON schema from one that refused to produce an answer text
+ * block at all. Before R-X49 both ended `relaunch-unparseable`.
+ */
+test("#257 R-X49: a promoted judge whose relaunch was real and whose repair came back promoted names that cause on run.json", async () => {
+  const judged = judgeOut(['Review A', 'Review B', 'Review C'],
+    [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'neutral' }]);
+  const script = {
+    'abc123-s1': (o) => okWave(o.models.map(m => mkLeg(m, review(m)))),
+    // gpt's judge leg carried no text part: its reasoning was promoted to
+    // output, so it is never used as it stands (R-X32) and is relaunched.
+    'abc123-s2': (o) => okWave(o.models.map(m => (m === 'gpt'
+      ? { ...mkLeg(m, 'I should weigh the three reviews against each other first…'),
+        promoted: true, finish: 'length',
+        usage: { tokens: { reasoning: 32000, output: 1 }, cost: { amount: 0.02, source: 'reported' } } }
+      : mkLeg(m, judged)))),
+    // -q1 is the RELAUNCH: REAL text in the output channel, with no block.
+    'abc123-q1': (o) => okWave([mkLeg(o.model, 'Judged at length in prose; no trailing JSON.')]),
+    // -q2 is the one LC-12 repair of that text — and it answers in ITS reasoning
+    // channel. THE state R-X49 names.
+    'abc123-q2': (o) => okWave([{ ...mkLeg(o.model, 'Let me re-read the reviews first.'),
+      promoted: true,
+      usage: { tokens: { reasoning: 4000, output: 1 }, cost: { amount: 0.02, source: 'reported' } } }]),
+    'abc123-ch1': (o) => okWave([mkLeg(o.model, 'Synthesis.\n\nVERDICT: Ship it')]),
+  };
+  const opts = baseOptions(tmp);
+  const { exitCode } = await runCouncil(opts, deps(scriptedLaunchers(script)));
+  // The channel is 'info' on every arm: a lost judge is counted by
+  // thin-cross-review, and two judges still answered, so nothing degrades.
+  expect(exitCode).toBe(0);
+
+  const run = JSON.parse(fs.readFileSync(path.join(opts.runDir, 'run.json'), 'utf-8'));
+  const rec = (run.degrades || []).find(d => d.channel === 'judge-reasoning-only');
+  expect(rec).toBeDefined();
+  expect(rec.kind).toBe('info');
+  expect(rec.what).toBe('judge gpt answered in its reasoning channel');
+  expect(rec.why).toContain("the relaunch's answer did not parse and its repair answered in its "
+    + 'reasoning channel');
+  expect(rec.why).not.toContain('did not parse after its one repair');
+  // The machine field an operator filters on, the same one R-X36's arm uses.
+  expect(rec.data.repairPromotedAttempt).toBe(2);
+  expect(rec.data.attempts).toBe(2);
+  expect('rescued' in rec.data).toBe(false);
+});
+
 test('the PR #254 shape: judges that DIED are named as dead, not as bad output', async () => {
   // The field case (#251 item 3, #202). On PR #254 round 1 three judge legs hit
   // the NO_OUTPUT_BACKSTOP and produced nothing at all; the thin-cross-review
@@ -184,7 +233,7 @@ test('the PR #254 shape: judges that DIED are named as dead, not as bad output',
   // run.json was sent at the wrong one.
   //
   // A dead judge leg ('error', no summary) skips the repair loop entirely
-  // (run-stage2.js gates it on 'complete' AND a summary), so unlike the
+  // (run-stage2-judge.js gates it on 'complete' AND a summary), so unlike the
   // unparseable fixture above this script needs no -q solos.
   const script = {
     'abc123-s1': (o) => okWave(o.models.map(m => mkLeg(m, review(m)))),

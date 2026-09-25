@@ -24,6 +24,7 @@ const { buildRunStatsEntry } = require('./run-assemble');
 // v4.9 W4: pickFallbackChair + classifyChairAttempt moved to chair-fallback.js
 // (size-gate split); re-exported below so no caller changes.
 const { pickFallbackChair, classifyChairAttempt } = require('./chair-fallback');
+const { isPromotedLeg } = require('./promoted');
 
 /**
  * Chair chain (attempt → retry → ledger-promoted fallback → give up) plus the
@@ -58,7 +59,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       tag: o.tag, // v4.7 F8 D16: rides the same forward as councilRunId/councilName.
     });
     addWave(solo.wave);
-    const ok = solo.leg && solo.leg.status === 'complete'
+    const ok = solo.leg && solo.leg.status === 'complete' && !isPromotedLeg(solo.leg) // #257 R-X22: a promoted chair is no synthesis; the walk continues (named mutant "CHAIRPROMOTEDUSED", tests/council/run-chair.test.js)
       && solo.leg.summary && solo.leg.summary.trim();
     // rawLeg is the UN-nulled leg — the classifier needs to see a failed leg
     // document, not just the ok/null collapse the rest of the walk consumes.
@@ -201,7 +202,8 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     // it never supplies a terminal line; a ch4 that never launched gets no
     // row at all, because there is nothing billed to attribute. The push sits
     // AFTER the verdict parse so it stamps the ch4 leg's own measured outcome (PR 199 D1).
-    overallVerdict = parseChairTerminal((repair.leg && repair.leg.summary) || '', o.intent);
+    // #257 R-X27: a promoted verdict-line repair supplies no line — the existing no-parseable-VERDICT arm of chair-failed fires (named mutant "CH4PROMOTEDUSED", tests/council/run-chair.test.js)
+    overallVerdict = parseChairTerminal((repair.leg && !isPromotedLeg(repair.leg) && repair.leg.summary) || '', o.intent);
     chairConformance = overallVerdict ? 'repaired' : 'unstructured';
     if (repair.leg) {
       chairRows.push(buildRunStatsEntry({

@@ -119,6 +119,100 @@ describe('run-stats-entry — the TTFT probe rides the row (v4.9 W13 Task A)', (
 });
 
 /**
+ * #257 — `promoted` rides the runStats row, in the ttftMs slot (between
+ * `ttftMs` and `usage`). Sourced off the LEG document, same shape as `ttftMs`
+ * above: no caller change, no forgotten call site, a dead seat (`leg: null`)
+ * carries no key.
+ *
+ * Emit-when-TRUE (the literal): a leg's `promoted` only ever reaches the row as
+ * `true`, never `false`/`null`/any other truthy stand-in. Named mutant
+ * ROWPROMOTEDCOERCED — `leg.promoted ? …` — would coerce a merely-truthy value
+ * (the string `'true'`, or `1`) into the literal; the ABSENCE test below is its
+ * proof.
+ */
+describe('run-stats-entry — promoted rides the row (#257)', () => {
+  const legWith = (extra) => ({ model: 'openrouter/x/y', status: 'complete', durationMs: 42, usage: null, ...extra });
+
+  test('a leg carrying promoted: true stamps it on the row, between ttftMs and usage', () => {
+    const row = rse.buildRunStatsEntry({
+      leg: legWith({ ttftMs: 1234, promoted: true }), model: 'alias', role: 'reviewer', wasChair: false,
+    });
+    expect(row.promoted).toBe(true);
+    expect(Object.keys(row)).toEqual([
+      'model', 'role', 'wasChair', 'conformance', 'resolvedModel', 'status', 'durationMs',
+      'ttftMs', 'promoted', 'usage',
+    ]);
+  });
+
+  // GREEN at HEAD: the key does not exist at HEAD at all, for any leg — this
+  // pins that a merely-truthy `promoted` still never stamps it, once the
+  // producer exists. ROWPROMOTEDCOERCED is what turns this red.
+  test('ABSENCE: a non-true promoted (false / \'true\' / 1) stamps no key', () => {
+    for (const bad of [false, 'true', 1]) {
+      const row = rse.buildRunStatsEntry({
+        leg: legWith({ promoted: bad }), model: 'alias', role: 'reviewer', wasChair: false,
+      });
+      expect('promoted' in row).toBe(false);
+    }
+  });
+});
+
+/**
+ * #257 R-X45 (fix round 2, review S2) — `rescued` rides THE ONE ROW BUILDER.
+ *
+ * It was first spread onto the judge row by `run-assemble.js` after the builder
+ * returned, which put it last — while `tally.js`'s re-projection placed it
+ * between `promoted` and `usage`. Two producers, two slots, two pins that froze
+ * the divergence. Emitting it HERE, in the builder's own slot immediately after
+ * `promoted`, makes the two agree by construction rather than by agreement.
+ *
+ * EXPLICIT-ONLY, like `summary`: it is NOT sourced from the leg. The leg a
+ * rescued judge row is attributed to is the PROMOTED one (#83), so a leg-sourced
+ * default would be exactly backwards.
+ *
+ * NAMED MUTANT — RESCUEDORDERDRIFT (run-assemble.js): spread it onto the built
+ * row instead of passing it in. Reds runstats-byte-order.test.js :: G7f.
+ */
+describe('run-stats-entry — rescued rides the row, in promoted\'s slot (#257 R-X45)', () => {
+  const leg = { model: 'openai/gpt-5', status: 'complete', durationMs: 50,
+    usage: { input: 3 }, waveId: 'r1-s2', promoted: true };
+
+  test('emit-when-TRUE: the literal true emits, every other value emits nothing', () => {
+    expect(rse.buildRunStatsEntry({ leg, model: 'alpha', role: 'judge', rescued: true }).rescued).toBe(true);
+    for (const notTrue of [undefined, false, null, 0, '', 'true', 1]) {
+      expect(`rescued=${String(notTrue)} -> `
+        + `${'rescued' in rse.buildRunStatsEntry({ leg, model: 'alpha', role: 'judge', rescued: notTrue })}`)
+        .toBe(`rescued=${String(notTrue)} -> false`);
+    }
+  });
+
+  test('the SLOT: immediately after `promoted`, immediately before `usage`', () => {
+    const keys = Object.keys(rse.buildRunStatsEntry({ leg, model: 'alpha', role: 'judge', rescued: true }));
+    expect(keys.indexOf('rescued')).toBe(keys.indexOf('promoted') + 1);
+    expect(keys.indexOf('usage')).toBe(keys.indexOf('rescued') + 1);
+    // The slot holds even with no `promoted` on the leg — it is still the key
+    // immediately before `usage`, which is what tally.js's allowlist also does.
+    const plainLeg = { ...leg, promoted: undefined };
+    const k2 = Object.keys(rse.buildRunStatsEntry({ leg: plainLeg, model: 'alpha', role: 'judge', rescued: true }));
+    expect(k2.indexOf('usage')).toBe(k2.indexOf('rescued') + 1);
+  });
+
+  test('NOT leg-sourced: a promoted leg alone never mints it (the attributed leg is the promoted one)', () => {
+    expect('rescued' in rse.buildRunStatsEntry({ leg, model: 'alpha', role: 'judge' })).toBe(false);
+    expect('rescued' in rse.buildRunStatsEntry({ leg: { ...leg, rescued: true }, model: 'alpha', role: 'judge' })).toBe(false);
+  });
+
+  test('byte-exact, every optional field at once including rescued', () => {
+    expect(JSON.stringify(rse.buildRunStatsEntry({
+      leg: { ...leg, ttftMs: 4321 }, model: 'alpha', role: 'judge', conformance: 'repaired',
+      rescued: true,
+    }))).toBe('{"model":"alpha","role":"judge","wasChair":false,"conformance":"repaired",'
+      + '"waveId":"r1-s2","resolvedModel":"openai/gpt-5","status":"complete","durationMs":50,'
+      + '"ttftMs":4321,"promoted":true,"rescued":true,"usage":{"input":3}}');
+  });
+});
+
+/**
  * PR #207 council round 3, B3 — ONE predicate, spelled once, at every gate.
  *
  * There are five `ttftMs` sites in src/: the probe that computes it
@@ -127,8 +221,9 @@ describe('run-stats-entry — the TTFT probe rides the row (v4.9 W13 Task A)', (
  * which is four chances to disagree and, as the pin above records, four ways to
  * ship a value the schema forbids.
  *
- * The predicate now lives in `src/utils/ttft.js :: isMeasuredTtft`. Three gates
- * IMPORT it. The fourth — `src/council/run-stats-entry.js` — cannot: P3 above
+ * The predicate now lives in `src/utils/ttft.js :: isMeasuredTtft`. Four gates
+ * IMPORT it (three until #202 made `council/tally.js` the fourth). The fifth —
+ * `src/council/run-stats-entry.js` — cannot: P3 above
  * pins that module REQUIRE-FREE so require-free consumers (./debate.js) can
  * import it, and the pin fires on the character sequence anywhere in the file,
  * comments included. It therefore spells the same expression inline, and this
@@ -149,8 +244,13 @@ describe('run-stats-entry — the TTFT probe rides the row (v4.9 W13 Task A)', (
  *                   SAME expression by hand"
  *   · fanout-leg    RED 3 / 2 — "…dropped on BOTH hops" and the `result &&`
  *                   shape pin (tests/sidecar/fanout.test.js) · "…gates import it"
- *   · result-schema RED 2 / 1 — "buildRunResult drops a dishonest
- *                   metadata.ttftMs" · "…gates import it"
+ *   · leg-riders    RED 2 / 1 — "buildRunResult drops a dishonest
+ *                   metadata.ttftMs" · "…gates import it". MEASURED while this
+ *                   gate still stood in result-schema.js
+ *                   (`src/utils/result-schema.js@7e2fc83f:83`); #257 moved it to
+ *                   `src/utils/leg-riders.js :: legRiders`, which buildRunResult
+ *                   spreads — so apply GATESPLIT there, and the same two tests
+ *                   still red because the fixture drives buildRunResult.
  *   · headless      RED 2 / 2 — "CLOCK SKEW…"
  *                   (tests/no-output-backstop-wiring.test.js) · "…gates import it"
  * ⚠️ The result-schema fixture had to be written DIRECTLY against
@@ -165,7 +265,16 @@ describe('the ttftMs emit gate is ONE predicate (PR #207 round 3, B3)', () => {
   // RE-PROJECTION, not a producer — see utils/ttft.js. Its own pins live in tally.test.js
   // ('the TTFT probe reaches the published artifacts'), including the drift pin that fires
   // for ANY future buildRunStatsEntry key that allowlist is not taught to carry.
-  const IMPORTERS = ['src/headless.js', 'src/sidecar/fanout-leg.js', 'src/utils/result-schema.js',
+  // #257: the wave document's gate moved. `utils/result-schema.js` no longer imports the
+  // predicate or calls it — its rider block (ttftMs included) was extracted to
+  // `utils/leg-riders.js :: legRiders`, which `buildRunResult` spreads. The GATE is there
+  // now, so the importer is leg-riders.js; result-schema.js kept only the words and moved
+  // to MENTIONS_ONLY below. The count is unchanged: four importers, five gates.
+  // Named mutant "ROSTERSTALE" — put `src/utils/result-schema.js` back into this list
+  // (an extraction's classic residue: the roster still names the file the gate LEFT).
+  // "the four importable gates import it" reds on it, because the file matches neither
+  // the `require('./ttft')` nor the `isMeasuredTtft(` pattern any more.
+  const IMPORTERS = ['src/headless.js', 'src/sidecar/fanout-leg.js', 'src/utils/leg-riders.js',
     'src/council/tally.js'];
   const INLINE = 'src/council/run-stats-entry.js';
 
@@ -184,8 +293,19 @@ describe('the ttftMs emit gate is ONE predicate (PR #207 round 3, B3)', () => {
    * from here into IMPORTERS to silence a failure: that list also drives "the
    * four importable gates import it", which requires a real `isMeasuredTtft`
    * call. A file that gates belongs there; a file that talks belongs here.
+   *
+   * `utils/result-schema.js` (#257): it WAS the third importer until its rider
+   * block — ttftMs, finish, variant, variantUnverified, backstop — was lifted
+   * whole into `utils/leg-riders.js :: legRiders` so `promoted` could join it
+   * (that file sat at the 300-line gate). `buildRunResult` now spreads
+   * `legRiders(metadata)`, so it still PRODUCES the field and its docblock still
+   * names it, but it neither imports the predicate nor calls it: the decision
+   * here is that the gate travelled with the code and this file now only talks
+   * about it. The behavioural pin stays where it was — "buildRunResult drops a
+   * dishonest metadata.ttftMs" above drives the moved gate THROUGH
+   * buildRunResult, which is the rebuild path a caller actually reaches.
    */
-  const MENTIONS_ONLY = ['src/council/debate.js'];
+  const MENTIONS_ONLY = ['src/council/debate.js', 'src/utils/result-schema.js'];
 
   /** Every .js file under src/, repo-relative, forward-slashed. */
   function srcFiles(dir = 'src') {

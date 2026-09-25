@@ -163,18 +163,29 @@ function buildJudgeBundle({ reviews, findings, date }) {
  * contract embedded here, so a task judge repaired against the review bullet
  * would be told to re-rank on the wrong axis — on the paid path the run reaches
  * precisely because that judge already got its output wrong once.
+ *
+ * ⚠️ #257 R-X34: TWO arms, not three. R-X29 added a third for a PROMOTED judge
+ * ("there is no prior text to correct; answer afresh"), because such a judge's
+ * `summary` is its reasoning and "uncapped" above is exactly why that mattered —
+ * the motivating case was ~165,000 characters of deliberation handed back under
+ * "this is the text to correct". R-X32 removed the caller: a promoted judge is
+ * RELAUNCHED with the original bundle, never repaired, because a repair solo is
+ * a fresh session with no bundle to judge from. The arm is therefore withdrawn
+ * rather than left unreachable, and a stray `promoted` key changes nothing
+ * (both pinned in tests/council/briefings-stage2.test.js).
  * @param {string} contract the intent's judge output contract
  * @param {{errors?: Array<{code:string,detail:string}>, judgement?: string}} args
  */
 function judgeRepairPromptWith(contract, { errors, judgement }) {
   const lines = (errors || []).map(e => `- ${e.code}: ${e.detail}`).join('\n');
   const text = typeof judgement === 'string' ? judgement.trim() : '';
+  const absent = 'Your previous response was empty — there is no prior judgement to correct. '
+    + 'Do not invent rankings or adjudications to satisfy the schema: say so in your output.';
   const prior = text
     ? ['--- YOUR PREVIOUS JUDGEMENT (verbatim — this is the text to correct) ---',
       text,
       '--- END OF YOUR PREVIOUS JUDGEMENT ---'].join('\n')
-    : 'Your previous response was empty — there is no prior judgement to correct. '
-      + 'Do not invent rankings or adjudications to satisfy the schema: say so in your output.';
+    : absent;
   return [
     'Do NOT use any tools or read any files; everything is in this message; begin '
     + 'immediately with the JSON block.',

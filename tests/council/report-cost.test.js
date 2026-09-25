@@ -72,4 +72,27 @@ describe('report-cost — extraction pins (v4.9 W8 T-A)', () => {
     expect(buildCostModel(ROWS, { usage: {} }).total).toEqual(summed);
     expect(buildCostModel([], undefined).rows).toEqual([]);
   });
+
+  /**
+   * #257 R-X45 — THE FIFTH SUFFIX. The ruling mints `role: 'relaunch'` for the
+   * follow-up ask that RE-asks a promoted seat rather than correcting it. Without
+   * an entry here the cost table renders such a row with no suffix at all, i.e.
+   * exactly like a bench seat's own row — the one thing ROLE_SUFFIX exists to
+   * prevent (Plan 2 final review F1: a same-model collision in the table).
+   *
+   * NAMED MUTANT — RELAUNCHSUFFIXDROPPED: delete `ROLE_SUFFIX.relaunch` from
+   * src/council/report-cost.js. Reds this test.
+   */
+  test('X4 — a `relaunch` row is tagged (relaunch), never left bare beside its seat row', () => {
+    const rows = buildCostModel([
+      { model: 'gpt', role: 'seat', wasChair: false, status: 'complete', durationMs: 10, usage: null },
+      { model: 'gpt', role: 'judge', wasChair: false, status: 'complete', durationMs: 5, usage: null },
+      { model: 'gpt', role: 'relaunch', wasChair: false, status: 'complete', durationMs: 7, usage: null },
+      { model: 'gpt', role: 'repair', wasChair: false, status: 'timeout', durationMs: 3, usage: null },
+    ], undefined).rows;
+    expect(rows.map(r => r.model)).toEqual([
+      'gpt', 'gpt (judge)', 'gpt (relaunch)', 'gpt (repair)']);
+    // The seat row stays bare — the tag set is still an allowlist, not "everything".
+    expect(rows[0].model).toBe('gpt');
+  });
 });

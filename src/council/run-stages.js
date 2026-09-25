@@ -27,7 +27,9 @@ const { launchStage1 } = require('./run-stage1-launch');
 const { buildRunStatsEntry } = require('./run-assemble');
 const { pushDeadSeatRows } = require('./run-stage1-rows');
 const { bindStage1Waves, orphanLegNote, missingSeatDeadWave } = require('./stage1-bind');
-const { skippedWaveNote, truncatedReviewNote } = require('./run-retry-notes');
+const { skippedWaveNote, truncatedReviewNote, reasoningOnlyClause, promotedFacts, MAX_LEG_ERROR_CHARS } = require('./run-retry-notes'); // #257 R-X38 fix 1: ONE cap, defined there
+const { isPromotedLeg } = require('./promoted'); // direct from the leaf: run-retry-notes re-exports only the two clause builders above.
+const { collapseExcerpt } = require('../utils/text-sanitize'); // #257 R-X38: the house sanitizer `run-stage2-notes.js :: judgeDeadNote` already binds ITS leg error with.
 // slug lives in ./seats (v4.8 PR1) so that module can stay require-free;
 // re-exported below — run-stages.test.js imports it from here.
 const { slug } = require('./seats');
@@ -113,13 +115,19 @@ async function runStage1(ctx) {
   // fix round), beside `waveStillDeadNote` whose partial arm it mirrors; this file EMITS.
   for (const d of retry.skippedDeadWaves) { ctx.degrade.note(skippedWaveNote(d)); }
   for (const leg of retry.skippedDeadLegs) {
+    const pf = promotedFacts(leg); // named in the `why` AND carried in `data` — one read (#257 C7)
     ctx.degrade.note({
       channel: 'dead-leg',
       what: `seat ${leg.modelInput || leg.model} did not review`,
-      why: `the leg ended '${leg.status}'${leg.error ? `: ${leg.error}` : ''} with no usable output`,
+      // #257 R-X38: `why` is PROSE — stderr, run.json, the `amicus council report` Markdown — so the provider's error is
+      // bounded to one sanitized line, as the judge-death prose is (`run-stage2-notes.js ::
+      // judgeDeadNote`, #219). `data.reason` stays VERBATIM: machine surface, not a sentence.
+      // The cap bounds provider NOISE, never an amicus-minted reason — the ruling and the
+      // measurements are at `run-retry-notes.js :: MAX_LEG_ERROR_CHARS`. Mutant "DEADLEGPROSERAW".
+      why: `the leg ended '${leg.status}'${leg.error ? `: ${collapseExcerpt(leg.error, MAX_LEG_ERROR_CHARS)}` : ''} with no usable output${reasoningOnlyClause(pf)}`,
       effect: `${firstPass.length} of ${legs.length + missingSeats.length} seats reviewed; `
         + 'the run continues with the bench that did and will exit degraded (2)',
-      data: { seat: leg.modelInput || leg.model, status: leg.status, reason: leg.error || null },
+      data: { seat: leg.modelInput || leg.model, status: leg.status, reason: leg.error || null, ...(pf ? { promoted: pf } : {}) }, // #257 R-X14: the machine surface, emit-when-promoted
     });
   }
   for (const rec of retry.stillDeadNotes) { ctx.degrade.note(rec); }
@@ -211,7 +219,7 @@ async function runStage1(ctx) {
         return { aborted: solo.exitCode, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves,
           degraded: false, extraRows };
       }
-      const repaired = (solo.leg && solo.leg.summary) || '';
+      const repaired = (solo.leg && !isPromotedLeg(solo.leg) && solo.leg.summary) || ''; // #257 R-X21: a promoted repair is a failed attempt — its reasoning is not findings (named mutant "REPAIRPROMOTEDUSED", tests/council/run-stages.test.js)
       if (repaired.trim()) { repairing = repaired; }
       res = validateFindings(repaired);
       // Every -p<N> launch gets a row — INCLUDING a failed repair (null/'error' leg ⇒ never-invent

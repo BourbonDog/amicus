@@ -123,7 +123,7 @@ function toGlobalFindings(letter, raiser, findings, raiserSeat) {
  *   join across two independently-sourced arrays. `null` marks a slot whose
  *   label has no distinguishing seat (unique-alias bench, or no `seatMap`
  *   given at all — every pre-T3.2 call site). T3.2 wired `orderSeats` no
- *   further than its `judgeResults[]` call site in run-stage2.js. T3.3 carried
+ *   further than its `judgeResults[]` push in run-stage2-judge.js :: adjudicateJudgeLeg. T3.3 carried
  *   it one hop on, to `rankings[]` in run-assemble.js :: buildTallyInput, and
  *   seat-keyed street-cred.js :: rankPositions with it — emitting the field
  *   only when it holds a non-null, because THIS function returns an all-null

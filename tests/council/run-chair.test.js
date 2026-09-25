@@ -7,6 +7,14 @@ const { runCouncil, pickFallbackChair } = require('../../src/council/run');
 const runState = require('../../src/council/run-state');
 const { scriptedLaunchers, happyScript, baseOptions, mkLeg, okWave } =
   require('./helpers/fake-launchers');
+const { codeOnly } = require('../helpers/code-only');
+// #257 R-X22: the attempt classifier is a walk-internal taxonomy that run.js
+// deliberately does NOT re-export (pinned in tests/council/chair-fallback.test.js),
+// so the unit pins below read it from the module that owns it.
+const { classifyChairAttempt } = require('../../src/council/chair-fallback');
+// Council r2: the chair reason's token parenthetical has ONE home — promoted.js
+// — and the identity pin below reads it from there rather than re-spelling it.
+const { promotedFacts, tokenSplit } = require('../../src/council/promoted');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-chair-')); });
@@ -296,6 +304,161 @@ describe('chairAttempts[] recording (LC-5)', () => {
       { waveId: 'abc123-ch1', model: 'deepseek', outcome: 'error', reason: 'error' });
     expect(run.chairAttempts[1]).toEqual(
       { waveId: 'abc123-ch2', model: 'deepseek', outcome: 'error', reason: 'aborted' });
+  });
+});
+
+/**
+ * #257 R-X22. A chair leg that answered only in its reasoning channel arrives
+ * `complete` with a non-blank `summary`, so at HEAD `attemptChair`'s `ok` was
+ * TRUE and the chair's DELIBERATION was written into verdict.json as the
+ * council's synthesis. It is no synthesis: the leg is nulled and the walk
+ * continues — ch2 (same chair), ch3 (the ledger-promoted fallback), give up —
+ * exactly as for a chair that produced no output at all.
+ *
+ * The cause rides `chairAttempts[].reason`, not a new outcome: `outcome` is a
+ * CLOSED enum (schemas/council-run.schema.json) and the `chair-failed` `why`
+ * already renders `a.reason || a.outcome`, so the walk prints the cause with
+ * zero template edits. Without it the walk would read "ch1 deepseek: no-output"
+ * — true and useless, the exact defect class #257 keeps re-finding.
+ */
+describe('#257: a promoted chair leg is no synthesis (R-X22)', () => {
+  const REASONING_TEXT = 'Let me carefully analyze the bench before I answer.';
+  const PROMOTED_REASON = 'answered only in its reasoning channel '
+    + "(40332 reasoning / 1 output tokens, finish 'stop'); no synthesis to read";
+  // A real promoted chair leg document: `complete`, carrying its deliberation
+  // as `summary`, with no `error` at all — which is why `ok` was true at HEAD.
+  const promotedChairLeg = (model, { cost = 0.03, reasoning = 40332, output = 1, finish = 'stop' } = {}) => ({
+    ...mkLeg(model, REASONING_TEXT, 'complete', cost),
+    promoted: true,
+    ...(finish ? { finish } : {}),
+    usage: { tokens: { reasoning, output }, cost: { amount: cost, source: 'reported' } },
+  });
+
+  test('a promoted ch1 chair is no synthesis: ch2 (same chair) is tried and, when it answers, exit is unaffected; chairAttempts[0] records no-output with the reasoning-channel reason (#257 R-X22)', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([promotedChairLeg('deepseek')]);
+    script['abc123-ch2'] = () => okWave([mkLeg('deepseek', 'Synthesis.\nVERDICT: Ship it', 'complete', 0.03)]);
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn: () => [],
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(0);
+    expect(readVerdict().overallVerdict).toBe('Ship it');
+    // TWO entries, not one: recordAttempt records every RESOLVED attempt, the
+    // succeeding one included (pinned by the happy-path test above, where a
+    // clean ch1 is itself recorded 'completed'). The promoted ch1 is the first.
+    expect(run.chairAttempts).toEqual([
+      { waveId: 'abc123-ch1', model: 'deepseek', outcome: 'no-output', reason: PROMOTED_REASON },
+      { waveId: 'abc123-ch2', model: 'deepseek', outcome: 'completed', reason: null },
+    ]);
+    // The attempt was PAID for, so it keeps its chair-attempt row. The row is
+    // minted by buildRunStatsEntry from the raw leg, so `promoted: true` rides
+    // it straight off the leg document — never stamped by hand here.
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    const attemptRows = input.runStats.filter(r => r.role === 'chair-attempt');
+    expect(attemptRows).toHaveLength(1);
+    expect(attemptRows[0]).toMatchObject({
+      model: 'deepseek', wasChair: false, status: 'complete', waveId: 'abc123-ch1', promoted: true,
+    });
+  });
+
+  test('three promoted chair legs give up: chair-failed names the reason for every attempt, overallVerdict is null, exit 2', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([promotedChairLeg('deepseek')]);
+    script['abc123-ch2'] = () => okWave([promotedChairLeg('deepseek')]);
+    // ch3 is the ledger-promoted fallback, and its facts are its OWN: no
+    // `finish` at all, so the optional finish segment is absent from its reason.
+    script['abc123-ch3'] = (opts) => {
+      expect(opts.model).toBe('grok');
+      return okWave([promotedChairLeg('grok', { cost: 0.02, reasoning: 12000, output: 0, finish: null })]);
+    };
+    const statsFn = () => [
+      { model: 'grok', avgStreetCredPeersOnly: 1.2 },
+      { model: 'gemini', avgStreetCredPeersOnly: 1.0 },
+    ];
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn,
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);
+    expect(readVerdict().overallVerdict).toBeNull();
+    const chairFailed = (run.degrades || []).find(d => d.channel === 'chair-failed');
+    expect(chairFailed).toBeDefined();
+    expect(chairFailed.why).toContain(`ch1 deepseek: ${PROMOTED_REASON}`);
+    expect(chairFailed.why).toContain(`ch2 deepseek: ${PROMOTED_REASON}`);
+    expect(chairFailed.why).toContain('ch3 grok: answered only in its reasoning channel '
+      + '(12000 reasoning / 0 output tokens); no synthesis to read');
+    // Once per attempt — each names its own cause, never one cause for all three.
+    expect(chairFailed.why.match(/answered only in its reasoning channel/g)).toHaveLength(3);
+  });
+
+  test('classifyChairAttempt: a promoted complete leg is no-output carrying the cause in `reason`; a non-promoted one is byte-identical', () => {
+    expect(classifyChairAttempt({
+      status: 'complete', summary: REASONING_TEXT, promoted: true, finish: 'stop',
+      usage: { tokens: { reasoning: 40332, output: 1 } },
+    })).toEqual({ outcome: 'no-output', reason: PROMOTED_REASON });
+    // No usage and no finish: promotedFacts reports neither counter (R-X44 — null,
+    // never a fabricated 0) and the finish segment is dropped entirely.
+    expect(classifyChairAttempt({ status: 'complete', summary: REASONING_TEXT, promoted: true }))
+      .toEqual({ outcome: 'no-output', reason: 'answered only in its reasoning channel '
+        + '(token usage not reported); no synthesis to read' });
+    // The control: a leg that is not promoted classifies exactly as it always has.
+    expect(classifyChairAttempt({ status: 'complete', summary: 'Synthesis.' }))
+      .toEqual({ outcome: 'completed', reason: null });
+  });
+
+  /**
+   * Council r2: the `(<r> reasoning / <o> output tokens[, finish '<f>'])`
+   * parenthetical was hand-written TWICE — once in promoted.js's Stage-1 clause,
+   * once here — so the chair walk and the retry notes could drift apart without
+   * a single test noticing. It has one home now, and this is an IDENTITY pin:
+   * the expectation is BUILT from `tokenSplit`, so a second hand-composed copy
+   * in chair-fallback.js fails here even while it still reads correctly today.
+   * The byte-for-byte wording stays pinned by PROMOTED_REASON above.
+   * Named mutant SPLITFORKED: chair-fallback.js composes the fragment itself
+   * again with one character changed. Red set: this test.
+   */
+  test('the chair reason is COMPOSED from promoted.js :: tokenSplit — one fragment, two callers (council r2)', () => {
+    const legs = [
+      { status: 'complete', summary: REASONING_TEXT, promoted: true, finish: 'stop',
+        usage: { tokens: { reasoning: 40332, output: 1 } } },
+      // The fallback chair's own facts: no `finish`, so the optional segment is absent.
+      { status: 'complete', summary: REASONING_TEXT, promoted: true,
+        usage: { tokens: { reasoning: 12000, output: 0 } } },
+    ];
+    for (const leg of legs) {
+      expect(classifyChairAttempt(leg).reason).toBe(
+        `answered only in its reasoning channel (${tokenSplit(promotedFacts(leg))}); no synthesis to read`);
+    }
+    // The fragment really is the Stage-1 one: the two announcements differ only
+    // in the sentence they are quoted into, never in the numbers or the finish.
+    expect(tokenSplit(promotedFacts(legs[0]))).toBe("40332 reasoning / 1 output tokens, finish 'stop'");
+  });
+
+  /**
+   * The identity pin above compares STRINGS, so a hand-written fork that is
+   * byte-identical today would still pass it — it only catches a fork once it
+   * has already drifted, which is one regression too late. This reads the
+   * SOURCE, the same move tests/council/promoted.test.js's LEAF pin makes: the
+   * chair reason must be COMPOSED from the shared fragment, and the fragment's
+   * own text must not appear in this file at all.
+   * Named mutant SPLITINLINED: paste the fragment back inline, unchanged. Red
+   * set: this test (and this test only — that is the whole point of it).
+   *
+   * #257 R-X41 (B1): the ' reasoning / ' fragment is message PROSE (part of
+   * tokenSplit's composed text, promoted.js:152), not a code token — a design
+   * comment could legitimately quote it while explaining what tokenSplit
+   * produces. codeOnly() strips comments first so only an actual inline
+   * re-spelling (real code) fails this; the SPLITINLINED mutant below is
+   * still real code, so it still reds.
+   */
+  test('chair-fallback.js CALLS tokenSplit and does not re-spell the fragment (council r2)', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '../../src/council/chair-fallback.js'), 'utf8');
+    expect(src).toContain('tokenSplit(');
+    // The fragment's own text. Present here = a second home for it, whatever it
+    // currently reads, and the two announcements are free to drift again.
+    expect(codeOnly(src)).not.toContain(' reasoning / ');
   });
 });
 
@@ -777,5 +940,63 @@ describe('chair VERDICT-line repair (one re-prompt)', () => {
     const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
     expect(input.runStats.find(r => r.wasChair).conformance).toBe('unstructured');
     expect(readVerdict().overallVerdict).toBeNull();
+  });
+
+  /**
+   * #257 R-X27 — the ninth reader, on this surface. `parseChairTerminal`
+   * (parse-stage2.js :: parseTerminalLine) scans EVERY line and keeps the LAST
+   * match, so a ch4 repair leg that answered only in its reasoning channel
+   * hands the council a verdict out of its own deliberation: `overallVerdict`
+   * is set and `chairConformance` reads 'repaired'. It is no repair. The
+   * summary is stood down at the parse, and the EXISTING no-parseable-line arm
+   * of chair-failed fires — the same outcome as a repair that simply never
+   * produced a line (the test two above this one).
+   */
+  const REASONING_TEXT = 'Let me carefully analyze the bench before I answer.';
+  // A ch4 repair leg carrying a VERDICT line inside its deliberation. `promoted`
+  // is the ONLY difference between the two tests below.
+  const ch4Leg = (promoted) => ({
+    ...mkLeg('deepseek', `${REASONING_TEXT}\nVERDICT: Ship it`, 'complete', 0.01, 'abc123-ch4'),
+    ...(promoted ? { promoted: true, finish: 'stop',
+      usage: { tokens: { reasoning: 40332, output: 1 }, cost: { amount: 0.01, source: 'reported' } } } : {}),
+  });
+  const ch4Script = (promoted) => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Great synthesis, no verdict line.', 'complete', 0.03)]);
+    script['abc123-ch4'] = () => okWave([ch4Leg(promoted)]);
+    return script;
+  };
+
+  test('a PROMOTED ch4 repair supplies no VERDICT line even though its reasoning contains one: overallVerdict null, the no-parseable-line chair-failed arm, exit 2 (#257 R-X27)', async () => {
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(ch4Script(true)), appendRunFn: jest.fn(), statsFn: () => [],
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);
+    expect(readVerdict().overallVerdict).toBeNull();
+    // The EXISTING arm, verbatim — R-X27 adds no wording (run-chair.js:221).
+    const chairFailed = (run.degrades || []).find(d => d.channel === 'chair-failed');
+    expect(chairFailed).toBeDefined();
+    expect(chairFailed.why).toBe('the chair ran but its output carried no parseable VERDICT: line');
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    expect(input.runStats.find(r => r.wasChair).conformance).toBe('unstructured');
+    // The repair LAUNCHED and was paid for, so its row stands — minted by
+    // buildRunStatsEntry from repair.leg, so `promoted: true` rides it unchanged.
+    const repairRows = input.runStats.filter(r => r.role === 'repair');
+    expect(repairRows).toHaveLength(1);
+    expect(repairRows[0]).toMatchObject({ model: 'deepseek', wasChair: false, status: 'complete',
+      waveId: 'abc123-ch4', conformance: 'unstructured', promoted: true });
+  });
+
+  test('positive control: the SAME ch4 summary on a NON-promoted leg still repairs — overallVerdict Ship it, conformance repaired, exit 0', async () => {
+    const { exitCode } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(ch4Script(false)), appendRunFn: jest.fn(), statsFn: () => [],
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(0);
+    expect(readVerdict().overallVerdict).toBe('Ship it');
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    expect(input.runStats.find(r => r.wasChair).conformance).toBe('repaired');
+    expect(input.runStats.find(r => r.role === 'repair').conformance).toBe('clean');
   });
 });

@@ -40,7 +40,7 @@ require('../src/utils/path-setup').ensureNodeModulesBinInPath();
 
 const KIMI = 'moonshotai/kimi-k3';
 const BUDGET = '64000'; // .github/amicus-ci-aliases.json :: outputBudget — CI's real reservation
-const SESSIONS = 4;     // one judge per bench seat (src/council/run-stage2.js:134-140)
+const SESSIONS = 4;     // one judge per bench seat (src/council/run-stage2.js:135-141)
 /** src/opencode-client.js:637-646 — amicus registers this on EVERY server it starts. */
 const CHAT_AGENT = {
   description: 'Conversational agent — reads are auto-approved, writes and commands require permission',

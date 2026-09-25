@@ -271,6 +271,104 @@ describe('runStage1', () => {
     expect(solos[1].prompt).toContain(badReview);
   });
 
+  /**
+   * #257 R-X21 (spec §10 addendum, owner decision C). The findings-repair solo
+   * tested NO status — only the truthiness of `solo.leg.summary` — so a repair
+   * leg that answered ONLY in its reasoning channel handed its deliberation
+   * back as `repairing`: the NEXT repair prompt told the model its own thinking
+   * was "the review you must correct", and `validateFindings` ran over
+   * reasoning prose. That is the disease this PR exists to cure, on another
+   * surface.
+   *
+   * The rule: a promoted `-p<N>` solo is a FAILED repair attempt inside the
+   * existing bound (`attempts < 2`) — byte-identical to a dead repair. It is
+   * SILENT at run time by design (R-X21): a failed repair has never announced
+   * itself, and its record is the `role: 'repair'` row (which carries
+   * `promoted: true` straight off the leg) plus the seat's `unstructured`
+   * conformance.
+   *
+   * NAMED MUTANT — REPAIRPROMOTEDUSED: drop `!isPromotedLeg(solo.leg) &&` from
+   * run-stages.js's `const repaired = …` line. Reds the first test below — the
+   * promoted reasoning becomes `repairing` and rides into the second repair's
+   * briefing.
+   */
+  describe('#257 R-X21: a promoted Stage-1 repair solo', () => {
+    // The seat's OWN leg is not promoted here: a promoted seat leg never
+    // materializes as a review at all (run-launch.js :: materializeReviews
+    // skips it, pinned in the "#257: a promoted Stage-1 leg is no deliverable"
+    // block below), so the repair loop is reachable only through an ordinary
+    // unstructured review whose REPAIR came back promoted.
+    const REPAIR_REASONING = 'Let me carefully analyze the material before I answer.';
+    const promotedRepairLeg = (waveId) => ({
+      ...mkLeg('gpt', REPAIR_REASONING, 'complete', waveId, 1),
+      promoted: true, finish: 'stop',
+      usage: { tokens: { reasoning: 40332, output: 1 }, cost: { amount: 0.02, source: 'reported' } },
+    });
+    const badReview = 'Prose about the material, but no fenced block at all.';
+    const scenarioCtx = (secondRepairLeg) => {
+      const solos = [];
+      const ctx = makeCtx({
+        models: ['gemini', 'gpt'],
+        onWave: (opts) => okWave(opts.models.map((m, i) =>
+          mkLeg(m, m === 'gpt' ? badReview : review(m), 'complete', opts.waveId, i + 1))),
+        onSolo: (opts) => {
+          solos.push(opts);
+          return okWave([solos.length === 1 ? promotedRepairLeg(opts.waveId) : secondRepairLeg(opts.waveId)]);
+        },
+      });
+      return { ctx, solos };
+    };
+
+    test('a promoted -p1 repair is a failed repair attempt: its reasoning is never validated as findings, the seat ends unstructured, and the repair row says promoted: true (#257 R-X21)', async () => {
+      const { ctx, solos } = scenarioCtx((waveId) => deadLeg('gpt', 'error', 'boom', waveId, 1));
+      const { reviews, extraRows } = await runStage1(ctx);
+
+      // THE OBSERVABLE (named mutant REPAIRPROMOTEDUSED). `repairing` is only
+      // readable through the text the NEXT repair prompt carries — the same way
+      // the LC-6 trio above observes it. A promoted repair contributes no
+      // artifact, so attempt 2 still names the last text we actually have.
+      expect(ctx.launchers.launchSolo).toHaveBeenCalledTimes(2);   // the bound, unchanged
+      expect(solos.map((s) => s.waveId)).toEqual(['abc123-p1', 'abc123-p2']);
+      expect(solos[1].prompt).toContain(badReview);
+      expect(solos[1].prompt).not.toContain(REPAIR_REASONING);
+
+      // The seat lands exactly where a dead repair leaves it: KEPT, unstructured,
+      // no findings — the reasoning was never validated into any.
+      const gpt = reviews.find((r) => r.modelInput === 'gpt');
+      expect(gpt.conformance).toBe('unstructured');
+      expect(gpt.findings).toEqual([]);
+      expect(gpt.text).toBe(badReview);          // LC-11: always the seat's own prose
+      expect(reviews).toHaveLength(2);           // never dropped for a formatting miss
+
+      // Both -p<N> launches get their row; the promoted one SAYS so, minted by
+      // buildRunStatsEntry off the leg document — never added by hand — and
+      // emit-when-true keeps it off the other.
+      const repairRows = extraRows.filter((x) => x.role === 'repair');
+      expect(repairRows).toHaveLength(2);
+      expect(repairRows.map((x) => x.waveId)).toEqual(['abc123-p1', 'abc123-p2']);
+      expect(repairRows[0]).toMatchObject({ model: 'gpt', status: 'complete',
+        conformance: 'unstructured', promoted: true });
+      expect('promoted' in repairRows[1]).toBe(false);
+      // R-X21: silent. No new channel, no note — the row and the seat's
+      // conformance are the record.
+      expect(ctx._notes).toEqual([]);
+    });
+
+    test('the bound still rescues: a promoted -p1 leaves -p2 free to repair the seat', async () => {
+      const { ctx, solos } = scenarioCtx((waveId) => mkLeg('gpt', review('gpt'), 'complete', waveId, 1));
+      const { reviews, extraRows } = await runStage1(ctx);
+
+      expect(solos).toHaveLength(2);             // a failed attempt, not an exhausted budget
+      const gpt = reviews.find((r) => r.modelInput === 'gpt');
+      expect(gpt.conformance).toBe('repaired');
+      expect(gpt.findings).toHaveLength(1);
+      const repairRows = extraRows.filter((x) => x.role === 'repair');
+      expect(repairRows.map((x) => x.conformance)).toEqual(['unstructured', 'clean']);
+      expect(repairRows[0].promoted).toBe(true);
+      expect(ctx._notes).toEqual([]);
+    });
+  });
+
   test('still malformed after 2 repairs → unstructured, findings [], review KEPT', async () => {
     let soloCount = 0;
     const ctx = makeCtx({
@@ -741,8 +839,15 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     expect(res.degraded).toBe(false);
   });
 
-  test('an OUTPUT_LENGTH death is a dead leg whose note carries the reason verbatim, and gets NO truncation note', async () => {
-    const dead = { ...deadLeg('b', 'error', "OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — 32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — raise outputBudget in config.json (docs/configuration.md, Output budget)", 'abc123-s1', 2), finish: 'length' };
+  // #257 R-X38 fix round 1: retitled. The `why` bounds PROVIDER noise, but an AMICUS-MINTED
+  // reason must arrive whole (owner ruling, round 3) — so this is now an EXACT pin on the
+  // real formatter's output, not a `.*` regex that would tolerate the remedy being cut.
+  // Minted here rather than pasted: a copied literal is how a cap and a format drift apart.
+  test('an OUTPUT_LENGTH death is a dead leg whose note carries an amicus-minted reason verbatim (provider noise is bounded), and gets NO truncation note', async () => {
+    const { formatOutputLengthReason } = require('../../src/utils/output-length');
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+      budget: null, reasoningOnly: false, ambientFlag: null });
+    const dead = { ...deadLeg('b', 'error', MINTED, 'abc123-s1', 2), finish: 'length' };
     // Same harness as 'retry also dies': roster (-s1) ['a', 'b'], retry roster (-s1r1) ['b'] alone.
     const ctx = makeCtx({ models: ['a', 'b'] });
     ctx.launchers.launchWave
@@ -754,7 +859,17 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     // Named mutant "DEADNOTED": iterate `legs` instead of `materialized` in run-stages — a note appears here.
     expect(ctx._notes.filter((n) => n.channel === 'output-truncated')).toHaveLength(0);
     const n = ctx._notes.find((x) => x.channel === 'dead-leg');
-    expect(n.why).toMatch(/^the leg ended 'error': OUTPUT_LENGTH: the provider stopped at the max_tokens reservation \(finish 'length'\) and no answer text arrived — 32000 reasoning \/ 0 output tokens; .* with no usable output/);
+    expect(MINTED.length).toBeGreaterThan(200);          // it was truncated under the old cap
+    // The retry dies too, so this is `retryLegStillDeadNote`'s leg arm: first reason in full,
+    // then the retry tail. Exact, so a cap that ate the remedy could not hide behind a `.*`.
+    expect(n.why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
+      + "its once-only retry also ended 'timeout'");
+    // The clause the ruling exists for, named so a future cap change reds HERE and not only
+    // in tests/council/run-retry-notes.test.js's minted-reason corpus.
+    expect(n.why).toContain('raise outputBudget in config.json (docs/configuration.md, Output budget)');
+    // `data.reason` describes the RETRY leg (null here); the FIRST leg's raw bytes ride
+    // `data.firstFailure` — the machine surface, verbatim, as ever.
+    expect(n.data.firstFailure.reason).toBe(MINTED);
   });
 
   test('legs with no finish produce no output-truncated note', async () => {
@@ -765,6 +880,176 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     expect(res.reviews.map((r) => r.modelInput).sort()).toEqual(['a', 'b']);
     // Named mutant "NONOTE": drop the loop — the first test fails; this one pins the quiet path.
     expect(ctx._notes.filter((n) => n.channel === 'output-truncated')).toHaveLength(0);
+  });
+});
+
+// ---- #257: a leg that answered only in its reasoning channel ----
+//
+// The THIRD sibling of the two classes above, and the one that looked healthy:
+// the engine answer had no text part at all, so conversation-mirror.js promoted
+// the REASONING to output and headless.js stamped `promoted: true`. The leg then
+// arrives `complete`, with text, with no error — and the text is the model's
+// deliberation, not a review. `materializeReviews` is the ONE gate that rejects
+// it (run-launch.js), which is exactly what routes the seat into the once-only
+// retry: run-stages.js's `deadLegs0` is "every leg that function rejected".
+//
+// Placed HERE, in the Stage-1 retry region, on purpose — the Stage-2 half of
+// #257 is built on a parallel branch that inserts in the Stage-2 region.
+describe('#257: a promoted Stage-1 leg is no deliverable — it is retried, and every note names the cause', () => {
+  const CLAUSE = ' — it answered only in its reasoning channel '
+    + "(40332 reasoning / 1 output tokens, finish 'stop'), which is not a review";
+  const REASONING_TEXT = 'Let me carefully analyze the diff before I answer.';
+  // A real promoted leg document: complete, carrying its deliberation as `summary`,
+  // no `error` at all — which is why the pre-#257 prose ("ended 'complete' with no
+  // usable output") was true and useless.
+  const promotedLeg = (model, waveId, slot) => ({
+    ...mkLeg(model, REASONING_TEXT, 'complete', waveId, slot),
+    promoted: true, finish: 'stop',
+    usage: { tokens: { reasoning: 40332, output: 1 }, cost: { amount: 0.02, source: 'reported' } },
+  });
+  // At HEAD the promoted leg materializes and then FAILS findings validation, so
+  // the repair loop runs. A launcher that returns no leg lets these tests fail on
+  // their own assertions rather than on an undefined `onSolo` callback. After the
+  // fix no solo is launched at all (the leg never becomes a review).
+  const noSolo = () => ({ wave: { legs: [] }, exitCode: 0 });
+  // roster (-s1): ['a','b'] -> a=slot1, b=slot2. retry roster (-s1r1): ['b'] alone -> slot1.
+  const scenarioCtx = (retryLegFor) => {
+    const ctx = makeCtx({ models: ['a', 'b'], onSolo: noSolo });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a', 'abc123-s1', 1), promotedLeg('b', 'abc123-s1', 2)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [retryLegFor('b', 'abc123-s1r1', 1)] }, exitCode: 0 });
+    return ctx;
+  };
+
+  test('(a) a promoted first leg is retried once and healed: ONE heal note naming the reasoning channel', async () => {
+    const ctx = scenarioCtx(usableLeg);
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(2);      // the skip is what FIRES the retry
+    expect(ctx.launchers.launchWave.mock.calls[1][0].models).toEqual(['b']);
+    expect(ctx._notes.map((n) => n.channel)).toEqual(['stage1-retry']);
+    expect(ctx._notes[0].kind).toBe('heal');
+    expect(ctx._notes[0].why).toBe(
+      `its first leg ended 'complete' with no usable output${CLAUSE} and was relaunched once`);
+    expect(r.degraded).toBe(false);
+    // The primary review is the RETRY's leg and the RETRY's text.
+    const b = r.reviews.find((v) => v.modelInput === 'b');
+    expect(b.leg.waveId).toBe('abc123-s1r1');
+    expect(b.text).toBe(review('b'));
+    // The first leg stopped being primary: role `superseded`, and the row carries
+    // `promoted: true` straight off the leg (buildRunStatsEntry, never by hand).
+    const superseded = r.extraRows.filter((x) => x.role === 'superseded');
+    expect(superseded).toHaveLength(1);
+    expect(superseded[0]).toMatchObject({ model: 'b', status: 'complete',
+      waveId: 'abc123-s1', promoted: true });
+    expect(r.extraRows.some((x) => x.model === 'b' && x.role === 'seat')).toBe(false);
+  });
+
+  /**
+   * The TRIPWIRE (spec §3.6). Everything downstream of Stage 1 — the judge
+   * bundle, the chair packet, the ledger — reads `reviews`, and NONE of them
+   * filters: `materializeReviews` is the only defence there is. This asserts on
+   * the array run-stages actually hands onward, so it reds under the named
+   * mutant PROMOTEDKEPT (delete the skip in run-launch.js :: materializeReviews)
+   * even though the builders themselves are untouched. The unit halves live in
+   * tests/council/briefings-stage2.test.js and
+   * tests/council/chair-packet-seats.test.js.
+   */
+  test('the reviews handed onward carry no promoted leg and no reasoning text (#257 tripwire)', async () => {
+    const r = await runStage1(scenarioCtx(usableLeg));
+    // Non-vacuous: two reviews DID land — the tripwire is about WHICH.
+    expect(r.reviews.map((v) => v.modelInput).sort()).toEqual(['a', 'b']);
+    expect(r.reviews.filter((v) => v.leg && v.leg.promoted === true)).toEqual([]);
+    expect(r.reviews.filter((v) => v.text.startsWith('Let me carefully analyze'))).toEqual([]);
+    expect(r.reviews.map((v) => v.leg.waveId).sort()).toEqual(['abc123-s1', 'abc123-s1r1']);
+  });
+
+  test('(b) first AND retry promoted: still-dead, the why names the cause TWICE, the row carries promoted', async () => {
+    const ctx = scenarioCtx(promotedLeg);
+    const r = await runStage1(ctx);
+    expect(r.degraded).toBe(true);
+    expect(r.deadLegs.map((l) => l.modelInput)).toEqual(['b']);
+    const dead = ctx._notes.filter((n) => n.channel === 'dead-leg');
+    expect(dead).toHaveLength(1);
+    expect(dead[0].why).toBe(`the leg ended 'complete' with no usable output${CLAUSE}; `
+      + `its once-only retry also ended 'complete'${CLAUSE}`);
+    expect(dead[0].why.split(CLAUSE)).toHaveLength(3);              // once per attempt
+    // R-X14: the MACHINE surface, which is all `verdict-seat-loss.js ::
+    // deriveSeatLoss` reads. `data.status`/`data.reason` describe the retry leg,
+    // so `data.promoted` does too; the first leg's facts ride `data.firstFailure`.
+    expect(dead[0].data.promoted).toEqual({ reasoning: 40332, output: 1, finish: 'stop' });
+    expect(dead[0].data.firstFailure.promoted).toEqual({ reasoning: 40332, output: 1, finish: 'stop' });
+    // The dead-seat row comes off the REAL retry leg through buildRunStatsEntry
+    // (run-stage1-rows.js:212) — `promoted` rides it, it is never added by hand.
+    const primary = r.extraRows.find((x) => x.model === 'b' && x.role === 'seat');
+    expect(primary).toMatchObject({ status: 'complete', waveId: 'abc123-s1r1', promoted: true });
+    expect(r.reviews.map((v) => v.modelInput)).toEqual(['a']);
+  });
+
+  test('(c) the skipped-leg note (overBudget — no retry was attempted) names the reasoning channel too', async () => {
+    const ctx = makeCtx({ overBudget: () => true, models: ['a', 'b'], onSolo: noSolo });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1), promotedLeg('b', 'abc123-s1', 2)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1);      // no second launch
+    expect(ctx._notes.map((n) => n.channel)).toContain('dead-leg');
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    expect(n.why).toBe(`the leg ended 'complete' with no usable output${CLAUSE}`);
+    expect(n.effect).toBe('1 of 2 seats reviewed; the run continues with the bench that did and will exit degraded (2)');
+    // R-X14: the same facts on the machine surface this note's `data` is.
+    expect(n.data.promoted).toEqual({ reasoning: 40332, output: 1, finish: 'stop' });
+    expect(r.degraded).toBe(true);
+  });
+
+  test('a leg that is NOT promoted keeps every announcement byte-identical (the clause is the empty string)', async () => {
+    const ctx = makeCtx({ overBudget: () => true, models: ['a', 'b'] });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1), deadLeg('b', undefined, undefined, 'abc123-s1', 2)] }, exitCode: 0 });
+    await runStage1(ctx);
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    expect(n.why).toBe("the leg ended 'error': boom with no usable output");
+    // R-X14 emit-when-promoted: no key at all, so the record's exact shape is unmoved.
+    expect(n.data).toEqual({ seat: 'b', status: 'error', reason: 'boom' });
+  });
+});
+
+// ---- #257 R-X38: the skipped-leg prose bounds the provider's error ----
+//
+// run-stages.js's OWN dead-leg note (the overBudget / no-retry-attempted arm) is the
+// fifth prose site that interpolates a provider-controlled `leg.error`; the other four
+// live in run-retry-notes.js and are pinned in tests/council/run-retry-notes.test.js.
+// The `why` reaches stderr, run.json and report.md, so it runs through the same SANITIZER
+// the Stage-2 judge-death prose has used since #219 (`run-stage2-notes.js ::
+// judgeDeadNote`) — at a different cap: the council's own `run-retry-notes.js ::
+// MAX_LEG_ERROR_CHARS`, where Stage 2 still carries a bare literal 200 (filed, not fixed
+// here). `data.reason` stays VERBATIM: machine surface, not a sentence.
+//
+// The expected text is written out in full rather than computed with the sanitizer — a
+// test that builds its expectation from the function under test pins nothing.
+//
+// Named mutant "DEADLEGPROSERAW": drop `collapseExcerpt(...)` from that `why`.
+describe('#257 R-X38: the Stage-1 skipped-leg note bounds the provider error in its prose', () => {
+  const { MAX_LEG_ERROR_CHARS } = require('../../src/council/run-retry-notes');
+  // One `\n`, an ANSI sequence, and well past MAX_LEG_ERROR_CHARS.
+  const ESC = String.fromCharCode(27);   // a real escape byte, without a raw control char in this source
+  const HOSTILE = `${ESC}[31mPROVIDER_ERROR: upstream refused${ESC}[0m\nsecond line\n${'y'.repeat(900)}`;
+  // What a reader must see: one line, no escapes, MAX_LEG_ERROR_CHARS ending in an ellipsis.
+  const BOUND = `PROVIDER_ERROR: upstream refused second line ${'y'.repeat(754)}…`;
+
+  test('the why carries one sanitized, capped line; data.reason carries the raw bytes', async () => {
+    expect(HOSTILE.length).toBeGreaterThan(900);                    // the fixture is hostile
+    expect(BOUND).toHaveLength(MAX_LEG_ERROR_CHARS);                // the cap, stated
+    const ctx = makeCtx({ overBudget: () => true, models: ['a', 'b'] });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1), deadLeg('b', 'error', HOSTILE, 'abc123-s1', 2)] }, exitCode: 0 });
+    await runStage1(ctx);
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    expect(n.why).toBe(`the leg ended 'error': ${BOUND} with no usable output`);
+    expect(n.why).not.toContain('\n');
+    expect(n.why).not.toContain(ESC);
+    // The machine surface is untouched — verbatim, exactly as judgeDeadNote's data.reason is.
+    expect(n.data).toEqual({ seat: 'b', status: 'error', reason: HOSTILE });
   });
 });
 
@@ -1913,8 +2198,10 @@ describe('runStage2', () => {
     // glm (minor) on PR #219: the stage-2 degrade embedded `leg.error` verbatim
     // while this same PR institutes sanitization for untrusted provider text one
     // hop upstream (utils/session-status.js). `why` is PROSE — it renders into
-    // run.json, the report and the sticky comment — so an unbounded multi-line
-    // provider error would wreck the line it lands in.
+    // run.json, the stderr Notice and the Markdown `amicus council report` prints —
+    // so an unbounded multi-line provider error would wreck the line it lands in.
+    // (NOT the sticky PR comment: MEASURED — the workflow's comment step interpolates
+    // neither `seatLoss` nor `degrades`, so no degrade prose ever reaches it.)
     const nasty = `Provider exploded
 SECOND LINE
 	TABS   ${'x'.repeat(400)}`;
@@ -1958,6 +2245,776 @@ SECOND LINE
     });
     await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeUndefined();
+  });
+
+  /**
+   * #257 R-X32 (owner decision A′) — A PROMOTED JUDGE IS RELAUNCHED, NEVER USED
+   * AS IT STANDS. A leg whose engine answer had no text part gets its reasoning
+   * promoted to output and comes back `promoted: true`. Round 1 parsed that
+   * deliberation like any other judgement and USED it whenever a fenced block
+   * happened to fall out of it (spec R4). It is not a judgement: it is the
+   * thinking that precedes one, and a block found inside it was never submitted
+   * as an answer.
+   *
+   * The rule is now Stage 1's — RETRY, not repair:
+   *   · the promoted leg is never parsed (unparseable BY RULE) and writes no
+   *     `judge-<seat>.md`;
+   *   · its `-q1` is a RELAUNCH carrying the ORIGINAL bundle briefing, because a
+   *     repair solo is a fresh session with no bundle: a repair of a promoted
+   *     judge cannot succeed and only burns a solo;
+   *   · a relaunch with real but unparseable text gets the ONE remaining LC-12
+   *     repair, which carries that relaunch's text verbatim;
+   *   · a relaunch that is promoted again, or dies, stands the judge down;
+   *   · every path is announced on `judge-reasoning-only`, rescued or not — a
+   *     silent path fails the product bar as hard as a crash.
+   *
+   * ⚠️ #257 R-X37: every named mutant below is applied in
+   * `src/council/run-stage2-judge.js`, where this loop body now lives — the
+   * extraction moved the code, not the behaviour.
+   * NAMED MUTANT — JUDGEOWNBLOCKUSED: restore `parseJudgeOutput(leg.summary,
+   * parseCtx)` for a promoted leg in run-stage2-judge.js. Reds (a) below.
+   * NAMED MUTANT — FROMREASONINGDROPPED: delete `fromReasoning:` from the
+   * `ok: false` push in run-stage2-judge.js. Reds (b) below.
+   */
+  const promotedJudgeLeg = (summary, waveId, slot, tokens) => ({
+    ...mkLeg('gpt', summary, 'complete', waveId, slot),
+    promoted: true,
+    usage: { cost: { amount: 0.01, source: 'reported' }, tokens },
+  });
+  // The judge that is NOT promoted, identical in every scenario below.
+  const geminiJudge = (waveId) => mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+    [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', waveId, 1);
+  // The two blocks DIFFER on purpose: whichever adjudications reach judgeResults
+  // name which TEXT was read — the deliberation, or the relaunch's answer.
+  const OWN_BLOCK = judgeOut(['Review A', 'Review B'],
+    [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]);
+  const RELAUNCH_BLOCK = judgeOut(['Review B', 'Review A'],
+    [{ id: 'A1', verdict: 'neutral' }, { id: 'B1', verdict: 'agree' }]);
+
+  test('#257 R-X32: a promoted judge whose OWN block parses is NOT used — it is relaunched', async () => {
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        promotedJudgeLeg(OWN_BLOCK, opts.waveId, 2, { reasoning: 1200, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        const leg = mkLeg('gpt', RELAUNCH_BLOCK, 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    // Review M3: the relaunch is a BILLED leg of its own and still gets a row —
+    // forking it out of the push would lose its spend. #257 R-X45 renamed that
+    // row's ROLE (a relaunch is a fresh ask, not a correction); the row itself,
+    // its wave id and its conformance are unchanged.
+    expect(extraRows.filter(r => r.role === 'relaunch')).toHaveLength(1);
+    expect(extraRows[0]).toMatchObject({ model: 'gpt', role: 'relaunch', waveId: 'abc123-q1',
+      conformance: 'clean' });
+
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.ok).toBe(true);
+    // THE RELAUNCH's adjudications and ranking, never the deliberation's.
+    expect(gpt.adjudications).toEqual([{ id: 'A1', verdict: 'neutral' }, { id: 'B1', verdict: 'agree' }]);
+    expect(gpt.order).toEqual(['gpt', 'gemini']);
+    expect(gpt.conformance).toBe('repaired');
+    // #257 R-X45 (c): the adjudication that was USED is the relaunch's real text,
+    // so this marker is false and `rescued` carries the fact instead (the sibling
+    // R-X45 block below is the full record).
+    expect(gpt.fromReasoning).toBe(false);
+    expect(gpt.rescued).toBe(true);
+    expect(solos.map(s => s.waveId)).toEqual(['abc123-q1']);   // exactly ONE solo: the relaunch
+
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);                             // exactly one, for the one promoted judge
+    expect(notes[0].kind).toBe('info');
+    expect(notes[0].what).toBe('judge gpt answered in its reasoning channel');
+    expect(notes[0].why).toBe('its own answer was its deliberation, not a judgement; relaunched '
+      + "once with the original briefing, and that relaunch's adjudication is the one used; "
+      + 'the deliberation itself was read by nobody (1200 reasoning / 0 output tokens)');
+    expect(notes[0].effect).toBe('the adjudication counts; nothing else changes');
+    expect(notes[0].data).toEqual({ judge: 'gpt', seat: 'gpt', reasoningTokens: 1200,
+      outputTokens: 0, attempts: 1, relaunched: true, rescued: true,
+      relaunchWaveId: 'abc123-q1', usedWaveId: 'abc123-q1' });
+    // It is not a death and it is not a loss — neither louder channel fires.
+    expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeUndefined();
+    // Parity: the judge that was NOT promoted carries the marker as false, never absent.
+    expect(judgeResults.find(j => j.judge === 'gemini').fromReasoning).toBe(false);
+  });
+
+  test('#257 (a2): through the REAL sink the info note survives and does NOT degrade the run', async () => {
+    // The sibling above drives makeCtx's raw collector, which accepts any
+    // channel string — the same false green #202's drift pin was filed about.
+    // Only the real sink proves `judge-reasoning-only` is REGISTERED (not
+    // rewritten to `internal`) and that kind 'info' leaves the exit code alone.
+    const { createDegradeSink } = require('../../src/council/run-degrade');
+    const sinkDir = fs.mkdtempSync(path.join(tmp, 'stage2-promoted-'));
+    const degraded = { value: false };
+    const sink = createDegradeSink({ runDir: sinkDir, degraded, write: () => {} });
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      degrade: sink,
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        promotedJudgeLeg(OWN_BLOCK, opts.waveId, 2, { reasoning: 800, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        const leg = mkLeg('gpt', RELAUNCH_BLOCK, 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    const rec = sink.all().find(r => r.channel === 'judge-reasoning-only');
+    expect(rec).toBeDefined();                 // NOT rewritten to 'internal'
+    expect(rec.kind).toBe('info');
+    expect(degraded.value).toBe(false);        // => exit code unaffected
+  });
+
+  /**
+   * #257 R-X32 — WHY THE -q1 IS A RELAUNCH AND NOT A REPAIR. A repair solo is a
+   * FRESH session: it carries the errors, the contract and (LC-12) the text to
+   * correct, and NOTHING of the bundle — no reviews, no findings index. A
+   * promoted judge has no text worth correcting, so a repair would ask it to
+   * judge material it can no longer see; it can only fail, and it bills.
+   * Round 1's R-X29 briefing arm ("your previous response was written in the
+   * reasoning channel") existed to phrase exactly that doomed ask, and is
+   * WITHDRAWN with this ruling.
+   *
+   * NAMED MUTANT — RELAUNCHISREPAIR: drop the `isPromotedLeg(leg) && attempts === 1
+   * ? bundle :` fork in run-stage2-judge.js so the -q1 is the repair prompt again.
+   * Reds this test.
+   */
+  test('#257 R-X32: the -q1 of a promoted judge is a RELAUNCH — its prompt is byte-identical to the -s2 bundle', async () => {
+    const REASONING = 'I should weigh Review A against Review B, at enormous length…';
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        promotedJudgeLeg(REASONING, opts.waveId, 2, { reasoning: 40332, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        const leg = mkLeg('gpt', RELAUNCH_BLOCK, 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    // The -s2 wave's own prompt, as the launcher received it: the bundle.
+    const bundle = ctx.launchers.launchWave.mock.calls[0][0].prompt;
+    expect(solos).toHaveLength(1);
+    expect(solos[0].waveId).toBe('abc123-q1');
+    expect(solos[0].prompt).toBe(bundle);
+    // …and the same bytes the run archived for the reader.
+    expect(solos[0].prompt).toBe(fs.readFileSync(path.join(ctx.o.runDir, 'bundle-stage2.md'), 'utf-8'));
+    // No repair furniture, and above all not the deliberation (the motivating
+    // case was ~165,000 characters of it handed back under "the text to correct").
+    expect(solos[0].prompt).not.toContain('YOUR PREVIOUS');
+    expect(solos[0].prompt).not.toContain(REASONING);
+    expect(solos[0].prompt).not.toContain('written in the reasoning channel');
+    expect(solos[0].prompt).not.toContain('Your previous response was empty');
+  });
+
+  /**
+   * #257 R-X32 — THE STAND-DOWN. A relaunch that is promoted AGAIN has produced
+   * no real text twice; a repair of it would carry nothing to correct and no
+   * bundle to judge from, so the judge stands down and the run says so. The
+   * cross-review proceeds with the judges that answered.
+   *
+   * NAMED MUTANT — STANDDOWNDROPPED: remove the `&& !standDown` conjunct from
+   * run-stage2-judge.js's `while` (C4 replaced the old three-conjunct guard
+   * `!(isPromotedLeg(leg) && attempts === 1 && judging === '')` with that one
+   * read of the explicit state). A second solo launches. Reds this test.
+   * NAMED MUTANT — STANDDOWNSILENT: drop the `else if (isPromotedLeg(leg))` note
+   * from run-stage2-judge.js's `!parsed.ok` branch. Reds this test's note assertions.
+   */
+  test('#257 R-X32: a relaunch that is promoted again stands the judge down — one solo, no -q2, ok:false, fromReasoning, noted', async () => {
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        promotedJudgeLeg('I should weigh Review A against Review B…',
+          opts.waveId, 2, { reasoning: 1500, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        // THE ADVERSARIAL SHAPE: the relaunch's reasoning CONTAINS a valid
+        // fenced block. It must STILL be unusable — what disqualifies it is the
+        // channel it came back on, not whether it happens to parse.
+        const leg = promotedJudgeLeg(`more deliberation\n\n${RELAUNCH_BLOCK}`,
+          opts.waveId, 1, { reasoning: 9000, output: 1 });
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    expect(solos.map(s => s.waveId)).toEqual(['abc123-q1']);   // ONE solo: no -q2 is ever launched
+    // Review M3: a relaunch that rescued nothing is still a billed leg with its
+    // own row — `unstructured`, because nothing parseable came back. #257 R-X45:
+    // and that row is named for the ask it was, `relaunch`.
+    expect(extraRows.filter(r => r.role === 'relaunch')).toHaveLength(1);
+    expect(extraRows[0]).toMatchObject({ model: 'gpt', role: 'relaunch', waveId: 'abc123-q1',
+      conformance: 'unstructured', promoted: true });
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.ok).toBe(false);
+    expect(gpt.died).toBe(false);              // it answered — just never in the output channel
+    expect(gpt.emptyAnswer).toBe(false);
+    expect(gpt.fromReasoning).toBe(true);
+    expect(gpt.conformance).toBe('unstructured');
+    expect(gpt.adjudications).toBeNull();
+
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].kind).toBe('info');
+    expect(notes[0].why).toContain('relaunched once with the original briefing, and the relaunch '
+      + 'answered in its reasoning channel again');
+    expect(notes[0].effect).toBe('the judge is not counted; the cross-review proceeds with the '
+      + 'judges that answered, and thin-cross-review fires below two');
+    expect(notes[0].data).toMatchObject({ attempts: 1, relaunched: true });
+    expect('rescued' in notes[0].data).toBe(false);            // emit-when-true
+    expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeUndefined();
+  });
+
+  test("#257 R-X32: a dead relaunch stands the judge down with the 'produced no usable text' cause", async () => {
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        promotedJudgeLeg('deliberation, no block', opts.waveId, 2, { reasoning: 700, output: 0 }),
+      ]),
+      // No leg at all — the launcher's failed-solo shape (makeCtx derives
+      // `leg` from `wave.legs[0]`, so an empty wave is a null leg).
+      onSolo: (opts) => { solos.push(opts); return { wave: { waveId: opts.waveId, legs: [] }, exitCode: 0 }; },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    expect(solos.map(s => s.waveId)).toEqual(['abc123-q1']);
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.ok).toBe(false);
+    expect(gpt.fromReasoning).toBe(true);
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].why).toBe('its own answer was its deliberation, not a judgement; relaunched '
+      + 'once with the original briefing, and the relaunch produced no usable text; '
+      + 'the deliberation itself was read by nobody (700 reasoning / 0 output tokens)');
+    expect(notes[0].data).toMatchObject({ attempts: 1, relaunched: true });
+  });
+
+  test('#257 (b): a promoted judge whose relaunch answers unusably is ok:false, fromReasoning, NOT dead', async () => {
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        // A promoted leg's summary is the REASONING text — long, present, and
+        // carrying no fenced block. The relaunch answers for real and the one
+        // remaining repair still fails: the judge is lost, and said to be.
+        promotedJudgeLeg('I should weigh Review A against Review B…',
+          opts.waveId, 2, { reasoning: 1500, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        const leg = mkLeg('gpt', 'still no stage-2 block', 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    expect(solos.map(s => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.ok).toBe(false);
+    expect(gpt.died).toBe(false);              // it answered — just not usably
+    expect(gpt.emptyAnswer).toBe(false);
+    expect(gpt.fromReasoning).toBe(true);
+    // Not a death; but NO LONGER silent — the stand-down is announced.
+    expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeUndefined();
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].why).toContain("the relaunch's answer did not parse after its one repair");
+    expect(notes[0].data).toMatchObject({ attempts: 2, relaunched: true });
+    expect('rescued' in notes[0].data).toBe(false);
+
+    // …and the fact reaches the reason run.js prints, which is the whole point
+    // of carrying it on the result rather than re-deriving it downstream.
+    const { thinCrossReviewNote } = require('../../src/council/run-stage2-notes');
+    expect(thinCrossReviewNote(judgeResults).why)
+      .toBe('1 answered only in the reasoning channel and was not rescued');
+  });
+
+  /**
+   * #257 R-X49 (council round 5, C2 — gpt, major, confirmed 3-0) — THE SEVENTH
+   * STAND-DOWN STATE. The shape above ends `relaunch-unparseable` whatever the
+   * repair did, and chair HQ2 named the cost: "How can an operator tuning prompt
+   * budgets distinguish between a model that cannot follow the JSON schema and a
+   * model that refused to provide an answer text block entirely?" Those are two
+   * different fixes — a prompt/schema problem and a reasoning-budget problem —
+   * and the state machine already had a slot for WHICH ending, so this is the
+   * missing value rather than a new mechanism.
+   *
+   * R-X36's `repair-promoted` arm cannot carry it: that sentence opens `its own
+   * answer was real but did not parse`, and THIS judge's own answer was its
+   * deliberation. Hence a state of its own, and one more `why` to keep
+   * byte-identical.
+   *
+   * NAMED MUTANT — RELAUNCHREPAIRPROMOTEDHIDDEN: drop `isPromotedLeg(solo.leg)`
+   * (or the whole second gate) from the promoted-judge tracker in
+   * run-stage2-judge.js. Reds the first test below — the ending falls back to
+   * `relaunch-unparseable`, exactly the conflation R-X49 removes.
+   */
+  const REPAIR_DELIBERATION = 'Let me re-read the two reviews before I answer.';
+  // The relaunch's OWN answer: REAL text in the output channel, with no block —
+  // it is what the one LC-12 repair carries, verbatim.
+  const RELAUNCH_PROSE = 'Weighed Review A against Review B at length; no trailing JSON.';
+  const relaunchThenCtx = (secondSolo) => {
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        promotedJudgeLeg('I should weigh Review A against Review B…', opts.waveId, 2,
+          { reasoning: 32000, output: 1 }),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        return okWave([solos.length === 1
+          ? mkLeg('gpt', RELAUNCH_PROSE, 'complete', opts.waveId, 1)
+          : secondSolo(opts.waveId)]);
+      },
+    });
+    return { ctx, solos };
+  };
+
+  test('#257 R-X49: a promoted judge whose relaunch was real and whose repair came back PROMOTED gets its own stand-down sentence', async () => {
+    // THE ADVERSARIAL SHAPE, as everywhere else in #257: the promoted repair's
+    // reasoning CONTAINS a valid fenced block. What disqualifies it is the
+    // channel it came back on, not whether it happens to parse.
+    const { ctx, solos } = relaunchThenCtx((waveId) => ({
+      ...mkLeg('gpt', `${REPAIR_DELIBERATION}\n\n${RELAUNCH_BLOCK}`, 'complete', waveId, 1),
+      promoted: true, finish: 'stop',
+      usage: { tokens: { reasoning: 4000, output: 1 }, cost: { amount: 0.02, source: 'reported' } },
+    }));
+    const { judgeResults, extraRows } = await runStage2(ctx,
+      { reviews: stage1Reviews(), labels, globalFindings });
+
+    // Both asks ran, and the repair carried the RELAUNCH's text (LC-12), never
+    // the deliberation of either promoted leg.
+    expect(solos.map(s => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    expect(solos[1].prompt).toContain(RELAUNCH_PROSE);
+    expect(solos[1].prompt).not.toContain(REPAIR_DELIBERATION);
+
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.ok).toBe(false);                 // the promoted repair's block is no adjudication
+    expect(gpt.died).toBe(false);
+    expect(gpt.fromReasoning).toBe(true);       // the judge's OWN answer was its deliberation
+
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].kind).toBe('info');
+    expect(notes[0].what).toBe('judge gpt answered in its reasoning channel');
+    expect(notes[0].why).toBe('its own answer was its deliberation, not a judgement; relaunched '
+      + "once with the original briefing, and the relaunch's answer did not parse and its repair "
+      + 'answered in its reasoning channel; the deliberation itself was read by nobody '
+      + '(32000 reasoning / 1 output tokens)');
+    expect(notes[0].data).toEqual({ judge: 'gpt', seat: 'gpt', reasoningTokens: 32000,
+      outputTokens: 1, attempts: 2, relaunched: true, repairPromotedAttempt: 2 });
+    expect('rescued' in notes[0].data).toBe(false);
+    expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeUndefined();
+
+    // The machine record the prose now agrees with: the relaunch's row is a
+    // relaunch, the repair's row says `promoted: true`, and neither moved.
+    expect(extraRows.map(r => [r.waveId, r.role]))
+      .toEqual([['abc123-q1', 'relaunch'], ['abc123-q2', 'repair']]);
+    expect(extraRows[1]).toMatchObject({ model: 'gpt', promoted: true,
+      conformance: 'unstructured' });
+    expect('promoted' in extraRows[0]).toBe(false);
+  });
+
+  test("#257 R-X49 CONTROL: when the repair's own answer is real, the ending is 'relaunch-unparseable', byte-identical to today", async () => {
+    const { ctx } = relaunchThenCtx((waveId) =>
+      mkLeg('gpt', 'still no stage-2 block', 'complete', waveId, 1));
+    const { judgeResults } = await runStage2(ctx,
+      { reviews: stage1Reviews(), labels, globalFindings });
+
+    expect(judgeResults.find(j => j.judge === 'gpt').ok).toBe(false);
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].why).toBe('its own answer was its deliberation, not a judgement; relaunched '
+      + "once with the original briefing, and the relaunch's answer did not parse after its one "
+      + 'repair; the deliberation itself was read by nobody (32000 reasoning / 1 output tokens)');
+    expect(notes[0].data).toEqual({ judge: 'gpt', seat: 'gpt', reasoningTokens: 32000,
+      outputTokens: 1, attempts: 2, relaunched: true });
+    expect('repairPromotedAttempt' in notes[0].data).toBe(false);
+  });
+
+  /**
+   * #257 R-X32 — THE ONE REPAIR THE RELAUNCH IS STILL OWED. A relaunch that
+   * answers with REAL text that does not parse is an ordinary unstructured
+   * judgement: LC-12's verbatim arm is truthful about it, so the second and
+   * last attempt is the repair, carrying that relaunch's text and nothing of
+   * the deliberation. This replaces round 1's `#257 (b2)`, whose repair rode on
+   * the ORIGINAL promoted leg.
+   */
+  test("#257 R-X32: a relaunch with real but unparseable text gets the one LC-12 repair, which carries the RELAUNCH's text verbatim", async () => {
+    const REASONING = 'Deliberating at 40,000 tokens of length…';
+    const RELAUNCH_TEXT = 'I judged at length in prose, but the trailing JSON never appeared.';
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        promotedJudgeLeg(REASONING, opts.waveId, 2, { reasoning: 40332, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        const leg = mkLeg('gpt', solos.length === 1 ? RELAUNCH_TEXT : RELAUNCH_BLOCK,
+          'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    expect(solos.map(s => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    expect(solos[1].prompt).toContain(
+      '--- YOUR PREVIOUS JUDGEMENT (verbatim — this is the text to correct) ---\n'
+      + RELAUNCH_TEXT + '\n--- END OF YOUR PREVIOUS JUDGEMENT ---');
+    expect(solos[1].prompt).not.toContain(REASONING);
+    expect(solos[1].prompt).not.toContain('written in the reasoning channel');
+
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.ok).toBe(true);
+    expect(gpt.conformance).toBe('repaired');
+    // #257 R-X45 (c): the used adjudication is REAL TEXT, so `fromReasoning` —
+    // "answered only in its reasoning channel and was not rescued" — is false on
+    // this entry, and `rescued`/`usedWaveId` carry the rescue instead. The sibling
+    // R-X45 block below drives that record in full.
+    expect(gpt.fromReasoning).toBe(false);
+    expect(gpt.rescued).toBe(true);
+    expect(gpt.order).toEqual(['gpt', 'gemini']);
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].why).toBe('its own answer was its deliberation, not a judgement; relaunched '
+      + "once with the original briefing, and the relaunch's answer needed one repair — the "
+      + 'adjudication used came from that repair (attempt 2); the deliberation itself was read '
+      + 'by nobody (40332 reasoning / 0 output tokens)');
+    expect(notes[0].effect).toBe('the adjudication counts; nothing else changes');
+    expect(notes[0].data).toEqual({ judge: 'gpt', seat: 'gpt', reasoningTokens: 40332,
+      outputTokens: 0, attempts: 2, relaunched: true, rescued: true,
+      relaunchWaveId: 'abc123-q1', usedWaveId: 'abc123-q2' });
+    // Review M4: the artifact is the RELAUNCH's prose (attempt 1), never the
+    // repair's block — the `attempts === 1` guard on the write, which is exactly
+    // what a mutant would drop.
+    expect(fs.readFileSync(path.join(ctx.o.runDir, 'judge-gpt.md'), 'utf-8')).toBe(RELAUNCH_TEXT);
+  });
+
+  /**
+   * Review I1 — THE CEILING BETWEEN THE RELAUNCH AND ITS REPAIR. `ctx.overBudget()`
+   * is re-checked on every pass of the loop, so a relaunch that answers with real
+   * but unparseable text can be followed by NO repair at all. The stand-down is
+   * the same, but the cause is not: naming a repair that never launched would
+   * contradict `data.attempts: 1` in the same record.
+   */
+  test('#257 R-X32: the cost ceiling between the relaunch and its repair stands the judge down with the ceiling cause', async () => {
+    const solos = [];
+    let ceilingHit = false;
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      overBudget: () => ceilingHit,
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        promotedJudgeLeg('deliberation, no block', opts.waveId, 2, { reasoning: 40000, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        ceilingHit = true;                      // the ceiling arrives DURING the relaunch
+        const leg = mkLeg('gpt', 'I judged in prose; the JSON never appeared.', 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    expect(solos.map(s => s.waveId)).toEqual(['abc123-q1']);   // the relaunch ran; its repair never did
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.ok).toBe(false);
+    expect(gpt.fromReasoning).toBe(true);
+    const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].why).toBe('its own answer was its deliberation, not a judgement; relaunched '
+      + "once with the original briefing, and the relaunch's answer did not parse — the cost "
+      + 'ceiling was reached before its repair; the deliberation itself was read by nobody '
+      + '(40000 reasoning / 0 output tokens)');
+    expect(notes[0].why).not.toContain('after its one repair');   // no -q2 was ever launched
+    expect(notes[0].data).toMatchObject({ attempts: 1, relaunched: true });
+  });
+
+  /**
+   * #257 R-X32 — THE ARTIFACT. `judge-<seat>.md` is what a reader opens to see
+   * what the judge said. A promoted leg's deliberation is not that, and shipping
+   * it under that name is the same misattribution the parse rule above removes.
+   * The relaunch's REAL text takes the name instead; a judge that stood down
+   * leaves no file at all.
+   *
+   * NAMED MUTANT — JUDGEARTIFACTPROMOTED: drop `&& !isPromotedLeg(leg)` from the
+   * artifact write. Reds the stand-down half (the file exists, holding the
+   * deliberation).
+   * NAMED MUTANT — RELAUNCHARTIFACTDROPPED: drop the relaunch's
+   * `fs.writeFileSync(...)`. Reds the answered half.
+   */
+  test('#257 R-X32: no judge-<seat>.md is written from a promoted leg; the relaunch\'s real text becomes the artifact', async () => {
+    const stoodDown = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        promotedJudgeLeg('THE DELIBERATION', opts.waveId, 2, { reasoning: 50, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        const leg = promotedJudgeLeg('more deliberation', opts.waveId, 1, { reasoning: 60, output: 0 });
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    await runStage2(stoodDown, { reviews: stage1Reviews(), labels, globalFindings });
+    // The judge that answered still has its artifact; the promoted one has NONE.
+    expect(fs.existsSync(path.join(stoodDown.o.runDir, 'judge-gemini.md'))).toBe(true);
+    expect(fs.existsSync(path.join(stoodDown.o.runDir, 'judge-gpt.md'))).toBe(false);
+
+    const answered = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        geminiJudge(opts.waveId),
+        promotedJudgeLeg('THE DELIBERATION', opts.waveId, 2, { reasoning: 50, output: 0 }),
+      ]),
+      onSolo: (opts) => {
+        const leg = mkLeg('gpt', RELAUNCH_BLOCK, 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    await runStage2(answered, { reviews: stage1Reviews(), labels, globalFindings });
+    const file = path.join(answered.o.runDir, 'judge-gpt.md');
+    expect(fs.existsSync(file)).toBe(true);
+    expect(fs.readFileSync(file, 'utf-8')).toBe(RELAUNCH_BLOCK);   // the relaunch, not the deliberation
+  });
+
+  /**
+   * #257 R-X45 (council round 4, findings A3/C1/C2/C3/D1/D7) — A RELAUNCH IS
+   * RECORDED AS ONE.
+   *
+   * Round 3 spent a promoted judge's relaunch through the repair vocabulary: the
+   * `-q<N>` row said `role: 'repair'` although a relaunch is a fresh ASK, not a
+   * correction (A3/C2), and the rescued judge's ok:true entry still said
+   * `fromReasoning: true` although the adjudication that was used came from real
+   * text (D7). D1 then asked the reader's question: a rescued judge ships a row
+   * carrying `promoted: true` with nothing on it saying the judge was rescued.
+   *
+   * The ruling answers it the way Stage 1 already does — a row describes its LEG,
+   * and the rescue is the NEXT row:
+   *   · the attempt-1 relaunch of a promoted judge is `role: 'relaunch'`; its one
+   *     LC-12 repair (attempt 2) is still `role: 'repair'`;
+   *   · `conformance` stays the ASKS-TO-PARSE axis — 'clean' (the first ask
+   *     parsed), 'repaired' (a later ask did), 'unstructured' (none did). The
+   *     VALUES do not move; the CAUSE lives on `role`/`promoted` and in the note;
+   *   · the rescued entry says `rescued: true` and `usedWaveId` — WHICH wave's
+   *     text was adjudicated — and `fromReasoning: false`, because the used
+   *     adjudication is real text. `leg` STAYS the attributed `-s2` leg (#83), so
+   *     `leg.summary` is the deliberation and `usedWaveId` is what names the
+   *     answer (C3);
+   *   · the heal note's `data` names both waves; its `what`/`why` do not move.
+   *
+   * NAMED MUTANT — RELAUNCHROLEREPAIR: put `role: 'repair'` back on the
+   * `extraRows.push` in run-stage2-judge.js. Reds (a), (b) and (d).
+   * NAMED MUTANT — RESCUEDMARKERDROPPED: drop `rescued: true` from the ok:true push.
+   * NAMED MUTANT — USEDWAVEIDDROPPED: drop `usedWaveId` from the ok:true push.
+   * NAMED MUTANT — FROMREASONINGONRESCUED: restore `fromReasoning: isPromotedLeg(leg)`
+   * on the ok:true push.
+   * NAMED MUTANT — RELAUNCHWAVEIDDROPPED: drop `relaunchWaveId`/`usedWaveId` from
+   * the rescued `promotedJudgeNote` call in run-stage2-judge.js.
+   */
+  describe('#257 R-X45: the record of a relaunch', () => {
+    test('(a) a promoted judge rescued by its relaunch: -q1 is a RELAUNCH row, the entry says rescued/usedWaveId and NOT fromReasoning', async () => {
+      const ctx = makeCtx({
+        models: ['gemini', 'gpt'],
+        onWave: (opts) => okWave([
+          geminiJudge(opts.waveId),
+          promotedJudgeLeg(OWN_BLOCK, opts.waveId, 2, { reasoning: 1200, output: 0 }),
+        ]),
+        onSolo: (opts) => {
+          const leg = mkLeg('gpt', RELAUNCH_BLOCK, 'complete', opts.waveId, 1);
+          return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+        },
+      });
+      const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+      // A3/C2: the row names the KIND of follow-up ask. The -q<N> ID SPACE is
+      // unchanged on purpose — it means "a follow-up ask of this seat"; only the
+      // role says which kind.
+      expect(extraRows).toHaveLength(1);
+      expect(extraRows[0]).toMatchObject({ model: 'gpt', role: 'relaunch',
+        waveId: 'abc123-q1', conformance: 'clean' });
+      expect(extraRows.some(r => r.role === 'repair')).toBe(false);
+
+      const gpt = judgeResults.find(j => j.judge === 'gpt');
+      expect(gpt.ok).toBe(true);
+      expect(gpt.rescued).toBe(true);
+      expect(gpt.usedWaveId).toBe('abc123-q1');
+      // D7: the used adjudication came from real text, so this marker — which
+      // means "answered only in its reasoning channel and was NOT rescued" —
+      // is false on every ok:true entry.
+      expect(gpt.fromReasoning).toBe(false);
+      // (b) conformance is the ASKS-TO-PARSE axis and has not moved: a later ask parsed.
+      expect(gpt.conformance).toBe('repaired');
+      // C3: `leg` stays the ATTRIBUTED -s2 leg (#83) — its summary is the
+      // deliberation, and `usedWaveId` is what names the answer that was used.
+      expect(gpt.leg.waveId).toBe('abc123-s2');
+      expect(gpt.leg.promoted).toBe(true);
+      expect(gpt.leg.summary).toBe(OWN_BLOCK);
+
+      const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+      expect(notes).toHaveLength(1);
+      // BYTE-IDENTICAL: the ruling moves no announcement prose.
+      expect(notes[0].what).toBe('judge gpt answered in its reasoning channel');
+      expect(notes[0].why).toBe('its own answer was its deliberation, not a judgement; relaunched '
+        + "once with the original briefing, and that relaunch's adjudication is the one used; "
+        + 'the deliberation itself was read by nobody (1200 reasoning / 0 output tokens)');
+      expect(notes[0].effect).toBe('the adjudication counts; nothing else changes');
+      // The two waves the heal note now names.
+      expect(notes[0].data).toEqual({ judge: 'gpt', seat: 'gpt', reasoningTokens: 1200,
+        outputTokens: 0, attempts: 1, relaunched: true, rescued: true,
+        relaunchWaveId: 'abc123-q1', usedWaveId: 'abc123-q1' });
+    });
+
+    test("(b) rescued by the RELAUNCH's repair: -q1 is relaunch, -q2 is repair, and usedWaveId names -q2", async () => {
+      const RELAUNCH_TEXT = 'I judged at length in prose, but the trailing JSON never appeared.';
+      const solos = [];
+      const ctx = makeCtx({
+        models: ['gemini', 'gpt'],
+        onWave: (opts) => okWave([
+          geminiJudge(opts.waveId),
+          promotedJudgeLeg('deliberation, no block', opts.waveId, 2, { reasoning: 40332, output: 0 }),
+        ]),
+        onSolo: (opts) => {
+          solos.push(opts);
+          const leg = mkLeg('gpt', solos.length === 1 ? RELAUNCH_TEXT : RELAUNCH_BLOCK,
+            'complete', opts.waveId, 1);
+          return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+        },
+      });
+      const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+      expect(solos.map(s => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+      // The RELAUNCH is attempt 1; its one LC-12 repair is a repair, and says so.
+      expect(extraRows.map(r => [r.waveId, r.role])).toEqual([
+        ['abc123-q1', 'relaunch'], ['abc123-q2', 'repair']]);
+      // Each -q row's own conformance is its own measured outcome.
+      expect(extraRows[0].conformance).toBe('unstructured');
+      expect(extraRows[1].conformance).toBe('clean');
+
+      const gpt = judgeResults.find(j => j.judge === 'gpt');
+      expect(gpt.ok).toBe(true);
+      expect(gpt.rescued).toBe(true);
+      expect(gpt.usedWaveId).toBe('abc123-q2');      // the wave whose TEXT was adjudicated
+      expect(gpt.fromReasoning).toBe(false);
+      expect(gpt.conformance).toBe('repaired');
+      const notes = ctx._notes.filter(n => n.channel === 'judge-reasoning-only');
+      expect(notes[0].data).toMatchObject({ attempts: 2,
+        relaunchWaveId: 'abc123-q1', usedWaveId: 'abc123-q2' });
+    });
+
+    test('(c) a NON-promoted judge repaired once is untouched: role repair, no rescued, no usedWaveId', async () => {
+      const ctx = makeCtx({
+        models: ['gemini', 'gpt'],
+        onWave: (opts) => okWave([
+          geminiJudge(opts.waveId),
+          mkLeg('gpt', 'prose only, no fenced block at all', 'complete', opts.waveId, 2),
+        ]),
+        onSolo: (opts) => {
+          const leg = mkLeg('gpt', RELAUNCH_BLOCK, 'complete', opts.waveId, 1);
+          return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+        },
+      });
+      const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+      // BYTE PARITY with today: the relaunch role is gated on `isPromotedLeg(leg)`.
+      expect(extraRows).toHaveLength(1);
+      expect(extraRows[0].role).toBe('repair');
+      const gpt = judgeResults.find(j => j.judge === 'gpt');
+      expect(gpt.ok).toBe(true);
+      expect(gpt.conformance).toBe('repaired');
+      expect(gpt.fromReasoning).toBe(false);
+      expect('rescued' in gpt).toBe(false);
+      expect('usedWaveId' in gpt).toBe(false);
+      expect(ctx._notes.filter(n => n.channel === 'judge-reasoning-only')).toEqual([]);
+    });
+
+    test('(d) a STOOD-DOWN promoted judge carries no rescued marker and keeps fromReasoning on its ok:false entry', async () => {
+      const ctx = makeCtx({
+        models: ['gemini', 'gpt'],
+        onWave: (opts) => okWave([
+          geminiJudge(opts.waveId),
+          promotedJudgeLeg('THE DELIBERATION', opts.waveId, 2, { reasoning: 50, output: 0 }),
+        ]),
+        onSolo: (opts) => {
+          const leg = promotedJudgeLeg('more deliberation', opts.waveId, 1, { reasoning: 60, output: 0 });
+          return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+        },
+      });
+      const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+      expect(extraRows.map(r => r.role)).toEqual(['relaunch']);
+      const gpt = judgeResults.find(j => j.judge === 'gpt');
+      expect(gpt.ok).toBe(false);
+      // C1: 'unstructured' because NO ask parsed as an adjudication — the value
+      // is the asks-to-parse axis, not a claim about what the text was.
+      expect(gpt.conformance).toBe('unstructured');
+      // The ok:FALSE entry is where `fromReasoning` still means what it says, and
+      // it is what drives the thin-cross-review clause.
+      expect(gpt.fromReasoning).toBe(true);
+      expect('rescued' in gpt).toBe(false);
+      expect('usedWaveId' in gpt).toBe(false);
+    });
+  });
+
+  test('#257 (c) NEGATIVE PIN: a promoted judge that DIED is a death, never a reasoning note', async () => {
+    // `promoted` is emit-when-true and never minted on a death (spec R12), so
+    // this shape should be unreachable — pinned so the `!legDied` guard on
+    // `fromReasoning`, and the placement of the info note on the ok:true path,
+    // are both load-bearing rather than incidental.
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        { ...deadLeg('gpt', 'error', 'NO_OUTPUT_BACKSTOP: no output in 300s', opts.waveId, 2),
+          promoted: true },
+      ]),
+      onSolo: () => { throw new Error('a dead judge leg must not be repaired'); },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    const gpt = judgeResults.find(j => j.judge === 'gpt');
+    expect(gpt.died).toBe(true);
+    expect(gpt.fromReasoning).toBe(false);
+    expect(ctx._notes.find(n => n.channel === 'judge-reasoning-only')).toBeUndefined();
+    expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeDefined();
+  });
+
+  test('#257 BYTE PARITY: a bench with NO promoted judge raises no new note at all', async () => {
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+      ]),
+      onSolo: () => { throw new Error('no repairs expected'); },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    expect(ctx._notes).toEqual([]);
+    for (const j of judgeResults) { expect(j.fromReasoning).toBe(false); }
   });
 
   test('#83: each judgeResult carries its leg for cost attribution', async () => {
@@ -2078,6 +3135,224 @@ SECOND LINE
     expect(solos[1].prompt).toContain(badJudge);
   });
 
+  /**
+   * #257 R-X21 (spec §10 addendum, owner decision C). The `-q<N>` judge-repair
+   * solo tested NO status either — only the truthiness of `solo.leg.summary` —
+   * so a repair that answered ONLY in its reasoning channel had its
+   * deliberation parsed, and if that reasoning happened to carry a fenced
+   * block, the adjudication was USED and counted. Silently: the
+   * `judge-reasoning-only` note keys on the ORIGINAL wave leg (#83's
+   * convention), so a NON-promoted judge rescued by a promoted repair raised
+   * nothing at all — the measured gap this gate closes by construction.
+   *
+   * With the gate, the note's promoted-ORIGINAL arms can only ever describe one
+   * shape: a promoted original rescued by a NON-promoted repair, which is exactly
+   * what their `why` says. That arm is already pinned by '#257 (b2)' above — not
+   * duplicated here. The silence this docblock recorded is closed by R-X36
+   * below, which gives the OTHER shape its own sentence.
+   *
+   * NAMED MUTANT — JUDGEREPAIRPROMOTEDUSED: drop `!isPromotedLeg(solo.leg) &&`
+   * from run-stage2-judge.js's `const out = …` line. Reds the test below: `ok` flips
+   * to true and the reasoning's block becomes the adjudication.
+   */
+  test('a promoted -q1 repair supplies nothing: its block is never parsed (#257 R-X21)', async () => {
+    const solos = [];
+    const badJudge = 'Judged at length in prose, but the trailing JSON never appeared.';
+    const REPAIR_REASONING = 'Let me weigh the two reviews against each other first.';
+    // THE ADVERSARIAL SHAPE: the promoted repair's reasoning CONTAINS a valid
+    // fenced judge block. It must STILL be unusable — what disqualifies it is
+    // the channel it came back on, not whether it happens to parse.
+    const promotedRepairLeg = (waveId) => ({
+      ...mkLeg('gemini', `${REPAIR_REASONING}\n\n${
+        judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }])}`, 'complete', waveId, 1),
+      promoted: true, finish: 'stop',
+      usage: { tokens: { reasoning: 40332, output: 1 }, cost: { amount: 0.02, source: 'reported' } },
+    });
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        // The ORIGINAL judge is NOT promoted — it answered in its output
+        // channel, just without a block.
+        mkLeg('gemini', badJudge, 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        return okWave([solos.length === 1
+          ? promotedRepairLeg(opts.waveId)
+          : deadLeg('gemini', 'error', 'boom', opts.waveId, 1)]);
+      },
+    });
+    const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    const g = judgeResults.find((j) => j.judge === 'gemini');
+    expect(g.ok).toBe(false);                  // the promoted repair's block is NOT an adjudication
+    expect(g.adjudications).toBeNull();
+    expect(g.order).toBeNull();
+    expect(g.conformance).toBe('unstructured');
+    expect(g.died).toBe(false);                // it answered; the REPAIRS were unusable
+    // The ORIGINAL was not promoted, so this judge did not answer in its
+    // reasoning channel — a different fact with a different fix (spec R4), and
+    // the marker that names that fact stays false here.
+    expect(g.fromReasoning).toBe(false);
+    // #257 R-X36: the channel is no longer silent on this shape — but what it
+    // says is about the REPAIR, never the judge's own answer. Pinned in full below.
+    expect(ctx._notes.filter((n) => n.channel === 'judge-reasoning-only').map((n) => n.what))
+      .toEqual(["judge gemini's repair answered in its reasoning channel"]);
+    expect(ctx._notes.find((n) => n.channel === 'stage2-judge')).toBeUndefined();
+
+    // The bound is unchanged, and `judging` never became the promoted
+    // reasoning — LC-12's observable, read the same way.
+    expect(solos.map((s) => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    expect(solos[1].prompt).toContain(badJudge);
+    expect(solos[1].prompt).not.toContain(REPAIR_REASONING);
+
+    // Both -q<N> launches get their row; the promoted one SAYS so (minted by
+    // buildRunStatsEntry off the leg), and emit-when-true keeps it off the other.
+    const repairRows = extraRows.filter((r) => r.role === 'repair');
+    expect(repairRows).toHaveLength(2);
+    expect(repairRows.map((r) => r.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    expect(repairRows[0]).toMatchObject({ model: 'gemini', status: 'complete',
+      conformance: 'unstructured', promoted: true });
+    expect('promoted' in repairRows[1]).toBe(false);
+  });
+
+  /**
+   * #257 R-X36 (council round 3, B1 — gpt, major). THE OTHER PROMOTED SHAPE.
+   * The R-X21 gate above stops a promoted repair from being READ. What it never
+   * did was SAY so: `judge-reasoning-only` keys on the ORIGINAL wave leg (#83's
+   * convention), so a judge whose own answer was real-but-unparseable, whose
+   * `-q<N>` repair came back promoted, and which then ended unusable, left a
+   * `-q<N>` row saying `promoted: true` — the machine record — and not one word
+   * of prose. Under owner decision A′ every path a promoted answer takes is
+   * announced, and this one was not.
+   *
+   * The `what` FORKS from the promoted-original arms deliberately: this judge's
+   * own answer was real, and a reader must not come away believing otherwise.
+   *
+   * It fires only when the judge ENDS unusable. Attempt 2 carries the ORIGINAL's
+   * real text, so a promoted attempt 1 followed by a parseable attempt 2 is just
+   * a failed repair with a row that says so — the CONTROL below.
+   *
+   * NAMED MUTANT — REPAIRPROMOTEDSILENT: in run-stage2-judge.js delete the
+   * `: (repairPromoted === null ? null : 'repair-promoted')` arm of the C4
+   * stand-down resolution. Reds the first test below.
+   */
+  const REPAIR_REASONING = 'Let me weigh the two reviews against each other first.';
+  // THE ADVERSARIAL SHAPE, as in R-X21 above: the promoted repair's reasoning
+  // CONTAINS a valid fenced block. What disqualifies it is the channel it came
+  // back on, not whether it happens to parse.
+  const promotedRepair = (waveId) => ({
+    ...mkLeg('gemini', `${REPAIR_REASONING}
+
+${
+      judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }])}`, 'complete', waveId, 1),
+    promoted: true, finish: 'stop',
+    usage: { tokens: { reasoning: 40332, output: 1 }, cost: { amount: 0.02, source: 'reported' } },
+  });
+  // The judge's OWN answer: REAL text in the output channel, with no block.
+  const REAL_BUT_UNPARSEABLE = 'Judged at length in prose, but the trailing JSON never appeared.';
+  const repairPromotedCtx = (secondSolo) => {
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', REAL_BUT_UNPARSEABLE, 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]),
+          'complete', opts.waveId, 2),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        return okWave([solos.length === 1 ? promotedRepair(opts.waveId) : secondSolo(opts.waveId)]);
+      },
+    });
+    return { ctx, solos };
+  };
+
+  test('#257 R-X36: a repair that comes back promoted is announced when the judge ends unusable', async () => {
+    const { ctx, solos } = repairPromotedCtx(
+      (waveId) => mkLeg('gemini', 'still no stage-2 block', 'complete', waveId, 1));
+    const { judgeResults, extraRows } = await runStage2(ctx,
+      { reviews: stage1Reviews(), labels, globalFindings });
+
+    expect(solos.map((s) => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    const g = judgeResults.find((j) => j.judge === 'gemini');
+    expect(g.ok).toBe(false);
+    expect(g.conformance).toBe('unstructured');
+    // The judge's OWN answer was real: this is a fact about its REPAIR, and the
+    // promoted-original marker must stay false or the two would be conflated.
+    expect(g.fromReasoning).toBe(false);
+
+    const notes = ctx._notes.filter((n) => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].kind).toBe('info');
+    expect(notes[0].what).toBe("judge gemini's repair answered in its reasoning channel");
+    expect(notes[0].why).toBe('its own answer was real but did not parse; repair attempt 1 was '
+      + 'written in the reasoning channel and is not a judgement, and the judge ended unusable');
+    expect(notes[0].effect).toBe('the judge is not counted; the cross-review proceeds with the '
+      + 'judges that answered, and thin-cross-review fires below two');
+    expect(notes[0].data).toEqual({ judge: 'gemini', seat: 'gemini', attempts: 2,
+      repairPromotedAttempt: 1 });
+    // Not a death; and the machine record the prose used to be missing is intact.
+    expect(ctx._notes.find((n) => n.channel === 'stage2-judge')).toBeUndefined();
+    const repairRows = extraRows.filter((r) => r.role === 'repair');
+    expect(repairRows[0]).toMatchObject({ waveId: 'abc123-q1', promoted: true,
+      conformance: 'unstructured' });
+    expect('promoted' in repairRows[1]).toBe(false);
+  });
+
+  test('#257 R-X36 CONTROL: a promoted repair whose NEXT attempt parses is just a failed repair — no note', async () => {
+    const { ctx } = repairPromotedCtx((waveId) => mkLeg('gemini',
+      judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]), 'complete', waveId, 1));
+    const { judgeResults, extraRows } = await runStage2(ctx,
+      { reviews: stage1Reviews(), labels, globalFindings });
+
+    const g = judgeResults.find((j) => j.judge === 'gemini');
+    expect(g.ok).toBe(true);
+    expect(g.conformance).toBe('repaired');
+    expect(g.fromReasoning).toBe(false);
+    // Nothing is announced at all — attempt 2 carried the ORIGINAL's real text
+    // and rescued the judge, so the promoted attempt 1 is a failed repair whose
+    // row already says `promoted: true`.
+    expect(ctx._notes).toEqual([]);
+    expect(extraRows.filter((r) => r.role === 'repair')[0])
+      .toMatchObject({ waveId: 'abc123-q1', promoted: true, conformance: 'unstructured' });
+  });
+
+  /**
+   * Round-3 review I1. The note fires on whatever the tracker says, and the
+   * tracker's SECOND conjunct decides WHICH attempt is named. Both repairs
+   * promoted is the only shape that can tell first from last — with one promoted
+   * repair the two readings agree, which is why the R-X36 test above cannot see
+   * this. `attempts` (how many ran) and `repairPromotedAttempt` (which one was
+   * promoted) deliberately differ here in the same record.
+   *
+   * NAMED MUTANT — FIRSTPROMOTEDREPAIRLOST: drop `&& repairPromoted === null` from
+   * the tracker in run-stage2-judge.js. Reds this test (it names attempt 2).
+   */
+  test('#257 R-X36: when BOTH repairs come back promoted, the FIRST is the one named', async () => {
+    const { ctx, solos } = repairPromotedCtx((waveId) => promotedRepair(waveId));
+    const { judgeResults, extraRows } = await runStage2(ctx,
+      { reviews: stage1Reviews(), labels, globalFindings });
+
+    // The ordinary two-repair bound is untouched by R-X36: a promoted repair
+    // supplies no block, so the loop spends both attempts and stops.
+    expect(solos.map((s) => s.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    const g = judgeResults.find((j) => j.judge === 'gemini');
+    expect(g.ok).toBe(false);
+    expect(g.fromReasoning).toBe(false);
+
+    const notes = ctx._notes.filter((n) => n.channel === 'judge-reasoning-only');
+    expect(notes).toHaveLength(1);                       // ONE note, not one per promoted repair
+    expect(notes[0].why).toContain('repair attempt 1 was written in the reasoning channel');
+    expect(notes[0].data).toEqual({ judge: 'gemini', seat: 'gemini', attempts: 2,
+      repairPromotedAttempt: 1 });
+    // Both rows carry the machine record, which is what makes the prose's choice
+    // of attempt 1 a decision rather than the only thing it could have said.
+    expect(extraRows.filter((r) => r.role === 'repair').map((r) => r.promoted))
+      .toEqual([true, true]);
+  });
+
   test('judge still bad after 2 repairs → ok false, conformance unstructured', async () => {
     let soloCount = 0;
     const ctx = makeCtx({
@@ -2093,6 +3368,17 @@ SECOND LINE
     const g = judgeResults.find(j => j.judge === 'gemini');
     expect(g.ok).toBe(false);
     expect(g.conformance).toBe('unstructured');
+    // #257 R-X36 NEGATIVE PIN (round-3 review I1). This is the most common
+    // Stage-2 failure there is — an ordinary judge, two ordinary failed repairs,
+    // not a promoted leg anywhere — and the reasoning channel must stay SILENT on
+    // it. Announcing a reasoning channel no leg of this run ever used is prose
+    // contradicting the record beside it, the defect class R-X13 and R-X36 both
+    // exist to remove, and it is what the tracker's `isPromotedLeg(solo.leg)`
+    // conjunct prevents. `#257 BYTE PARITY` cannot cover this: that bench parses
+    // on the first pass and never reaches the `!parsed.ok` branch at all.
+    // NAMED MUTANT — REPAIRGUARDDROPPED: drop `isPromotedLeg(solo.leg) &&` from
+    // the `repairPromoted` tracker in run-stage2-judge.js. Reds this assertion.
+    expect(ctx._notes).toEqual([]);
   });
 
   test('cost ceiling blocks judge repair: no solo fires, judge ends unstructured', async () => {

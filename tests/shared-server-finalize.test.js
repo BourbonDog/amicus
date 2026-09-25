@@ -107,11 +107,14 @@ describe('finalizeHeadlessResult (shared-server path)', () => {
 
   it('a completed run carrying variant threads it onto metadata (#218 PR 4)', () => {
     const sdir = tmpSession();
-    finalizeHeadlessResult(sdir, { completed: true, summary: 'cut', variant: 'low', variantUnverified: true }, os.tmpdir(), readMeta(sdir));
+    finalizeHeadlessResult(sdir, { completed: true, summary: 'cut', variant: 'low', variantUnverified: true, promoted: true }, os.tmpdir(), readMeta(sdir));
     const m = readMeta(sdir);
     expect(m.status).toBe('complete');
     expect(m.variant).toBe('low');
     expect(m.variantUnverified).toBe(true);
+    // #257: `promoted` rides the same opts passthrough. Named mutant
+    // "SHAREDPROMOTEDDROPPED": drop `promoted` from session-finalize.js's finalizeSession opts.
+    expect(m.promoted).toBe(true);
   });
 
   it('a run with no variant REMOVES prior variant keys from metadata', () => {
@@ -134,6 +137,20 @@ describe('finalizeHeadlessResult (shared-server path)', () => {
     const stale = tmpSession({ backstop: REC });
     finalizeHeadlessResult(stale, { completed: false, error: 'boom', backstop: FORGED }, os.tmpdir(), readMeta(stale));
     expect('backstop' in readMeta(stale)).toBe(false);
+  });
+
+  it('#257 (spec R12): an error run REMOVES a stale promoted and never stamps one, even when the result carries promoted: true', () => {
+    // Named mutant "SHAREDSTALEPROMOTED": drop the `delete metadata.promoted;` line from
+    // finalizeHeadlessResult's error branch. This is the ONE of the four direct error-branch
+    // writers with no reopen scrub in front of it — mcp-server.js reads metadata.json straight
+    // off disk, so a `promoted: true` from an EARLIER completed turn in the same session dir
+    // survives into this turn and produces `status: 'error'` + `promoted: true`, the document
+    // R12 exists to forbid. The delete is unconditional: an error leg never carries the fact.
+    const stale = tmpSession({ promoted: true });
+    finalizeHeadlessResult(stale, { completed: false, error: 'boom', promoted: true }, os.tmpdir(), readMeta(stale));
+    const m = readMeta(stale);
+    expect(m.status).toBe('error');
+    expect('promoted' in m).toBe(false);
   });
 
   it('#251 item 1: a completed run that was extended keeps the record through finalizeSession', () => {

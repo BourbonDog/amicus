@@ -120,19 +120,38 @@ describe('seatsFromRunStats (terminal fallback, spec §5.2)', () => {
   // model can now carry these alongside its real seat row, and unlike
   // rebuttal/revote (F37, above — kept rendering on purpose) these three
   // have no seats-panel meaning of their own and must not produce a row.
-  test('chair-attempt/repair/superseded rows produce no seat row (v4.7 D6/E1)', () => {
+  // #257 R-X45: `relaunch` joined this list. It is the SAME launch a promoted
+  // Stage-2 judge's `-q1` (or a promoted defence's / re-vote's dead relaunch)
+  // always was — filed as `repair`, and therefore hidden, until the rename. A
+  // relaunch is launch accounting, not a seat, so leaving it out would render a
+  // phantom seat row (alias, role `relaunch`, status error, every other column
+  // blank) for a launch the panel has never shown.
+  // NAMED MUTANT — RELAUNCHSEATPHANTOM: delete
+  // `SEATS_PANEL_EXCLUDED_ROLES.relaunch` from electron/workspace-ui/live-seats.js.
+  test('chair-attempt/repair/relaunch/superseded rows produce no seat row (v4.7 D6/E1; #257 R-X45)', () => {
     const rows = seatsFromRunStats([
       { model: 'gemini', role: 'seat', status: 'complete', durationMs: 120000, costDisplay: '$0.11' },
       { model: 'gemini', role: 'chair-attempt', status: 'complete', durationMs: 9000, costDisplay: '$0.03' },
       { model: 'gpt', role: 'repair', status: 'timeout', durationMs: 5000, costDisplay: '$0.02' },
+      { model: 'gpt', role: 'relaunch', status: 'error', durationMs: null, costDisplay: '—' },
       { model: 'qwen', role: 'superseded', status: 'complete', durationMs: 3000, costDisplay: '$0.01' },
     ]);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ model: 'gemini', role: 'seat' });
   });
 
-  // Judge/chair rows keep rendering exactly as before this filter — the new
-  // exclusion set is {'chair-attempt','repair','superseded'} only.
+  // The same fact stated as the regression it guards: the one launch that was
+  // hidden as `repair` before #257 R-X45 must stay hidden after the rename.
+  test('#257 R-X45: a relaunch row is hidden exactly as the repair row it used to be filed as', () => {
+    const seat = { model: 'gpt', role: 'seat', status: 'complete', durationMs: 120000, costDisplay: '$0.11' };
+    const asRepair = seatsFromRunStats([seat, { model: 'gpt', role: 'repair', status: 'error', durationMs: null, costDisplay: '—' }]);
+    const asRelaunch = seatsFromRunStats([seat, { model: 'gpt', role: 'relaunch', status: 'error', durationMs: null, costDisplay: '—' }]);
+    expect(JSON.stringify(asRelaunch)).toBe(JSON.stringify(asRepair));
+    expect(asRelaunch).toHaveLength(1);
+  });
+
+  // Judge/chair rows keep rendering exactly as before this filter — the
+  // exclusion set is {'chair-attempt','repair','relaunch','superseded'} only.
   test('judge and chair rows still render (unaffected by the new filter)', () => {
     const rows = seatsFromRunStats([
       { model: 'alpha', role: 'judge', status: 'complete', durationMs: 5000, costDisplay: '$0.01' },

@@ -32,6 +32,65 @@ const { emitStageStarted, emitStageTerminal } = require('../observe/events');
 
 const now = () => new Date().toISOString();
 
+/**
+ * #257 R-X46 — the clause that names WHOSE retry answered only in its reasoning
+ * channel, and WHAT KIND of retry it was.
+ *
+ * `debate-degraded` is ONE note for the whole round, so the original wording
+ * ("its repair") was unreadable the moment two defences were in it: the reader
+ * could not tell which raiser's work the sentence was about — the same silence
+ * R-X36 exists to remove (fix round 1). Fix round 3 then fixed the other half:
+ * calling a RELAUNCH a "repair" is precisely the misnaming the council raised as
+ * A3/C2, and which R-X45 removed from the runStats record — the prose must not
+ * re-introduce it. The kind rides beside the alias on the `promotedRetry` MARKER
+ * that `runDefenseSolo` / `repairRevoteLeg` set where the fact is known — off the
+ * WAVE-1 leg's own promotion, at the retry site — so the sentence and the row can
+ * never disagree because the sentence no longer reads the row at all (#257 R-X48).
+ * It DID read the row until R-X48, off the row's `relaunch` transport mark, and
+ * that is exactly why R-X46 case ii — a promoted relaunch that COMPLETES, so it
+ * supersedes and leaves NO retry row — went unnamed for a whole round.
+ *
+ * A relaunch clause says "again" because that is what happened: a promoted
+ * defence or re-vote was RE-ASKED with its original briefing (R-X33) and
+ * answered in its reasoning channel a second time.
+ *
+ * Entries are grouped by kind, each group rendered with the singular or the
+ * Oxford-free plural (`a, b and c`) form, and the groups concatenated — each
+ * clause already opens with '; ', so the kinds join with '; ' by construction.
+ * Group order is FIRST APPEARANCE in the round, not a fixed alphabet: the prose
+ * then follows the round's own order rather than an arbitrary one.
+ *
+ * Returns '' for an empty/absent list, which is what keeps every other degraded
+ * round's `why` byte-identical (named mutants "DEBATEPROMOTEDREPAIRSILENT",
+ * "DEBATEPROMOTEDREPAIRUNNAMED", "RELAUNCHCALLEDREPAIR").
+ * @param {Array<{alias: string, kind: string}>} [entries] the round's
+ *   `promotedRetry` MARKERS — one per RETRY that came back promoted, whichever
+ *   branch its leg took (a complete relaunch leaves no retry row), never one per
+ *   row; `kind` is 'repair' or 'relaunch'
+ * @returns {string} '' or one leading-'; ' clause per kind
+ */
+function promotedRepairClause(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) { return ''; }
+  const byKind = new Map();
+  for (const e of entries) {
+    if (!e || !e.alias) { continue; }
+    const kind = e.kind === 'relaunch' ? 'relaunch' : 'repair';
+    if (!byKind.has(kind)) { byKind.set(kind, []); }
+    byKind.get(kind).push(e.alias);
+  }
+  let out = '';
+  for (const [kind, aliases] of byKind) {
+    // 'relaunch' → 'relaunches'; 'repair' → 'repairs'.
+    const plural = kind === 'relaunch' ? 'relaunches' : 'repairs';
+    const again = kind === 'relaunch' ? ' again' : '';
+    out += aliases.length === 1
+      ? `; ${aliases[0]}'s ${kind} answered only in its reasoning channel${again}`
+      : `; the ${plural} of ${aliases.slice(0, -1).join(', ')} and ${aliases[aliases.length - 1]}`
+        + ` answered only in their reasoning channels${again}`;
+  }
+  return out;
+}
+
 async function runDebateStage(ctx, { provisional, provisionalInput, overBudget }) {
   const { o } = ctx;
   let debatedInput = provisionalInput, debatedRecord = provisional;
@@ -90,7 +149,17 @@ async function runDebateStage(ctx, { provisional, provisionalInput, overBudget }
         ctx.degrade.note({
           channel: 'debate-degraded',
           what: 'the debate round did not complete cleanly',
-          why: 'one or more defense or re-vote legs died or returned unstructured output',
+          // #257 R-X46: R-X36's rule, applied to the debate — a `promoted: true`
+          // row is never the only record of itself. When a defence's or re-vote's
+          // RETRY came back promoted, the prose NAMES whose it was (fix round 1;
+          // see promotedRepairClause above). R-X48: that is EVERY such retry,
+          // whichever branch its leg took — run-debate.js builds `promotedRepairs`
+          // from explicit markers, not from the rows, so the double-promoted
+          // COMPLETE relaunch (R-X46 case ii, which supersedes and leaves no
+          // repair row) is named too. The clause is '' for every other degraded
+          // round, so every other `why` is byte-identical.
+          why: 'one or more defense or re-vote legs died or returned unstructured output'
+            + promotedRepairClause(dbg.promotedRepairs),
           effect: 'affected findings keep their provisional tier; will exit degraded (2)',
         });
       }

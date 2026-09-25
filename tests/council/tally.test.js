@@ -850,3 +850,86 @@ describe('tally() — the TTFT probe reaches the published artifacts (#202)', ()
       .toEqual(['model', 'role', 'wasChair', 'conformance', 'status', 'durationMs', 'usage']);
   });
 });
+
+/**
+ * #257 — `promoted` rides tally's re-projection allowlist, in
+ * buildRunStatsEntry's own slot (between `ttftMs`/`durationMs` and `usage`; see
+ * G4d/G7e, tests/council/runstats-byte-order.test.js). Emit-when-true: the
+ * allowlist spread mirrors the producer's own `=== true` gate, so a truthy
+ * stand-in that somehow reached a row (a hand-edited artifact, an older
+ * producer) is dropped here too, not merely never produced.
+ *
+ * Named mutant TALLYPROMOTEDDROPPED — delete the allowlist line in tally.js.
+ */
+describe('tally() — promoted rides the allowlist (#257)', () => {
+  const baseInput = {
+    meta: { runId: 'r', runType: 'review', date: 'd', models: ['glm'], chair: 'gpt', claudeInCouncil: false },
+    findings: [], rankings: [], adjudications: [],
+  };
+  const seatRow = extra => ({ model: 'glm', role: 'seat', wasChair: false, conformance: 'clean',
+    status: 'complete', durationMs: 342229, usage: null, ...extra });
+
+  test('tally keeps promoted: true on a runStats row and drops promoted: false / "true"', () => {
+    const record = tally({ ...baseInput, runStats: [seatRow({ promoted: true })] });
+    expect(record.runStats[0].promoted).toBe(true);
+
+    for (const bad of [false, 'true']) {
+      const rec = tally({ ...baseInput, runStats: [seatRow({ promoted: bad })] });
+      expect(`promoted=${String(bad)} -> ${'promoted' in rec.runStats[0]}`)
+        .toBe(`promoted=${String(bad)} -> false`);
+    }
+  });
+});
+
+/**
+ * #257 R-X45 (fix round 1) — `rescued` TRAVELS WHEREVER `promoted` TRAVELS.
+ *
+ * D1's reader is a verdict.json consumer: "a runStats/judge row carrying
+ * `promoted: true` … with no `rescued` marker on the row". A marker that stops
+ * at tally-input.json never reaches that reader, so the allowlist carries it in
+ * the same slot and by the same emit-when-TRUE rule as `promoted`.
+ *
+ * Named mutant RESCUEDNOTPROJECTED — delete the `rescued` spread in tally.js.
+ */
+describe('tally() — rescued rides the allowlist beside promoted (#257 R-X45)', () => {
+  const baseInput = {
+    meta: { runId: 'r', runType: 'review', date: 'd', models: ['glm'], chair: 'gpt', claudeInCouncil: false },
+    findings: [], rankings: [], adjudications: [],
+  };
+  const judgeRow = extra => ({ model: 'glm', role: 'judge', wasChair: false, conformance: 'repaired',
+    status: 'complete', durationMs: 342229, usage: null, ...extra });
+
+  test('tally keeps rescued: true on a judge row and drops every falsy/coerced stand-in', () => {
+    const record = tally({ ...baseInput, runStats: [judgeRow({ promoted: true, rescued: true })] });
+    expect(record.runStats[0].rescued).toBe(true);
+    expect(record.runStats[0].promoted).toBe(true);
+
+    for (const bad of [false, 'true', 1, null]) {
+      const rec = tally({ ...baseInput, runStats: [judgeRow({ rescued: bad })] });
+      expect(`rescued=${String(bad)} -> ${'rescued' in rec.runStats[0]}`)
+        .toBe(`rescued=${String(bad)} -> false`);
+    }
+  });
+
+  test('a row with no rescue is byte-identical through the re-projection', () => {
+    const plain = judgeRow({});
+    const before = JSON.stringify(tally({ ...baseInput, runStats: [plain] }).runStats[0]);
+    expect('rescued' in JSON.parse(before)).toBe(false);
+    // …and the KEY ORDER invariant (G7b's rule) holds for a row that carries both:
+    // `rescued` sits immediately after `promoted`, which sits before `usage`.
+    const both = tally({ ...baseInput,
+      runStats: [judgeRow({ promoted: true, rescued: true })] }).runStats[0];
+    const keys = Object.keys(both);
+    expect(keys.indexOf('rescued')).toBe(keys.indexOf('promoted') + 1);
+    expect(keys.indexOf('usage')).toBe(keys.indexOf('rescued') + 1);
+  });
+
+  test('buildVerdict copies runStats VERBATIM, so the marker reaches verdict.json', () => {
+    const { buildVerdict } = require('../../src/council/verdict');
+    const record = tally({ ...baseInput, runStats: [judgeRow({ promoted: true, rescued: true })] });
+    const verdict = buildVerdict(record, []);
+    expect(verdict.runStats[0]).toMatchObject({ role: 'judge', promoted: true, rescued: true });
+    // VERBATIM, not merely "carries the key": the whole array is the same bytes.
+    expect(JSON.stringify(verdict.runStats)).toBe(JSON.stringify(record.runStats));
+  });
+});

@@ -172,7 +172,13 @@ describe('W11 byte-order goldens — debateRunStatsRows (mk)', () => {
   // that already shipped — W13 sources it off the LEG inside buildRunStatsEntry, which
   // is exactly the "no caller change and none can be forgotten" shape that was supposed
   // to cover every call site. It does not cover this one, because `mk` builds its own
-  // five-field leg. If `mk` is ever widened, THIS is the pin that must be re-decided.
+  // five-field leg.
+  // ⚠️ #257 R-X26 WIDENED `mk` — by exactly ONE field, `promoted`, and this pin was
+  // re-decided rather than relaxed. `ttftMs` still does not reach a debate row and this
+  // assertion is unchanged; `promoted` is the deliberate, documented exception, because a
+  // reasoning-only leg is the CAUSE of that row's `no-response`/unstructured outcome and
+  // the row would otherwise hide it. G1f below is its pin. Any FURTHER widening is again a
+  // behaviour change needing its own decision — this test is still the one to re-decide.
   test('G1e — a leg-sourced entry field (`ttftMs`) does NOT reach a debate row', () => {
     const leg = { model: 'gemini', status: 'complete', durationMs: 50, usage: null,
       conformance: 'clean', waveId: 'r1-d1', resolvedModel: 'google/gemini-3.5-pro', ttftMs: 1234 };
@@ -186,6 +192,43 @@ describe('W11 byte-order goldens — debateRunStatsRows (mk)', () => {
         waveId: 'r1-d1', ttftMs: 1234 },
       model: 'gemini', role: 'rebuttal', conformance: 'clean' });
     expect(direct.ttftMs).toBe(1234);
+  });
+
+  // #257 R-X26: the ONE field G1e's rule is widened for. `promoted` is emit-when-TRUE (the
+  // literal), so a row built from a leg that is not promoted carries no key at all and stays
+  // byte-identical — which is why G1's golden above, whose census fixture has no promoted
+  // leg, did not move a byte when `mk` was widened.
+  // Named mutant DEBATEROWPROMOTEDDROPPED: delete the `...(l.promoted === true ? …)` spread
+  // from `mk`'s synthetic leg in src/council/debate.js. It reds this test and the three
+  // row assertions in tests/council/run-debate.test.js's two #257 R-X23 describes.
+  test('G1f — `promoted` is forwarded to every debate role, in buildRunStatsEntry\'s own slot', () => {
+    const promoted = (over) => ({ model: 'gemini', status: 'complete', durationMs: 50, usage: null,
+      conformance: 'unstructured', waveId: 'r1-d1', resolvedModel: 'google/gemini-3.5-pro',
+      promoted: true, ...over });
+    const rows = debateRunStatsRows({
+      defenseLegs: [promoted({})],
+      revoteLegs: [promoted({ model: 'gpt', waveId: 'r1-rv', resolvedModel: 'openai/gpt-5' })],
+      supersededLegs: [promoted({ waveId: 'r1-d1', conformance: 'unstructured' })],
+      repairLegs: [promoted({ model: 'qwen', waveId: 'r1-rv-qwenr' })],
+    });
+    expect(rows.map(r => r.role)).toEqual(['rebuttal', 'revote', 'superseded', 'repair']);
+    expect(rows.map(r => r.promoted)).toEqual([true, true, true, true]);
+    // The SLOT, not merely the presence: run-stats-entry.js emits `promoted` between
+    // `ttftMs` (absent on every debate row — G1e) and `usage`, so G7b's key-order
+    // invariant holds for a row that carries it.
+    for (const row of rows) {
+      const keys = Object.keys(row);
+      expect(keys.indexOf('promoted')).toBe(keys.indexOf('durationMs') + 1);
+      expect(keys.indexOf('usage')).toBe(keys.indexOf('promoted') + 1);
+    }
+    // Emit-when-TRUE: not `false`, not `null`, not a truthy non-literal.
+    for (const notTrue of [false, null, undefined, 'true', 1]) {
+      const [row] = debateRunStatsRows({ defenseLegs: [promoted({ promoted: notTrue })],
+        revoteLegs: [], supersededLegs: [], repairLegs: [] });
+      expect('promoted' in row).toBe(false);
+    }
+    // And the census's own rows — no promoted leg anywhere in it — carry no key.
+    expect(debateRunStatsRows(censusLists()).some(r => 'promoted' in r)).toBe(false);
   });
 });
 
@@ -237,6 +280,33 @@ describe('W11 byte-order goldens — legRow (run-debate-revote)', () => {
     expect(legRow('gpt', legPresent, 'unstructured').role).toBeUndefined();
   });
 
+  // #257 R-X45 — THE RELAUNCH MARK. `legRow` is an INTERMEDIATE normalizer whose
+  // only consumer is `debate.js :: mk`, and `mk` is where a debate row's role is
+  // stamped. A promoted defence or re-vote whose RELAUNCH produced no usable leg
+  // needs that row named `relaunch` rather than `repair`, so the mark rides the
+  // normalized row and `mk` reads it. It is emit-when-TRUE and lands AFTER the
+  // shared entry's own keys, so G2a-c above (relaunch absent) stay byte-exact.
+  //
+  // NAMED MUTANT — DEBATERELAUNCHROLEREPAIR: drop the `isPromotedLeg(leg)` 4th
+  // argument at run-debate.js:93 / run-debate-revote.js:181, OR drop the
+  // `l.relaunch === true ? 'relaunch' :` ternary in debate.js :: mk.
+  test('G2e — the relaunch mark is emit-when-true, last, and never reaches the runStats row as a field', () => {
+    expect(JSON.stringify(legRow('glm', legPresent, 'unstructured', true))).toBe(
+      '{"model":"glm","wasChair":false,"conformance":"unstructured",'
+      + '"summary":"the pre-repair defense","waveId":"r1-d1",'
+      + '"resolvedModel":"openrouter/z-ai/glm-4.7","status":"complete","durationMs":900,'
+      + '"usage":{"input":1,"output":2},"relaunch":true}');
+    // Falsy — including the DEFAULT, which is how every non-promoted caller spells it.
+    for (const notTrue of [undefined, false, null, 0, '']) {
+      expect('relaunch' in legRow('glm', legPresent, 'unstructured', notTrue)).toBe(false);
+    }
+    // Through `mk`: the mark becomes the ROLE and is not a key of its own.
+    const [row] = debateRunStatsRows({ defenseLegs: [], revoteLegs: [], supersededLegs: [],
+      repairLegs: [legRow('glm', legPresent, 'unstructured', true)] });
+    expect(row.role).toBe('relaunch');
+    expect('relaunch' in row).toBe(false);
+  });
+
   // The END-TO-END pin, and the whole justification for FOLD DIFF #2: the literals
   // below are legRow's PRE-FOLD bytes, frozen. Feeding them and the post-fold call
   // through debateRunStatsRows must produce the SAME runStats rows — that is
@@ -277,6 +347,49 @@ describe('W11 byte-order goldens — claudeRunStatsRow (run-assemble)', () => {
   });
 });
 
+describe('#257 R-X45 — the rescued judge row (run-assemble)', () => {
+  // The judge row is the ONE producer of `rescued`. Fix round 2 (review S2): it is
+  // emitted by the ONE row builder, in buildRunStatsEntry's own slot immediately
+  // after `promoted` and before `usage` — the SAME slot tally.js's re-projection
+  // uses — so the producer and the re-projection cannot disagree about where it
+  // sits. (It was first spread onto the built row, which put it last and made the
+  // row change shape across the re-projection; G7f below is the round-trip pin.)
+  // It stays EXPLICIT-ONLY: the leg a rescued judge row is attributed to is the
+  // PROMOTED one (#83), so a leg-sourced default would be exactly backwards.
+  //
+  // NAMED MUTANT — JUDGEROWRESCUEDDROPPED: delete the `rescued:` argument in run-assemble.js.
+  const judgeRow = (rescued) => {
+    const input = require('../../src/council/run-assemble').buildTallyInput({
+      runId: 'r1', date: 'd', bench: ['alpha'], chair: 'deepseek', reviews: [],
+      judgeResults: [{ judge: 'alpha', ok: true, conformance: 'repaired', adjudications: [],
+        ...(rescued === undefined ? {} : { rescued }),
+        leg: { model: 'openai/gpt-5', status: 'complete', durationMs: 50,
+          usage: { input: 3 }, waveId: 'r1-s2', promoted: true } }],
+      chairStats: null, claudeReview: null,
+    });
+    return input.runStats.find(r => r.role === 'judge');
+  };
+
+  test('G4e — `rescued` sits between `promoted` and `usage`, the one slot tally.js also uses', () => {
+    expect(JSON.stringify(judgeRow(true))).toBe(
+      '{"model":"alpha","role":"judge","wasChair":false,"conformance":"repaired",'
+      + '"waveId":"r1-s2","resolvedModel":"openai/gpt-5","status":"complete","durationMs":50,'
+      + '"promoted":true,"rescued":true,"usage":{"input":3}}');
+    // The SLOT, not merely the presence. One position, asserted the same way on
+    // both sides of the re-projection (G7f, tally.test.js) — never two.
+    const keys = Object.keys(judgeRow(true));
+    expect(keys.indexOf('rescued')).toBe(keys.indexOf('promoted') + 1);
+    expect(keys.indexOf('usage')).toBe(keys.indexOf('rescued') + 1);
+  });
+
+  test('G4f — a judge row with no rescue is byte-identical to the pre-ruling row', () => {
+    expect(JSON.stringify(judgeRow(undefined))).toBe(
+      '{"model":"alpha","role":"judge","wasChair":false,"conformance":"repaired",'
+      + '"waveId":"r1-s2","resolvedModel":"openai/gpt-5","status":"complete","durationMs":50,'
+      + '"promoted":true,"usage":{"input":3}}');
+  });
+});
+
 describe('W11 byte-order goldens — buildRunStatsEntry (absence pins)', () => {
   test('G4a — a leg-absent entry emits SEVEN keys and nothing else', () => {
     expect(JSON.stringify(buildRunStatsEntry({ leg: null, model: 'gemini', role: 'seat' }))).toBe(
@@ -296,6 +409,25 @@ describe('W11 byte-order goldens — buildRunStatsEntry (absence pins)', () => {
       + '"findingsUnverified":true,"repairRefused":{"code":"X","detail":"d"},'
       + '"waveId":"r1-s1","resolvedModel":"google/gemini-3.5-pro","seat":"gemini#2",'
       + '"status":"complete","durationMs":12,"usage":{"input":3}}');
+  });
+
+  // #257 — a NEW test, not an edit to G4b: the ruling keeps that golden
+  // byte-identical. Same shape as G4b, plus `ttftMs` and `promoted` on the leg,
+  // so the ordering of `promoted` against its immediate neighbors (`durationMs`
+  // before it, `usage` after it) is pinned byte-for-byte, not just asserted with
+  // `Object.keys`.
+  test('G4d — every optional field at once, INCLUDING ttftMs/promoted, byte-exact and order-exact (#257)', () => {
+    expect(JSON.stringify(buildRunStatsEntry({
+      leg: { model: 'google/gemini-3.5-pro', status: 'complete', durationMs: 12,
+        usage: { input: 3 }, waveId: 'r1-s1', summary: 'ignored', ttftMs: 4321, promoted: true },
+      model: 'gemini', role: 'seat', wasChair: true, conformance: 'repaired',
+      findingsUnverified: true, repairRefused: { code: 'X', detail: 'd' },
+      seat: { id: 'gemini#2', alias: 'gemini' },
+    }))).toBe(
+      '{"model":"gemini","role":"seat","wasChair":true,"conformance":"repaired",'
+      + '"findingsUnverified":true,"repairRefused":{"code":"X","detail":"d"},'
+      + '"waveId":"r1-s1","resolvedModel":"google/gemini-3.5-pro","seat":"gemini#2",'
+      + '"status":"complete","durationMs":12,"ttftMs":4321,"promoted":true,"usage":{"input":3}}');
   });
 
   test('G4c — a leg\'s own `summary` is NEVER copied onto the row by the leg alone', () => {
@@ -379,6 +511,65 @@ describe('W11 — the reach of fold diff #1 (consumer checks)', () => {
   test('G7b — tally-input rows now sit in the SAME key order tally.json already used', () => {
     const inputRow = debateRunStatsRows(legs)[0];
     expect(Object.keys(inputRow)).toEqual(Object.keys(record([inputRow]).runStats[0]));
+  });
+
+  // #257 — G7b's invariant, a new case: a row that carries `promoted`. Built
+  // directly through buildRunStatsEntry rather than debateRunStatsRows, because
+  // `mk`'s own five-field leg does not copy leg-sourced fields at all — G1e
+  // already pins that boundary for `ttftMs`, and the same boundary holds here.
+  test('G7e — a promoted row also keeps its key order across tally\'s re-projection (#257)', () => {
+    const inputRow = buildRunStatsEntry({
+      leg: { model: 'openrouter/z-ai/glm-5.3', status: 'complete', durationMs: 5, usage: null,
+        promoted: true },
+      model: 'glm', role: 'seat', conformance: 'clean' });
+    expect(Object.keys(inputRow)).toEqual(Object.keys(record([inputRow]).runStats[0]));
+  });
+
+  /**
+   * #257 R-X45 (fix round 2, review S2) — G7b's invariant on THE ONE ROW SHAPE IT
+   * NEVER EXERCISED: the Stage-2 JUDGE row, which is `rescued`'s only producer.
+   *
+   * G7b builds its row through `debateRunStatsRows` and G7e through
+   * `buildRunStatsEntry` directly; neither goes through `run-assemble.js ::
+   * buildTallyInput`'s judge loop, so when `rescued` was spread onto the BUILT row
+   * there — landing last, after `usage` — while `tally.js` re-projected it between
+   * `promoted` and `usage`, the row changed shape across the boundary and nothing
+   * saw it. This drives the REAL round trip: buildTallyInput → tally().
+   *
+   * The fix that makes it hold is structural rather than a second agreement to
+   * maintain: `rescued` is now emitted by the ONE row builder, in
+   * buildRunStatsEntry's own slot, so the producer and the re-projection cannot
+   * disagree about where it sits.
+   *
+   * NAMED MUTANT — RESCUEDORDERDRIFT: in run-assemble.js, stop passing
+   * `rescued` into the builder and spread it onto the result instead
+   * (`}), ...(j.rescued === true ? { rescued: true } : {}) });`) — the pre-fix
+   * shape. Reds this test.
+   */
+  test('G7f — a RESCUED judge row keeps its key order across tally\'s re-projection (#257 R-X45)', () => {
+    const asm = require('../../src/council/run-assemble');
+    const inputRow = asm.buildTallyInput({
+      runId: 'r1', date: 'd', bench: ['alpha'], chair: 'deepseek', reviews: [],
+      judgeResults: [{ judge: 'alpha', ok: true, conformance: 'repaired', adjudications: [],
+        rescued: true, usedWaveId: 'r1-q1',
+        leg: { model: 'openai/gpt-5', status: 'complete', durationMs: 50,
+          usage: { input: 3 }, waveId: 'r1-s2', promoted: true } }],
+      chairStats: null, claudeReview: null,
+    }).runStats.find(r => r.role === 'judge');
+
+    expect(inputRow.rescued).toBe(true);
+    // THE INVARIANT: the row that reaches tally.json / verdict.json is the same
+    // shape as the row tally-input.json holds.
+    expect(Object.keys(inputRow)).toEqual(Object.keys(record([inputRow]).runStats[0]));
+    // …and, stated positively, the one slot both sides agree on.
+    const keys = Object.keys(inputRow);
+    expect(keys.indexOf('rescued')).toBe(keys.indexOf('promoted') + 1);
+    expect(keys.indexOf('usage')).toBe(keys.indexOf('rescued') + 1);
+    // Bytes, not just key names.
+    expect(JSON.stringify(record([inputRow]).runStats[0]))
+      .toBe('{"model":"alpha","role":"judge","wasChair":false,"conformance":"repaired",'
+        + '"waveId":"r1-s2","resolvedModel":"openai/gpt-5","status":"complete","durationMs":50,'
+        + '"promoted":true,"rescued":true,"usage":{"input":3}}');
   });
 
   test('G7c — every debate role still stays OUT of the ledger join', () => {

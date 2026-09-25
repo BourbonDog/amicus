@@ -1,7 +1,10 @@
 // tests/council/briefings-debate.test.js
 'use strict';
+const fs = require('fs');
+const path = require('path');
 const d = require('../../src/council/briefings-debate');
 const s2 = require('../../src/council/briefings-stage2');
+const { codeOnly } = require('../helpers/code-only');
 
 const DATE = '2026-07-19';
 
@@ -85,6 +88,58 @@ describe('repair prompts', () => {
     const t = d.buildRevoteRepairPrompt({ errors: [{ code: 'NOT_PARSEABLE', detail: 'x' }] });
     expect(t).toContain('NOT_PARSEABLE: x');
     expect(t).toContain('"revotes"');
+  });
+
+  // ---- #257 R-X34: TWO ARMS, NOT THREE ----
+  // R-X29 added a third `repair()` arm for a PROMOTED previous answer ("written
+  // in the reasoning channel … answer afresh"). Owner decision A′ withdrew the
+  // case that reached it: a promoted leg is never repaired at all — its one
+  // bounded retry is a RELAUNCH with the original briefing (run-debate.js and
+  // run-debate-revote.js, pinned in tests/council/run-debate.test.js). With no
+  // caller, the arm was dead prompt text that could only ever be reached by a
+  // future mistake, so it is gone and the two arms that were always right are
+  // pinned byte-identical below — unchanged by either ruling.
+  const ERRORS = [{ code: 'REASONING_ONLY', detail: 'answered only in its reasoning channel' }];
+  const EMPTY_TAIL = 'Do not invent a position to satisfy the schema: say so in your output.';
+
+  test('#257 R-X34: the two arms are byte-identical — the empty arm', () => {
+    for (const [build, kind] of [[d.buildDefenseRepairPrompt, 'defense'],
+      [d.buildRevoteRepairPrompt, 're-vote']]) {
+      const t = build({ errors: ERRORS });
+      expect(t).toContain(`Your previous ${kind} response was empty — there is no prior text `
+        + 'to correct. ' + EMPTY_TAIL);
+      expect(t).not.toContain('written in the reasoning channel');
+    }
+  });
+
+  test('#257 R-X34: the two arms are byte-identical — the verbatim arm', () => {
+    const prior = 'I defend A1 in prose, with no json block.';
+    expect(d.buildDefenseRepairPrompt({ errors: ERRORS, defense: prior })).toContain(
+      '--- YOUR PREVIOUS DEFENSE (verbatim — this is the text to correct) ---\n'
+      + prior + '\n--- END OF YOUR PREVIOUS DEFENSE ---');
+    expect(d.buildRevoteRepairPrompt({ errors: ERRORS, revote: prior })).toContain(
+      '--- YOUR PREVIOUS RE-VOTE (verbatim — this is the text to correct) ---\n'
+      + prior + '\n--- END OF YOUR PREVIOUS RE-VOTE ---');
+  });
+
+  // A SOURCE pin, not a behavioural one: the withdrawn arm was only ever
+  // reachable through an argument no caller passes any more, so no call to the
+  // two builders can red its return. Reading the module text is what makes
+  // pasting the arm back a test failure rather than a silent re-landing.
+  // NAMED MUTANT — ARMREADDED-DEBATE: restore the `promoted === true ? … :`
+  // ternary in briefings-debate.js's `repair()`. Reds this test, nothing else.
+  // #257 R-X41 (B1): a source-text NEGATIVE pin inspects CODE, not comments —
+  // the module's own header legitimately quotes this withdrawn phrase while
+  // explaining R-X34/R-X29, and the phrase surviving there (line-wrapped or
+  // not) is documentation, not the arm reappearing. codeOnly() strips
+  // comments before the check so only an actual re-added ternary (real code,
+  // never stripped) can still fail it.
+  test('#257 R-X34: the reasoning-channel arm is GONE from the source, not merely uncalled', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'src', 'council', 'briefings-debate.js'), 'utf-8');
+    expect(codeOnly(src)).not.toContain('written in the reasoning channel');
+    // The one empty-arm sentence survives, in one spelling, as the only `absent` case.
+    expect(src).toContain('response was empty — there is no prior text to correct.');
   });
 });
 

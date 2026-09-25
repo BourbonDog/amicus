@@ -2121,6 +2121,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       ...(isBackstopRecord(backstopRecord) ? { backstop: backstopRecord } : {}),
       // #218 PR 3: the engine's finish for the last assistant message, emit-when-set like ttftMs.
       ...(typeof finish === 'string' ? { finish } : {}),
+      // #257: the engine answered with no text part and the mirror promoted its reasoning
+      // (conversation-mirror.js :: mirrorMessages, `promotedOutput`) — the output IS the stand-in.
+      // Emit-when-true; the failed return above never carries it (a death has no deliverable to
+      // classify — an L2/L4 OUTPUT_LENGTH death has a non-empty stand-in and is still a death).
+      // Named mutants (tests/headless-output-length.test.js): PROMOTEDDROPPED, PROMOTEDONDEATH, PROMOTEDCOERCED.
+      ...(mirror.promotedOutput.length > 0 ? { promoted: true } : {}),
       exitCode: 0
     };
 

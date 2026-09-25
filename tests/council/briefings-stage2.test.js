@@ -1,7 +1,12 @@
 // tests/council/briefings-stage2.test.js
 'use strict';
+// #257 R-X34: the withdrawn arm is pinned by READING the source (below) — an
+// unreachable branch has no behaviour left to assert against.
+const fs = require('fs');
+const path = require('path');
 const s2 = require('../../src/council/briefings-stage2');
 const { parseJudgeOutput } = require('../../src/council/parse-stage2');
+const { codeOnly } = require('../helpers/code-only');
 
 const REVIEWS = [
   { label: 'Review A', text: 'A prose review.' },
@@ -233,6 +238,53 @@ describe('repair prompts', () => {
     expect(text.startsWith('Do NOT use any tools')).toBe(true);
     expect(text).toContain('VERDICT: Ship it');
   });
+
+  // ---- #257 R-X34: THE THIRD ARM IS WITHDRAWN ----
+  // R-X29 added a third `absent` arm for a PROMOTED judge repair ('your previous
+  // response was written in the reasoning channel…'). Under R-X32 a promoted
+  // judge is RELAUNCHED with the original bundle instead of repaired, so no
+  // caller can reach that arm again: run-stage2.js passes no `promoted` key at
+  // all, and an unreachable branch whose whole job was to phrase a doomed ask is
+  // worse than no branch. The two OLDER arms below are untouched, byte for byte.
+  const ERRORS = [{ code: 'NO_BLOCK', detail: 'no fenced json block' }];
+  const JUDGE_TAIL = 'Do not invent rankings or adjudications to satisfy the schema: '
+    + 'say so in your output.';
+
+  test('#257 R-X34: the reasoning-channel arm is GONE from the source, not merely unused', () => {
+    // A SOURCE pin, not a behaviour pin: with no caller left, a re-added arm
+    // would sit there green forever and the next reader would believe it runs.
+    // NAMED MUTANT — ARMREADDED-STAGE2: paste the R-X29 `promoted === true` arm
+    // back into judgeRepairPromptWith. Reds this test.
+    // #257 R-X41 (B1): same class of pin as briefings-debate.test.js's sibling
+    // check — a design comment documenting the withdrawn arm (as
+    // briefings-debate.js's own header already does) may legitimately quote
+    // this phrase without the arm having reappeared. codeOnly() strips
+    // comments first so only real code can still fail this.
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'src', 'council', 'briefings-stage2.js'), 'utf-8');
+    expect(codeOnly(src)).not.toContain('written in the reasoning channel');
+  });
+
+  test('#257 R-X34: a `promoted` key from a stale caller changes nothing', () => {
+    // The dispatchers forward the WHOLE args object (v4.9 W7 F1), so the
+    // withdrawal has to be a no-op on every Stage-2 repair surface rather than
+    // a fork that quietly survives in the task twin.
+    for (const intent of ['task', undefined]) {
+      expect(s2.judgeRepairPromptFor(intent, { errors: ERRORS, judgement: '', promoted: true }))
+        .toBe(s2.judgeRepairPromptFor(intent, { errors: ERRORS, judgement: '' }));
+    }
+  });
+
+  test('#257 R-X29: the two OLDER arms are byte-identical', () => {
+    const empty = s2.buildJudgeRepairPrompt({ errors: ERRORS });
+    expect(empty).toContain('Your previous response was empty — there is no prior judgement '
+      + 'to correct. ' + JUDGE_TAIL);
+    expect(empty).not.toContain('written in the reasoning channel');
+    const prior = 'I judged at length in prose, with no trailing JSON.';
+    expect(s2.buildJudgeRepairPrompt({ errors: ERRORS, judgement: prior })).toContain(
+      '--- YOUR PREVIOUS JUDGEMENT (verbatim — this is the text to correct) ---\n'
+      + prior + '\n--- END OF YOUR PREVIOUS JUDGEMENT ---');
+  });
 });
 
 describe('review judges never see the briefing — the anonymity narrowing (v4.9 W7 T-B)', () => {
@@ -281,5 +333,35 @@ describe('review judges never see the briefing — the anonymity narrowing (v4.9
       reviews: REVIEWS, findings: FINDINGS, briefing: BRIEFING,
     });
     expect(task).toContain('<council_briefing purpose="background_reference_only">');
+  });
+});
+
+// #257 tripwire (spec §3.6), the UNIT half. The Stage-1 half — the `reviews`
+// array run-stages actually hands onward — is pinned in
+// tests/council/run-stages.test.js ('the reviews handed onward carry no
+// promoted leg and no reasoning text'). Both halves exist because the defence
+// is in ONE place: `run-launch.js :: materializeReviews` skips a leg carrying
+// `promoted: true`. This builder has no filter of its own and must not grow one
+// — a second gate would make the real one deletable without a red test.
+describe('#257 — the judge bundle carries no promoted-reasoning text, because it never receives any', () => {
+  const REASONING = 'Let me carefully analyze the diff before I answer.';
+
+  test('the healed Stage-1 output reaches the judges intact and carries no reasoning text — and a hand-built promoted review WOULD be embedded verbatim, because materializeReviews is the only gate', () => {
+    // Shaped like scenario (a)'s output: the promoted leg never became a review,
+    // so the retry's text is what the seat contributes.
+    const healed = [
+      { label: 'Review A', text: 'Prose review a.' },
+      { label: 'Review B', text: 'Prose review b.' },
+    ];
+    const bundle = s2.buildJudgeBundle({ reviews: healed, findings: FINDINGS });
+    expect(bundle).toContain('Prose review b.');
+    expect(bundle).not.toContain(REASONING);
+
+    // The counter-case, stated so the real defence is not mistaken for this one:
+    // hand a promoted entry's text in and the builder embeds it, verbatim. That
+    // is correct — filtering here would duplicate the gate and hide its deletion.
+    const leaked = s2.buildJudgeBundle({
+      reviews: [{ label: 'Review A', text: REASONING }], findings: FINDINGS });
+    expect(leaked).toContain(REASONING);
   });
 });

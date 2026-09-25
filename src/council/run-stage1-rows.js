@@ -8,9 +8,11 @@
 // documents eliminating (v4.4.1 F5).
 const { buildRunStatsEntry } = require('./run-assemble');
 // The one keyspace. It lives in ./run-retry-keys (v4.8 Phase 2 T-A1), which IS require-free;
-// run-retry-group.js re-exports it and requires nothing else, so this import's closure
-// terminates at a leaf and cannot re-create the parent-child cycle the header above
-// documents eliminating. (v4.9 W3, SI-DUP b: `seatKey` joined this destructure — see keyOf.)
+// run-retry-group.js re-exports it and requires only two leaves of its own — ./run-retry-keys and
+// ./promoted (#257; its own header says so at :5-6), each require-free and each pinned so by a
+// test — so this import's closure still terminates at leaves and cannot re-create the parent-child
+// cycle the header above documents eliminating. (v4.9 W3, SI-DUP b: `seatKey` joined this
+// destructure — see keyOf.)
 const { seatKey, twinAliases, legLossKey } = require('./run-retry-group');
 // v4.8 T-A6 size-gate split: the SUPERSEDED half of these rows moved to
 // ./run-stage1-superseded, taking `../utils/degrade` and the default stderr sink with it.

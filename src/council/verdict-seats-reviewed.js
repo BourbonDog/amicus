@@ -11,8 +11,10 @@
  * emit-when-set rule and the role filter cannot drift apart. `of` is every
  * `role:'seat'` row — one per bench seat POST-retry, so a healed seat counts
  * once while its first attempt is `role:'superseded'`; judges, chair and
- * repairs are not bench seats. `reviewed` is those whose leg completed: a
- * `timeout` is not a review any more than an `error` is.
+ * repairs are not bench seats. `reviewed` is those whose leg completed and
+ * delivered a review — a `promoted: true` row (#257) completed with its
+ * reasoning as output and is not counted: a `timeout` is not a review any
+ * more than an `error` is.
  *
  * `unverified` (#242 / spec §5, v4.9.8) is those bench seats whose findings came from a
  * repair of a response with no parseable findings block — the LC-11 flag
@@ -67,17 +69,22 @@ function isBenchRole(role) {
  * is not a completed bench seat is an unverified review of nothing — counted nowhere and
  * rendered nowhere; a real dead leg has the sink's own dead-leg row. `unverified` can
  * therefore never exceed `reviewed` (V15/V16). Named mutant: SUBSETBLIND
- * (`&& r.status === 'complete'` deleted from this function).
+ * (`&& r.status === 'complete'` deleted from this function). Both this predicate and its
+ * `isRefusedSeat` sibling below also gate `r.promoted !== true` (#257 R-X25), so that
+ * invariant now rests on the predicates themselves rather than on a promoted row being
+ * structurally unreachable here.
  */
 // !Array.isArray: an array carrying named properties is not a row — lostRowsOf's own plain-object guard already skips it, and the census must agree.
 function isUnverifiedSeat(r) {
   return !!r && typeof r === 'object' && !Array.isArray(r) && isBenchRole(r.role)
-    && r.status === 'complete' && r.findingsUnverified === true;
+    && r.status === 'complete' && r.promoted !== true // #257 R-X25
+    && r.findingsUnverified === true;
 }
 
 /** Its sibling for a refused repair: the same gate, and `repairRefused` a plain object. */
 function isRefusedSeat(r) {
   return !!r && typeof r === 'object' && !Array.isArray(r) && isBenchRole(r.role) && r.status === 'complete'
+    && r.promoted !== true // #257 R-X25
     && !!r.repairRefused && typeof r.repairRefused === 'object' && !Array.isArray(r.repairRefused);
 }
 
@@ -113,7 +120,9 @@ function seatsReviewedOf(runStats) {
     .filter(r => !!r && typeof r === 'object' && !Array.isArray(r) && isBenchRole(r.role));
   if (seats.length === 0) { return {}; }
   return { seatsReviewed: {
-    reviewed: seats.filter(r => r.status === 'complete').length,
+    // #257 (decision B): a promoted leg completed but delivered no review — the seat is a LOSS
+    // (dead-seat row, seatLoss, exit 2), never a reviewer. Named mutant CENSUSPROMOTED (verdict.test.js).
+    reviewed: seats.filter(r => r.status === 'complete' && r.promoted !== true).length,
     // The shared predicate (isUnverifiedSeat above): `=== true` matching tally.js's
     // emit-when-true (V14), a completed leg (V15/V16). Named mutants: CENSUSZERO
     // (`unverified: 0`) and SUBSETBLIND — tests/council/verdict.test.js.

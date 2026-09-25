@@ -613,6 +613,251 @@ describe('runDebate — one bounded repair per defense solo', () => {
 
     expect(prompts['r-d1r']).toContain(bad);
     expect(prompts['r-d1r']).toContain('YOUR PREVIOUS DEFENSE');
+    // #257 R-X29 CONTROL: a NON-promoted defence keeps the verbatim block,
+    // byte-identical, and never reads the reasoning-channel arm. This is the
+    // half the promoted fix must not touch.
+    expect(prompts['r-d1r']).toContain(
+      '--- YOUR PREVIOUS DEFENSE (verbatim — this is the text to correct) ---\n'
+      + bad + '\n--- END OF YOUR PREVIOUS DEFENSE ---');
+    expect(prompts['r-d1r']).not.toContain('written in the reasoning channel');
+  });
+});
+
+// ---- #257 R-X23: a promoted defence leg (the engine answered only in its reasoning
+// channel, so conversation-mirror.js promoted that reasoning into `summary`) is
+// UNPARSEABLE. The gate is on the PARSE, not on the leg: the real leg document is
+// KEPT — nulling it would swap in runDefenseSolo's `status: 'error'` stub and lose
+// the row's real status/usage/waveId — so the round degrades through `conformance`
+// and the ONE bounded repair is the retry, exactly as for any unparseable defence.
+//
+// ⚠️ EVERY fixture here is ADVERSARIAL: the promoted summary CONTAINS a perfectly
+// parseable defence block. That is the whole point — a reasoning channel that
+// happens to be well-formed is still not an answer the seat chose to give, and the
+// assertions below prove it was never applied.
+describe('runDebate — a promoted defense is unparseable (#257 R-X23)', () => {
+  // A promoted leg: complete, non-empty summary, `promoted: true` off the leg
+  // document (src/council/promoted.js :: isPromotedLeg reads the LITERAL true).
+  // `usage` is real so the row below can be told apart from the error stub's nulls.
+  const promotedLeg = (model, summary, waveId) => ({ ...leg(model, summary, waveId),
+    promoted: true, durationMs: 4200, usage: { tokens: { output: 0, reasoning: 1900 } } });
+
+  test('a promoted defence leaves every original standing (no-response), keeps its leg on the rebuttal row, is repaired once, and degrades the round (#257 R-X23)', async () => {
+    const tmp = mkTmp('run-debate-promoted-defense-');
+    const input = provisionalInput();
+    const seen = [];
+    // ADVERSARIAL: a fully parseable `defend` block inside the promoted summary.
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        seen.push(opts.waveId);
+        // The repair is DEAD, so this run measures the promoted leg alone.
+        if (opts.waveId === 'r-d1r') { return { wave: wave([]), leg: null, exitCode: 0 }; }
+        const l = promotedLeg('gemini', inReasoning, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    // The parseable block in the reasoning channel was NOT applied: every bundled
+    // id's original stands, the same spec §5.7 fallback a dead defence gets.
+    expect(result.debateSummary.noResponse).toBe(1);
+    expect(result.debateSummary.defended).toBe(0);
+    expect(result.debateFindings).toEqual([
+      expect.objectContaining({ id: 'A1', action: 'no-response', previousTier: 'Disputed' })]);
+    expect(result.debateFindings.every(f => f.action === 'no-response')).toBe(true);
+    // `bad()` (run-debate.js) degrades through CONFORMANCE here, not through status:
+    // the kept leg is still `complete`. No `debate-degraded` wording changes.
+    expect(result.degraded).toBe(true);
+    expect(result.defenseLegs[0]).toMatchObject({ status: 'complete', conformance: 'unstructured' });
+    // Exactly ONE bounded repair — the retry, and the only one.
+    expect(seen).toEqual(['r-d1', 'r-d1r']);
+    // The REAL leg is on the row, not the `status: 'error'` stub: complete, with the
+    // promoted leg's own durationMs/usage/waveId — AND, per #257 R-X26, the cause itself.
+    // `promoted` is the one leg-sourced field `debate.js :: mk` forwards (pin G1f,
+    // tests/council/runstats-byte-order.test.js); named mutant DEBATEROWPROMOTEDDROPPED
+    // (delete that spread) reds the line below.
+    const rebuttal = result.debatedInput.runStats.find(r => r.model === 'gemini' && r.role === 'rebuttal');
+    expect(rebuttal).toMatchObject({ waveId: 'r-d1', status: 'complete', conformance: 'unstructured',
+      durationMs: 4200, usage: { tokens: { output: 0, reasoning: 1900 } }, promoted: true });
+    // #257 R-X30: the ROW is kept, the ARTIFACT is not. Keeping the leg (R-X23/R-X26) is what
+    // records the stand-down; writing its summary would have published the seat's deliberation as
+    // rebuttal-gemini.md. The reasoning stays in the leg's own session summary.md and in wave.json.
+    // Named mutant DEBATEPROMOTEDMATERIALIZED (src/council/run-launch.js :: materializeDebate).
+    expect(fs.existsSync(path.join(tmp, 'rebuttal-gemini.md'))).toBe(false);
+    // No adjudication moved.
+    expect(tally(result.debatedInput).findings.find(f => f.id === 'A1').tier).toBe('Disputed');
+    expect(result.verdictChanges).toBe(0);
+  });
+
+  test('a promoted defence whose repair answers cleanly is applied (the repair is the retry)', async () => {
+    const tmp = mkTmp('run-debate-promoted-defense-repaired-');
+    const input = provisionalInput();
+    // The two say DIFFERENT things, so the assertions below name which one landed.
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const repaired = defenseOut([{ id: 'A1', action: 'amend', claim: 'retry caps at 5', argument: 'measured' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1r') {
+          const l = leg('gemini', repaired, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        const l = promotedLeg('gemini', inReasoning, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => ({ wave: wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv')]), exitCode: 0 }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    // The repair's AMEND landed; the promoted leg's DEFEND never did.
+    expect(result.debateSummary.amended).toBe(1);
+    expect(result.debateSummary.defended).toBe(0);
+    expect(result.defenseLegs[0].conformance).toBe('repaired');
+    expect(fs.readFileSync(path.join(tmp, 'rebuttal-gemini.md'), 'utf-8')).toBe(repaired);
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows).toHaveLength(2);
+    // The clean repair's row is the primary, and it is NOT promoted — the control that
+    // proves the key below is the leg's own fact, not a property of the describe.
+    const primary = rows.find(r => r.role === 'rebuttal');
+    expect(primary).toMatchObject({ waveId: 'r-d1r', conformance: 'repaired' });
+    expect('promoted' in primary).toBe(false);
+    // The promoted original is the SUPERSEDED row — kept, not discarded, and it carries
+    // the cause (#257 R-X26; legRow hands buildRunStatsEntry the REAL leg document and
+    // `mk` forwards the field on — named mutant DEBATEROWPROMOTEDDROPPED reds this).
+    expect(rows.find(r => r.role === 'superseded')).toMatchObject(
+      { waveId: 'r-d1', conformance: 'unstructured', status: 'complete', wasChair: false, promoted: true });
+  });
+
+  test('a promoted defence REPAIR is not used either — the original stands and the round still degrades (#257 R-X23)', async () => {
+    const tmp = mkTmp('run-debate-promoted-defense-repair-');
+    const input = provisionalInput();
+    const seen = [];
+    // ⚠️ The first leg must be ALIVE-but-unparseable, not dead: runDefenseSolo gates
+    // the repair on `leg && !parsed.ok`, so a DEAD -d1 never launches -d1r at all.
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        seen.push(opts.waveId);
+        if (opts.waveId === 'r-d1r') {
+          const l = promotedLeg('gemini', inReasoning, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        const l = leg('gemini', 'prose only, no json block', opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    expect(result.debateSummary.noResponse).toBe(1);
+    expect(result.debateSummary.defended).toBe(0);
+    expect(result.debateFindings).toEqual([
+      expect.objectContaining({ id: 'A1', action: 'no-response', previousTier: 'Disputed' })]);
+    expect(result.degraded).toBe(true);
+    expect(result.defenseLegs[0].conformance).toBe('unstructured');
+    expect(seen).toEqual(['r-d1', 'r-d1r']);
+    // #257 R-X46 (D6) OVERTURNS the shape this test used to pin. The promoted
+    // repair no longer supersedes the wave-1 REAL text it failed to repair: the
+    // wave-1 leg stays the kept one, nothing is superseded, and the promoted
+    // repair is recorded as the repair row it was. The outcome is unchanged —
+    // nothing parsed, so every original still stands. The full three-case record
+    // (and the note that names the promoted repair) is the R-X46 block below.
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows.find(r => r.role === 'rebuttal')).toMatchObject({ waveId: 'r-d1', conformance: 'unstructured' });
+    expect(rows.some(r => r.role === 'superseded')).toBe(false);
+    expect(rows.find(r => r.role === 'repair')).toMatchObject({ waveId: 'r-d1r', conformance: 'unstructured', promoted: true });
+    // …and R-X30 no longer stands the artifact down, because the KEPT leg is not
+    // promoted: the raiser's real prose reaches rebuttal-gemini.md.
+    expect(fs.readFileSync(path.join(tmp, 'rebuttal-gemini.md'), 'utf-8')).toBe('prose only, no json block');
+    expect(tally(result.debatedInput).findings.find(f => f.id === 'A1').tier).toBe('Disputed');
+  });
+
+  // The CLEAN-RAISER CONTROL for R-X30. With only one raiser on the bench, a missing
+  // rebuttal-*.md is indistinguishable from a materializer that stopped writing anything
+  // at all — so this drives TWO raisers through one round, one promoted and one not.
+  test('the promoted raiser gets NO rebuttal-<seat>.md while the clean raiser on the same bench gets one (#257 R-X30)', async () => {
+    const tmp = mkTmp('run-debate-promoted-defense-artifact-');
+    // BOTH findings are disputed, so both gemini and gpt are raisers and both defend.
+    const input = { ...provisionalInput(),
+      findings: [
+        { id: 'A1', raiser: 'gemini', severity: 'major', claim: 'infinite retry' },
+        { id: 'B1', raiser: 'gpt', severity: 'major', claim: 'unbounded queue' },
+      ],
+      adjudications: [
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute' },
+        { findingId: 'A1', judge: 'qwen', verdict: 'dispute' },
+        { findingId: 'B1', judge: 'gemini', verdict: 'dispute' },
+        { findingId: 'B1', judge: 'qwen', verdict: 'dispute' },
+      ] };
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const cleanDefence = defenseOut([{ id: 'B1', action: 'defend', argument: 'bounded at 64' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      // Keyed on the MODEL, not the waveId: byRaiser's key order is what names -d1 vs -d2.
+      launchSolo: async (opts) => {
+        // gemini's one bounded repair is DEAD, so this round measures the promoted leg alone.
+        if (/r$/.test(opts.waveId)) { return { wave: wave([]), leg: null, exitCode: 0 }; }
+        const l = opts.model === 'gemini'
+          ? promotedLeg('gemini', inReasoning, opts.waveId)
+          : leg('gpt', cleanDefence, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async (opts) => ({ exitCode: 0, wave: wave(opts.models.map(
+        (m, i) => leg(m, revoteOut([{ id: 'B1', verdict: 'agree' }]), 'r-rv', i + 1))) }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    // gemini's promoted defence stood down (no-response); gpt's clean defence landed.
+    expect(result.debateSummary).toMatchObject({ defended: 1, noResponse: 1 });
+    // The kept leg still carries the cause on its row (R-X26) — what R-X30 changes is the ARTIFACT.
+    expect(result.debatedInput.runStats.find(r => r.model === 'gemini' && r.role === 'rebuttal'))
+      .toMatchObject({ status: 'complete', conformance: 'unstructured', promoted: true });
+    expect(fs.existsSync(path.join(tmp, 'rebuttal-gemini.md'))).toBe(false);
+    // The control: the same materializer, the same round, byte-identical for the clean raiser.
+    expect(fs.readFileSync(path.join(tmp, 'rebuttal-gpt.md'), 'utf-8')).toBe(cleanDefence);
+  });
+
+  /**
+   * #257 R-X33 (owner decision A′) — a promoted defence's one bounded retry is a
+   * RELAUNCH, not a repair.
+   *
+   * Two earlier shapes of this test pinned two earlier answers. The first
+   * asserted the repair carried the promoted seat's own text (the defect the
+   * round-2 council found: a promoted `summary` is deliberation, not a defence,
+   * and it is UNBOUNDED — ~165,000 characters in the motivating case, handed
+   * back under "this is the text to correct"). The second (R-X29) kept the
+   * repair shape but shipped no prior text and named the cause in a third
+   * briefing arm. The owner ruled A′: a leg that never answered has nothing to
+   * repair AGAINST, so it is simply ASKED AGAIN — the original -d1 brief, byte
+   * for byte. The briefing arm R-X29 added is withdrawn (R-X34).
+   *
+   * NAMED MUTANT — DEFENSERELAUNCHISREPAIR: drop the `isPromotedLeg(leg) ?
+   * brief :` ternary at run-debate.js's repair launch so the repair prompt is
+   * always built. Reds this test.
+   */
+  test('#257 R-X33: a promoted defence\'s one repair is a RELAUNCH — its prompt is byte-identical to the -d1 brief', async () => {
+    const tmp = mkTmp('run-debate-promoted-defense-prompt-');
+    const input = provisionalInput();
+    const prompts = {};
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        prompts[opts.waveId] = opts.prompt;
+        if (opts.waveId === 'r-d1r') { return { wave: wave([]), leg: null, exitCode: 0 }; }
+        const l = promotedLeg('gemini', inReasoning, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    // THE pin: the retry is the ORIGINAL briefing, not a repair turn built from it.
+    expect(typeof prompts['r-d1']).toBe('string');
+    expect(prompts['r-d1'].length).toBeGreaterThan(0);
+    expect(prompts['r-d1r']).toBe(prompts['r-d1']);
+    // Corollaries, spelled out so a failure names WHAT leaked rather than just
+    // "strings differ": no repair frame, no prior-text block, no deliberation.
+    expect(prompts['r-d1r']).not.toContain('YOUR PREVIOUS');
+    expect(prompts['r-d1r']).not.toContain(inReasoning.trim());
+    expect(prompts['r-d1r']).not.toContain('caps at 5');
+    expect(prompts['r-d1r']).not.toContain('REASONING_ONLY');
+    // R-X34: the third arm is withdrawn — a relaunch cannot reach it, and nothing else may.
+    expect(prompts['r-d1r']).not.toContain('written in the reasoning channel');
+    expect(prompts['r-d1r']).not.toContain('Your previous defense response was empty');
   });
 });
 
@@ -661,6 +906,12 @@ describe('runDebate — re-vote repair branch', () => {
       const repairCall = launched.find(o => o.waveId === 'r-rv-gptr');
       expect(repairCall.prompt).toContain('prose only, no json block');
       expect(repairCall.prompt).toContain('YOUR PREVIOUS RE-VOTE');
+      // #257 R-X29 CONTROL: a NON-promoted re-vote keeps the verbatim block,
+      // byte-identical, and never reads the reasoning-channel arm.
+      expect(repairCall.prompt).toContain(
+        '--- YOUR PREVIOUS RE-VOTE (verbatim — this is the text to correct) ---\n'
+        + 'prose only, no json block\n--- END OF YOUR PREVIOUS RE-VOTE ---');
+      expect(repairCall.prompt).not.toContain('written in the reasoning channel');
     });
 
     test("the repaired leg's conformance is 'repaired', and the round is not degraded", () => {
@@ -736,6 +987,152 @@ describe('runDebate — re-vote repair branch', () => {
   });
 });
 
+// ---- #257 R-X23, the re-vote half: the SAME parse gate, at
+// run-debate-revote.js's two sites. A promoted judge leg is `alive` today (complete,
+// non-empty summary), so parseRevote runs over its reasoning; gated, it is
+// unparseable, `byJudge[key]` stays the empty map, the judge's provisional Stage-2
+// verdict stands, and the ONE bounded repair (repairRevoteLeg) is the retry.
+// ⚠️ ADVERSARIAL again: each promoted summary CONTAINS a parseable re-vote that
+// would FLIP the verdict if it were applied, so every assertion below discriminates.
+describe('runDebate — a promoted re-vote is unparseable (#257 R-X23)', () => {
+  const promotedLeg = (model, summary, waveId, slot = 1) => ({ ...leg(model, summary, waveId, slot),
+    promoted: true, durationMs: 3100, usage: { tokens: { output: 0, reasoning: 2400 } } });
+  const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+  // gpt's promoted leg "agrees" and so would its promoted repair — gpt's REAL
+  // Stage-2 verdict is `dispute`, so anything applied is visible in the tally.
+  const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+
+  // `-rv` carries TWO judges, so each needs its own roster slot (gpt=1, qwen=2).
+  const revoteWave = (gptLeg) => ({ wave: wave([gptLeg,
+    leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]), exitCode: 0 });
+
+  test('a promoted re-vote is not applied, is repaired once, and a promoted repair still is not', async () => {
+    const tmp = mkTmp('run-debate-promoted-revote-');
+    const input = provisionalInput();
+    const launched = [];
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        launched.push(opts.waveId);
+        if (opts.waveId === 'r-d1') {
+          const l = leg('gemini', defended, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        // The repair is promoted too — and, adversarially, parseable inside.
+        const l = promotedLeg('gpt', gptFlip, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async (opts) => { launched.push(opts.waveId); return revoteWave(promotedLeg('gpt', gptFlip, 'r-rv', 1)); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    // Exactly ONE repair for the promoted judge, never two.
+    expect(launched.filter(id => id === 'r-rv-gptr')).toHaveLength(1);
+    expect(launched.sort()).toEqual(['r-d1', 'r-rv', 'r-rv-gptr']);
+    const gptLeg = result.revoteLegs.find(l => l.model === 'gpt');
+    expect(gptLeg.conformance).toBe('unstructured');
+    expect(result.degraded).toBe(true);
+    // The judge's ORIGINAL Stage-2 dispute stands; qwen's clean agree applies.
+    const a1 = tally(result.debatedInput).findings.find(f => f.id === 'A1');
+    expect(a1.basis).toEqual({ a: 1, d: 1, n: 0 });
+    expect(a1.tier).toBe('Contested');
+    const doc = JSON.parse(fs.readFileSync(path.join(tmp, 'debate.json'), 'utf-8'));
+    expect(doc.revotes.some(r => r.judge === 'gpt')).toBe(false);
+    expect(doc.revotes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ judge: 'qwen', id: 'A1', verdict: 'agree', applied: true })]));
+    // #257 R-X26: the `revote` row names the cause of the stand-down. The row is built
+    // from runRevoteWave's pushed literal (named mutant REVOTELITERALPROMOTEDDROPPED,
+    // src/council/run-debate-revote.js) and forwarded by `debate.js :: mk` (named mutant
+    // DEBATEROWPROMOTEDDROPPED). qwen re-voted cleanly and is the non-promoted control.
+    const revoteRows = result.debatedInput.runStats.filter(r => r.role === 'revote');
+    expect(revoteRows.find(r => r.model === 'gpt')).toMatchObject(
+      { waveId: 'r-rv-gptr', conformance: 'unstructured', promoted: true });
+    expect('promoted' in revoteRows.find(r => r.model === 'qwen')).toBe(false);
+    // #257 R-X30: no revote-gpt.md — a promoted re-vote is the judge's deliberation, not a
+    // re-vote deliverable. qwen re-voted cleanly on the same wave, so its artifact is the
+    // control proving the writer still runs. Named mutant DEBATEPROMOTEDMATERIALIZED
+    // (src/council/run-launch.js :: materializeDebate).
+    expect(fs.existsSync(path.join(tmp, 'revote-gpt.md'))).toBe(false);
+    expect(fs.readFileSync(path.join(tmp, 'revote-qwen.md'), 'utf-8'))
+      .toBe(revoteOut([{ id: 'A1', verdict: 'agree' }]));
+  });
+
+  test("a promoted re-vote whose repair answers cleanly is applied, and the repair's body is what is materialized", async () => {
+    const tmp = mkTmp('run-debate-promoted-revote-repaired-');
+    const input = provisionalInput();
+    const prompts = {};
+    // The repair DISPUTES where the promoted leg "agreed" — so the tally names which landed.
+    const repaired = revoteOut([{ id: 'A1', verdict: 'dispute', reason: 'still unsupported' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        prompts[opts.waveId] = opts.prompt;
+        const body = opts.waveId === 'r-d1' ? defended : repaired;
+        const l = leg(opts.waveId === 'r-d1' ? 'gemini' : 'gpt', body, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => revoteWave(promotedLeg('gpt', gptFlip, 'r-rv', 1)),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const gptLeg = result.revoteLegs.find(l => l.model === 'gpt');
+    expect(gptLeg.conformance).toBe('repaired');
+    expect(result.degraded).toBe(false);
+    // revote-gpt.md holds the POST-repair body, never the promoted reasoning.
+    const body = fs.readFileSync(path.join(tmp, 'revote-gpt.md'), 'utf-8');
+    expect(body).toBe(repaired);
+    expect(body).not.toBe(gptFlip);
+    // gpt's repair DISPUTED, so its provisional dispute is re-applied, not flipped.
+    const doc = JSON.parse(fs.readFileSync(path.join(tmp, 'debate.json'), 'utf-8'));
+    expect(doc.revotes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ judge: 'gpt', id: 'A1', verdict: 'dispute', applied: true })]));
+    // #257 R-X33: the retry that produced `repaired` was a RELAUNCH — it carried
+    // none of the promoted judge's deliberation and no repair frame at all. The
+    // byte-identity to the re-vote bundle is pinned in the next test; these are
+    // the corollaries, kept here so a leak reds the OUTCOME test too.
+    expect(prompts['r-rv-gptr']).not.toContain('YOUR PREVIOUS RE-VOTE');
+    expect(prompts['r-rv-gptr']).not.toContain(gptFlip.trim());
+    expect(prompts['r-rv-gptr']).not.toContain('defense convincing');
+    expect(prompts['r-rv-gptr']).not.toContain('REASONING_ONLY');
+    // R-X34: the withdrawn third arm, and the empty arm it was carved out of.
+    expect(prompts['r-rv-gptr']).not.toContain('written in the reasoning channel');
+    expect(prompts['r-rv-gptr']).not.toContain('Your previous re-vote response was empty');
+  });
+
+  /**
+   * #257 R-X33 (owner decision A′), the re-vote half. The re-vote's briefing is
+   * SHARED — one `revote-bundle.md` for the whole wave — so a promoted judge's
+   * relaunch is that same bundle, not a per-seat rebuild. Pinned three ways at
+   * once (the launchWave prompt, the on-disk artifact, the repair solo's prompt)
+   * because two of the three agreeing would not prove the third is the briefing
+   * the round actually ran on.
+   *
+   * NAMED MUTANT — REVOTERELAUNCHISREPAIR: drop the `isPromotedLeg(leg) ?
+   * bundle :` ternary at run-debate-revote.js's repairRevoteLeg launch so the
+   * repair prompt is always built. Reds this test.
+   */
+  test("#257 R-X33: a promoted re-vote's one repair is a RELAUNCH — its prompt is byte-identical to the re-vote bundle", async () => {
+    const tmp = mkTmp('run-debate-promoted-revote-relaunch-');
+    const input = provisionalInput();
+    const prompts = {};
+    let wavePrompt = null;
+    const repaired = revoteOut([{ id: 'A1', verdict: 'dispute', reason: 'still unsupported' }]);
+    await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        prompts[opts.waveId] = opts.prompt;
+        const body = opts.waveId === 'r-d1' ? defended : repaired;
+        const l = leg(opts.waveId === 'r-d1' ? 'gemini' : 'gpt', body, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async (opts) => { wavePrompt = opts.prompt; return revoteWave(promotedLeg('gpt', gptFlip, 'r-rv', 1)); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    // THE pin: the shared bundle, byte for byte, on all three surfaces.
+    expect(typeof wavePrompt).toBe('string');
+    expect(wavePrompt.length).toBeGreaterThan(0);
+    expect(fs.readFileSync(path.join(tmp, 'revote-bundle.md'), 'utf-8')).toBe(wavePrompt);
+    expect(prompts['r-rv-gptr']).toBe(wavePrompt);
+    // …and it is NOT the defence brief that went to -d1: the relaunch is per STAGE.
+    expect(prompts['r-rv-gptr']).not.toBe(prompts['r-d1']);
+  });
+});
+
 // ---- v4.7 D2/E4: superseded pre-repair legs + failed-repair rows, end to end ----
 describe('runDebate — v4.7 D2/E4 debate rows: superseded pre-repair legs and failed-repair rows', () => {
   test('a successful defense repair supersedes the original leg — waveIds -d1 (superseded) vs -d1r (primary)', async () => {
@@ -793,6 +1190,758 @@ describe('runDebate — v4.7 D2/E4 debate rows: superseded pre-repair legs and f
   });
 });
 
+
+/**
+ * #257 R-X45, the DEBATE half — a relaunch that produced nothing is still
+ * recorded as a relaunch.
+ *
+ * R-X33 already made a promoted defence's / re-vote's one bounded retry a
+ * RELAUNCH (the original briefing, byte for byte). Round 4's A3/C2 caught the
+ * record lagging behind the behaviour: when that relaunch produces no usable
+ * leg, the row it leaves behind still said `role: 'repair'` — the vocabulary of
+ * a correction, for an ask that corrected nothing.
+ *
+ * A relaunch that SUCCEEDS needs no extra row: it becomes the rebuttal/revote
+ * row and supersedes the promoted first leg exactly as a successful repair does
+ * today. Only the failed arm (`repairLeg` / `repairRow`) is renamed.
+ *
+ * NAMED MUTANT — DEBATERELAUNCHROLEREPAIR: drop the `isPromotedLeg(leg)` 4th
+ * argument at run-debate.js's `repairLeg = legRow(...)` (or at
+ * run-debate-revote.js's `repairRow: legRow(...)`). Reds this block.
+ */
+describe('runDebate — a promoted defence/re-vote relaunch is recorded as one (#257 R-X45)', () => {
+  const promotedLeg = (model, summary, waveId, slot = 1) => ({ ...leg(model, summary, waveId, slot),
+    promoted: true, durationMs: 4200, usage: { tokens: { output: 0, reasoning: 1900 } } });
+
+  test("a promoted defence whose RELAUNCH died leaves a role:'relaunch' row, not a repair row", async () => {
+    const tmp = mkTmp('run-debate-relaunch-role-');
+    const input = provisionalInput();
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        // The RELAUNCH is dead — no leg at all, so nothing supersedes.
+        if (opts.waveId === 'r-d1r') { return { wave: wave([]), leg: null, exitCode: 0 }; }
+        const l = promotedLeg('gemini', inReasoning, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows.map(r => r.role).sort()).toEqual(['rebuttal', 'relaunch']);
+    // The relaunch row is the DEAD attempt's own row: never invented, never a repair.
+    expect(rows.find(r => r.role === 'relaunch')).toMatchObject(
+      { model: 'gemini', role: 'relaunch', conformance: 'unstructured', status: 'error', usage: null });
+    expect(rows.some(r => r.role === 'repair')).toBe(false);
+    expect(rows.some(r => r.role === 'superseded')).toBe(false);
+  });
+
+  test("an ORDINARY defence whose repair died keeps role:'repair' — the control", async () => {
+    const tmp = mkTmp('run-debate-relaunch-control-');
+    const input = provisionalInput();
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1r') { return { wave: wave([]), leg: null, exitCode: 0 }; }
+        // ALIVE but unparseable, and NOT promoted: the retry is a real repair.
+        const l = leg('gemini', 'prose only, no json block', opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows.map(r => r.role).sort()).toEqual(['rebuttal', 'repair']);
+    expect(rows.some(r => r.role === 'relaunch')).toBe(false);
+  });
+
+  test("a promoted re-vote whose RELAUNCH died leaves a role:'relaunch' row too", async () => {
+    const tmp = mkTmp('run-debate-relaunch-revote-');
+    const input = provisionalInput();
+    const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1') {
+          const l = leg('gemini', defended, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        // gpt's re-vote RELAUNCH dies.
+        return { wave: wave([]), leg: null, exitCode: 0 };
+      },
+      launchWave: async () => ({ exitCode: 0, wave: wave([
+        promotedLeg('gpt', gptFlip, 'r-rv', 1),
+        leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const gptRows = result.debatedInput.runStats.filter(r => r.model === 'gpt');
+    expect(gptRows.find(r => r.role === 'relaunch')).toMatchObject(
+      { model: 'gpt', conformance: 'unstructured', status: 'error' });
+    expect(gptRows.some(r => r.role === 'repair')).toBe(false);
+    // qwen re-voted cleanly on the same wave — the control that the rename is
+    // the promoted leg's fact, not a property of the round.
+    expect(result.debatedInput.runStats.filter(r => r.model === 'qwen')
+      .every(r => r.role === 'revote')).toBe(true);
+  });
+
+  test('a relaunch row never joins the ledger, and the cost table tags it (relaunch)', () => {
+    // The two consumers of the new role, driven directly off a row of its shape.
+    const row = { model: 'gemini', role: 'relaunch', wasChair: false,
+      conformance: 'unstructured', status: 'error', durationMs: null, usage: null };
+    const rec = tally({ ...provisionalInput(),
+      runStats: [{ model: 'gemini', role: 'seat', wasChair: false, conformance: 'clean',
+        status: 'complete', durationMs: 10, usage: null }, row] });
+    const { buildLedgerRows } = require('../../src/council/ledger');
+    expect(buildLedgerRows(rec).find(r => r.model === 'gemini'))
+      .toMatchObject({ role: 'seat', conformance: 'clean' });
+    const { buildCostModel } = require('../../src/council/report-cost');
+    expect(buildCostModel([row], undefined).rows[0].model).toBe('gemini (relaunch)');
+  });
+});
+
+/**
+ * #257 R-X46 (council round 4, finding D6) — A PROMOTED REPAIR NEVER SUPERSEDES
+ * THE REAL TEXT IT FAILED TO REPAIR.
+ *
+ * `if (leg2)` treated ANY complete retry leg as the kept one. Combined with
+ * R-X30 (a promoted kept leg gets no rebuttal/revote artifact), that lost a
+ * seat's work outright in one shape: a defence that answered with REAL prose
+ * which merely did not parse, whose ONE repair came back promoted. The promoted
+ * repair became the kept leg, so R-X30 skipped the artifact, and the wave-1 real
+ * text was written nowhere at all.
+ *
+ * The three cases, and what each does now:
+ *   (i)   wave-1 PROMOTED + real relaunch      → supersede (unchanged: the
+ *         relaunch IS the answer, and the promoted leg was never one);
+ *   (ii)  wave-1 promoted + promoted relaunch  → supersede (unchanged: nothing
+ *         real is being dropped — neither leg ever answered);
+ *   (iii) wave-1 REAL-but-unparseable + PROMOTED repair → the wave-1 text STAYS
+ *         the kept leg (conformance 'unstructured', its artifact written exactly
+ *         as it was before #257, because the kept leg is not promoted), and the
+ *         promoted repair is recorded as the repair row — which carries
+ *         `promoted: true` off its own leg document (R-X26).
+ *
+ * R-X36's rule applies to the prose too: a `promoted: true` row is never the only
+ * record of itself, so the round's `debate-degraded` note names the promoted repair.
+ *
+ * NAMED MUTANT — DEFENSEPROMOTEDREPAIRSUPERSEDES: restore the bare `if (leg2)`
+ * at run-debate.js. Reds (iii) below.
+ * NAMED MUTANT — REVOTEPROMOTEDREPAIRSUPERSEDES: restore the bare `leg2 ?` at
+ * run-debate-revote.js :: repairRevoteLeg. Reds the re-vote (iii).
+ * NAMED MUTANT — DEBATEPROMOTEDREPAIRSILENT: drop the `dbg.repairPromoted` clause
+ * in run-debate-stage.js. Reds the note test.
+ */
+describe('runDebate — a promoted repair never supersedes real text (#257 R-X46)', () => {
+  const promotedLeg = (model, summary, waveId, slot = 1) => ({ ...leg(model, summary, waveId, slot),
+    promoted: true, durationMs: 4200, usage: { tokens: { output: 0, reasoning: 1900 } } });
+  const REAL_BUT_UNPARSEABLE = 'I defended the finding at length in prose; the JSON never appeared.';
+
+  test('(iii) DEFENCE: the wave-1 real text stays the kept leg, the promoted repair is the repair row, and the artifact is written', async () => {
+    const tmp = mkTmp('run-debate-rx46-defense-');
+    const input = provisionalInput();
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1r') {
+          const l = promotedLeg('gemini', inReasoning, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        const l = leg('gemini', REAL_BUT_UNPARSEABLE, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    // The KEPT leg is wave 1's, with wave 1's text and wave id.
+    expect(result.defenseLegs[0]).toMatchObject({ model: 'gemini', waveId: 'r-d1',
+      conformance: 'unstructured', summary: REAL_BUT_UNPARSEABLE });
+    expect('promoted' in result.defenseLegs[0]).toBe(false);
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows.find(r => r.role === 'rebuttal')).toMatchObject(
+      { waveId: 'r-d1', conformance: 'unstructured' });
+    // NOTHING was superseded — the real text was not replaced by a non-answer.
+    expect(rows.some(r => r.role === 'superseded')).toBe(false);
+    // The promoted repair is recorded as what it was, and its row names the cause.
+    expect(rows.find(r => r.role === 'repair')).toMatchObject(
+      { waveId: 'r-d1r', conformance: 'unstructured', status: 'complete', promoted: true });
+    // D6's actual loss: the seat's real prose now reaches the artifact surface
+    // (R-X30 skips only a PROMOTED kept leg, and the kept leg is not promoted).
+    expect(fs.readFileSync(path.join(tmp, 'rebuttal-gemini.md'), 'utf-8')).toBe(REAL_BUT_UNPARSEABLE);
+    // The outcome is unchanged: nothing parsed, so every original still stands.
+    expect(result.debateSummary.noResponse).toBe(1);
+    expect(result.degraded).toBe(true);
+  });
+
+  test('(i) DEFENCE control: a promoted wave-1 whose relaunch is REAL still supersedes, byte-identical to today', async () => {
+    const tmp = mkTmp('run-debate-rx46-defense-i-');
+    const input = provisionalInput();
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const repaired = defenseOut([{ id: 'A1', action: 'amend', claim: 'retry caps at 5', argument: 'measured' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1r') {
+          const l = leg('gemini', repaired, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        const l = promotedLeg('gemini', inReasoning, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => ({ wave: wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv')]), exitCode: 0 }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows.find(r => r.role === 'rebuttal')).toMatchObject({ waveId: 'r-d1r', conformance: 'repaired' });
+    expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-d1', promoted: true });
+    expect(rows.some(r => r.role === 'repair' || r.role === 'relaunch')).toBe(false);
+    expect(fs.readFileSync(path.join(tmp, 'rebuttal-gemini.md'), 'utf-8')).toBe(repaired);
+  });
+
+  test('(ii) DEFENCE control: promoted wave-1 AND promoted relaunch still supersedes — nothing real is dropped', async () => {
+    const tmp = mkTmp('run-debate-rx46-defense-ii-');
+    const input = provisionalInput();
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        const l = promotedLeg('gemini', inReasoning, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows.find(r => r.role === 'rebuttal')).toMatchObject({ waveId: 'r-d1r', promoted: true });
+    expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-d1', promoted: true });
+    expect(rows.some(r => r.role === 'repair' || r.role === 'relaunch')).toBe(false);
+    // Both legs are deliberation, so R-X30 still writes no artifact at all.
+    expect(fs.existsSync(path.join(tmp, 'rebuttal-gemini.md'))).toBe(false);
+  });
+
+  test('(iii) RE-VOTE: the wave-1 real text stays the kept leg and its revote artifact is written', async () => {
+    const tmp = mkTmp('run-debate-rx46-revote-');
+    const input = provisionalInput();
+    const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1') {
+          const l = leg('gemini', defended, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        // gpt's re-vote repair comes back PROMOTED, adversarially parseable inside.
+        const l = promotedLeg('gpt', gptFlip, opts.waveId);
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => ({ exitCode: 0, wave: wave([
+        leg('gpt', REAL_BUT_UNPARSEABLE, 'r-rv', 1),
+        leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const gptLeg = result.revoteLegs.find(l => l.model === 'gpt');
+    expect(gptLeg).toMatchObject({ waveId: 'r-rv', conformance: 'unstructured', summary: REAL_BUT_UNPARSEABLE });
+    expect('promoted' in gptLeg).toBe(false);
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gpt');
+    expect(rows.find(r => r.role === 'revote')).toMatchObject({ waveId: 'r-rv', conformance: 'unstructured' });
+    expect(rows.some(r => r.role === 'superseded')).toBe(false);
+    expect(rows.find(r => r.role === 'repair')).toMatchObject(
+      { waveId: 'r-rv-gptr', conformance: 'unstructured', promoted: true });
+    expect(fs.readFileSync(path.join(tmp, 'revote-gpt.md'), 'utf-8')).toBe(REAL_BUT_UNPARSEABLE);
+    // gpt's re-vote never parsed, so its Stage-2 dispute still stands.
+    const doc = JSON.parse(fs.readFileSync(path.join(tmp, 'debate.json'), 'utf-8'));
+    expect(doc.revotes.some(r => r.judge === 'gpt')).toBe(false);
+  });
+
+  test('(i)/(ii) RE-VOTE control: a PROMOTED wave-1 re-vote is still superseded by its relaunch', async () => {
+    const tmp = mkTmp('run-debate-rx46-revote-ctl-');
+    const input = provisionalInput();
+    const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1') {
+          const l = leg('gemini', defended, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        }
+        const l = promotedLeg('gpt', gptFlip, opts.waveId);   // case (ii): both promoted
+        return { wave: wave([l]), leg: l, exitCode: 0 };
+      },
+      launchWave: async () => ({ exitCode: 0, wave: wave([
+        promotedLeg('gpt', gptFlip, 'r-rv', 1),
+        leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gpt');
+    expect(rows.find(r => r.role === 'revote')).toMatchObject({ waveId: 'r-rv-gptr', promoted: true });
+    expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-rv', promoted: true });
+    expect(rows.some(r => r.role === 'repair' || r.role === 'relaunch')).toBe(false);
+  });
+
+  // R-X36's rule, applied to the debate: a `promoted: true` row is never the ONLY
+  // record of itself. The round-level note is where the debate speaks, so the
+  // clause rides its `why` — and only when a promoted repair actually ran.
+  test('the round note NAMES the promoted repair, and every other why stays byte-identical', async () => {
+    const { runDebateStage } = require('../../src/council/run-debate-stage');
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const run = async (repairLegFor) => {
+      const tmp = mkTmp('run-debate-rx46-note-');
+      const input = provisionalInput();
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          const l = opts.waveId === 'r-d1r' ? repairLegFor(opts.waveId)
+            : leg('gemini', REAL_BUT_UNPARSEABLE, opts.waveId);
+          return { wave: wave(l ? [l] : []), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+      return ctx.degrade.all().filter(n => n.channel === 'debate-degraded');
+    };
+
+    // Case (iii): the repair came back promoted. Fix round 1: the clause NAMES the
+    // raiser — "its" is ambiguous the moment two defences are listed.
+    const promotedNotes = await run((w) => promotedLeg('gemini', inReasoning, w));
+    expect(promotedNotes).toHaveLength(1);
+    expect(promotedNotes[0].why).toBe('one or more defense or re-vote legs died or returned '
+      + "unstructured output; gemini's repair answered only in its reasoning channel");
+    expect(promotedNotes[0].what).toBe('the debate round did not complete cleanly');
+
+    // The CONTROL: an ordinary dead repair, same degraded round, byte-identical prose.
+    const deadNotes = await run(() => null);
+    expect(deadNotes).toHaveLength(1);
+    expect(deadNotes[0].why).toBe(
+      'one or more defense or re-vote legs died or returned unstructured output');
+  });
+
+  /**
+   * #257 R-X46 (fix round 1) — THE CLAUSE NAMES WHOSE REPAIR IT WAS.
+   *
+   * `debate-degraded` is ONE note for the whole round, so a bare "its repair"
+   * stops being readable the moment two defences are in it: the reader cannot
+   * tell which raiser's work the sentence is about, which is the same silence
+   * R-X36 exists to remove. The clause carries the affected ALIASES and renders
+   * one of three shapes — one name, two names joined with `and`, three or more
+   * joined Oxford-free (`a, b and c`).
+   *
+   * NAMED MUTANT — DEBATEPROMOTEDREPAIRSILENT: drop the clause entirely.
+   * NAMED MUTANT — DEBATEPROMOTEDREPAIRUNNAMED: render the old boolean clause
+   * (`; its repair answered only in its reasoning channel`) regardless of who.
+   * Reds every case below.
+   */
+  describe('the clause names every raiser whose repair answered in its reasoning channel', () => {
+    const { runDebateStage } = require('../../src/council/run-debate-stage');
+    const inReasoning = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    // N raisers on one round: one Disputed finding each, disputed by the other two
+    // seats. ⚠️ `provisionalInput()`'s meta/rankings are kept — `nothingToDebate`
+    // short-circuits on `judged === false`, and an empty `rankings` is what makes
+    // tally() report that, so a hand-rolled input without them debates nothing.
+    const manyRaiserInput = (raisers) => ({
+      ...provisionalInput(),
+      findings: raisers.map((m, i) => ({ id: `F${i + 1}`, raiser: m, severity: 'major', claim: `claim ${i}` })),
+      adjudications: raisers.flatMap((m, i) => ['gemini', 'gpt', 'qwen']
+        .filter(j => j !== m)
+        .map(j => ({ findingId: `F${i + 1}`, judge: j, verdict: 'dispute' }))),
+    });
+    // `promotedFor` decides, per raiser alias, whether its repair comes back
+    // PROMOTED (case iii) or simply dead — so a round can mix the two.
+    const runRound = async (raisers, promotedFor) => {
+      const tmp = mkTmp('run-debate-fr1-clause-');
+      const input = manyRaiserInput(raisers);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (/r$/.test(opts.waveId)) {
+            if (!promotedFor(opts.model)) { return { wave: wave([]), leg: null, exitCode: 0 }; }
+            const l = promotedLeg(opts.model, inReasoning, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          const l = leg(opts.model, REAL_BUT_UNPARSEABLE, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected — nothing was defended'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+      return ctx.degrade.all().find(n => n.channel === 'debate-degraded').why;
+    };
+    const HEAD = 'one or more defense or re-vote legs died or returned unstructured output';
+
+    test('TWO raisers: both named, joined with `and`, plural channels', async () => {
+      expect(await runRound(['gemini', 'gpt'], () => true)).toBe(
+        `${HEAD}; the repairs of gemini and gpt answered only in their reasoning channels`);
+    });
+
+    test('THREE raisers: Oxford-free `a, b and c`', async () => {
+      expect(await runRound(['gemini', 'gpt', 'qwen'], () => true)).toBe(
+        `${HEAD}; the repairs of gemini, gpt and qwen answered only in their reasoning channels`);
+    });
+
+    test('MIXED: only the raiser whose repair was PROMOTED is named, in the singular', async () => {
+      // gemini's repair is promoted; gpt's simply died — the round degrades for
+      // both, and the clause is about the one fact it exists to surface.
+      expect(await runRound(['gemini', 'gpt'], (m) => m === 'gemini')).toBe(
+        `${HEAD}; gemini's repair answered only in its reasoning channel`);
+    });
+
+    test('NONE: the clause is empty and the why is byte-identical to a plain degraded round', async () => {
+      expect(await runRound(['gemini', 'gpt'], () => false)).toBe(HEAD);
+    });
+
+    /**
+     * #257 R-X46 (fix round 3) — THE CLAUSE NAMES THE KIND OF RETRY IT IS.
+     *
+     * Round 2's clause said "repair" about every promoted retry. But a promoted
+     * defence's or re-vote's retry is a RELAUNCH with the original briefing
+     * (R-X33), and calling it a repair is exactly the misnaming the council
+     * raised as A3/C2 and R-X45 removed from the RECORD — the prose must not
+     * re-introduce it. Fix round 3 read the kind off the row's own role-deciding
+     * mark — the same `relaunch` transport field `debate.js :: mk` stamps
+     * `role: 'relaunch'` from. R-X48 moved it onto the `promotedRetry` MARKER,
+     * read off the WAVE-1 leg's promotion at the retry site, so the sentence and
+     * the row can never disagree because the sentence no longer reads the row.
+     * The rows still carry `relaunch`, and `mk` still reads it for `role`; only
+     * the PROSE stopped deriving anything from them.
+     *
+     * THE REACHABLE RELAUNCH ROW (found by the round-2 review): wave 1 is a
+     * PROMOTED defence, its relaunch comes back promoted AND does not complete —
+     * `leg2` is null, so the supersede arm is skipped and the relaunch leaves a
+     * `repairLeg`. `promoted` is minted on a completed, TIMED-OUT or aborted leg
+     * (council-tally.schema.json), never on `status: 'error'` — so a timed-out
+     * promoted relaunch is a real row carrying `promoted: true`, and R-X36's rule
+     * says it is never the only record of itself. It is announced, as a relaunch —
+     * since R-X48 because its MARKER says so, not because this row exists. Round 2
+     * found this row reachable; its COMPLETE sibling, which leaves no retry row, stayed
+     * unnamed until round 5 (see the R-X48 block below).
+     *
+     * NAMED MUTANT — RELAUNCHCALLEDREPAIR: render the repair wording for every
+     * entry regardless of kind (round 2's behaviour). Reds all three below.
+     */
+    // A promoted retry leg that TIMED OUT: complete-ness is what `leg2` gates on,
+    // so this one never becomes the kept leg and leaves a row behind instead.
+    const promotedTimeout = (model, summary, waveId) => ({
+      ...promotedLeg(model, summary, waveId), status: 'timeout' });
+
+    test('a promoted RELAUNCH is announced as a relaunch — never as a repair', async () => {
+      const tmp = mkTmp('run-debate-fr3-relaunch-');
+      const input = manyRaiserInput(['gemini']);
+      const inReasoning = defenseOut([{ id: 'F1', action: 'defend', argument: 'caps at 5' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          // wave 1 is PROMOTED → its retry is a relaunch (R-X33); the relaunch
+          // comes back promoted AGAIN and times out, so it leaves a row.
+          const l = /r$/.test(opts.waveId)
+            ? promotedTimeout('gemini', inReasoning, opts.waveId)
+            : promotedLeg('gemini', inReasoning, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      const why = ctx.degrade.all().find(n => n.channel === 'debate-degraded').why;
+      expect(why).toBe(`${HEAD}; gemini's relaunch answered only in its reasoning channel again`);
+      expect(why).not.toContain('repair');
+    });
+
+    test('a MIXED round groups by kind: the repair clause, then the relaunch clause', async () => {
+      const tmp = mkTmp('run-debate-fr3-mixed-');
+      const input = manyRaiserInput(['gemini', 'gpt']);
+      const inReasoning = defenseOut([{ id: 'F1', action: 'defend', argument: 'caps at 5' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          const retry = /r$/.test(opts.waveId);
+          // gemini: wave-1 REAL but unparseable, repair promoted   → a REPAIR row.
+          // gpt:    wave-1 PROMOTED, relaunch promoted + timed out → a RELAUNCH row.
+          if (opts.model === 'gemini') {
+            const l = retry ? promotedLeg('gemini', inReasoning, opts.waveId)
+              : leg('gemini', REAL_BUT_UNPARSEABLE, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          const l = retry ? promotedTimeout('gpt', inReasoning, opts.waveId)
+            : promotedLeg('gpt', inReasoning, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(
+        `${HEAD}; gemini's repair answered only in its reasoning channel`
+        + "; gpt's relaunch answered only in its reasoning channel again");
+    });
+
+    test('TWO relaunches use the plural relaunch form', async () => {
+      const tmp = mkTmp('run-debate-fr3-two-relaunch-');
+      const input = manyRaiserInput(['gemini', 'gpt']);
+      const inReasoning = defenseOut([{ id: 'F1', action: 'defend', argument: 'caps at 5' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          const l = /r$/.test(opts.waveId)
+            ? promotedTimeout(opts.model, inReasoning, opts.waveId)
+            : promotedLeg(opts.model, inReasoning, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(
+        `${HEAD}; the relaunches of gemini and gpt answered only in their reasoning channels again`);
+    });
+
+    /**
+     * #257 R-X48 (council round 5 — C1 major 3-0, A1 minor 3-0, D3 minor 3-0:
+     * one gap raised three ways) — A PROMOTED RETRY IS NAMED WHICHEVER BRANCH
+     * ITS LEG TOOK.
+     *
+     * Fix round 3 read the clause's entries off the retry ROWS, so WHICH retries
+     * reached the note depended on which BRANCH the retry leg took. A promoted
+     * relaunch of an already-promoted defence or re-vote that COMPLETES takes the
+     * supersede arm (R-X46 case ii) and leaves `repairLeg` / `repairRow` null, so
+     * the round's prose said nothing about it — while the symmetric case (a REAL
+     * wave-1 whose promoted repair completes, case iii) WAS named. The same fact
+     * about the same seat, accounted two different ways, with the double-promoted
+     * seat visible only through its row's machine `promoted: true` — exactly what
+     * R-X36's rule forbids. Round 4's fix round 3 proved only the TIMED-OUT
+     * double-promoted case reachable; the COMPLETE one was missed.
+     *
+     * The fix is an explicit `promotedRetry: { alias, kind }` marker, set where
+     * the fact is KNOWN — in `runDefenseSolo` and `repairRevoteLeg`, off the
+     * retry leg itself, complete or not, superseding or not — and never inferred
+     * from a row. The rows do not change: the double-promoted complete case still
+     * supersedes and its rebuttal/revote row still carries `promoted: true`.
+     *
+     * NAMED MUTANT — DOUBLEPROMOTEDUNNAMED: derive `promotedRepairs` from the
+     * rows again (fix round 3's expression). Reds the two COMPLETE
+     * double-promoted tests below.
+     * NAMED MUTANT — PROMOTEDRETRYKINDLOST: always mint `kind: 'repair'`. Reds
+     * every relaunch test below.
+     */
+    test('DEFENCE: a COMPLETE promoted relaunch of a promoted defence is NAMED — and still supersedes', async () => {
+      const tmp = mkTmp('run-debate-rx48-defence-');
+      const input = manyRaiserInput(['gemini']);
+      const inReasoning = defenseOut([{ id: 'F1', action: 'defend', argument: 'caps at 5' }]);
+      const ctx = ctxFor(tmp, {
+        // Both legs promoted and BOTH complete → R-X46 case (ii): the relaunch
+        // supersedes, so the row-derived list saw nothing at all.
+        launchSolo: async (opts) => {
+          const l = promotedLeg('gemini', inReasoning, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      const res = await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      // The ROWS are unchanged (R-X46 case ii) — this fix is prose-only.
+      const rows = res.debatedInput.runStats.filter(r => r.model === 'gemini');
+      expect(rows.find(r => r.role === 'rebuttal')).toMatchObject({ waveId: 'r-d1r', promoted: true });
+      expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-d1', promoted: true });
+      expect(rows.some(r => r.role === 'repair' || r.role === 'relaunch')).toBe(false);
+      // …and the prose now names it, as the RELAUNCH it was (R-X33).
+      const why = ctx.degrade.all().find(n => n.channel === 'debate-degraded').why;
+      expect(why).toBe(`${HEAD}; gemini's relaunch answered only in its reasoning channel again`);
+      expect(why).not.toContain('repair');
+    });
+
+    test('RE-VOTE: a COMPLETE promoted relaunch of a promoted re-vote is NAMED — and still supersedes', async () => {
+      const tmp = mkTmp('run-debate-rx48-revote-');
+      const input = provisionalInput();
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (opts.waveId === 'r-d1') {
+            const l = leg('gemini', defended, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          // gpt's relaunch: promoted AGAIN and COMPLETE → the supersede arm.
+          const l = promotedLeg('gpt', gptFlip, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => ({ exitCode: 0, wave: wave([
+          promotedLeg('gpt', gptFlip, 'r-rv', 1),
+          leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+      });
+      ctx.o.debate = true;
+      const res = await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      const rows = res.debatedInput.runStats.filter(r => r.model === 'gpt');
+      expect(rows.find(r => r.role === 'revote')).toMatchObject({ waveId: 'r-rv-gptr', promoted: true });
+      expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-rv', promoted: true });
+      expect(rows.some(r => r.role === 'repair' || r.role === 'relaunch')).toBe(false);
+      const why = ctx.degrade.all().find(n => n.channel === 'debate-degraded').why;
+      expect(why).toBe(`${HEAD}; gpt's relaunch answered only in its reasoning channel again`);
+      expect(why).not.toContain('repair');
+    });
+
+    test('RE-VOTE control: a TIMED-OUT promoted relaunch is still named a relaunch (unchanged)', async () => {
+      const tmp = mkTmp('run-debate-rx48-revote-timeout-');
+      const input = provisionalInput();
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (opts.waveId === 'r-d1') {
+            const l = leg('gemini', defended, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          const l = promotedTimeout('gpt', gptFlip, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => ({ exitCode: 0, wave: wave([
+          promotedLeg('gpt', gptFlip, 'r-rv', 1),
+          leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(
+        `${HEAD}; gpt's relaunch answered only in its reasoning channel again`);
+    });
+
+    test('RE-VOTE control: a promoted repair of REAL wave-1 text is still named a repair (case iii)', async () => {
+      const tmp = mkTmp('run-debate-rx48-revote-repair-');
+      const input = provisionalInput();
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (opts.waveId === 'r-d1') {
+            const l = leg('gemini', defended, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          const l = promotedLeg('gpt', gptFlip, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        // gpt's wave-1 re-vote is REAL prose that merely did not parse.
+        launchWave: async () => ({ exitCode: 0, wave: wave([
+          leg('gpt', REAL_BUT_UNPARSEABLE, 'r-rv', 1),
+          leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      const why = ctx.degrade.all().find(n => n.channel === 'debate-degraded').why;
+      expect(why).toBe(`${HEAD}; gpt's repair answered only in its reasoning channel`);
+      expect(why).not.toContain('relaunch');
+    });
+
+    test('DEFENCE control: a retry that answered in PROSE is not named — the why is byte-identical', async () => {
+      const tmp = mkTmp('run-debate-rx48-real-retry-');
+      const input = manyRaiserInput(['gemini']);
+      const ctx = ctxFor(tmp, {
+        // Wave 1 AND its repair both answer with REAL prose that simply does not
+        // parse: the round degrades, but no leg answered in a reasoning channel,
+        // so the clause stays empty and the `why` is byte-identical.
+        launchSolo: async (opts) => {
+          const l = leg('gemini', REAL_BUT_UNPARSEABLE, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => { throw new Error('no re-vote wave expected'); },
+      });
+      ctx.o.debate = true;
+      await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(HEAD);
+    });
+
+    /**
+     * #257 R-X48 fix round 1 (task review I2) — THE RE-VOTE'S NEGATIVE PATHS ARE
+     * PINNED EXACTLY AS THE DEFENCE'S ARE.
+     *
+     * The marker's guard is `r2.leg && isPromotedLeg(r2.leg)`. Dropping the
+     * promotion half of it — `const promotedRetry = r2.leg ? … : null`, i.e.
+     * naming EVERY re-vote retry — survived the whole debate suite untouched
+     * (measured by the task review: 0 failed, 160 passed), while the identical
+     * mutant on the defence side reds the DEFENCE control above. So a re-vote
+     * retry that answered in REAL PROSE could start being recorded as having
+     * "answered only in its reasoning channel" — a false statement in the
+     * degradation record, which is the defect class this whole issue chain
+     * exists to remove — with no test noticing.
+     *
+     * The two tests below are paths (iv) and (v) of the R-X46/R-X48 taxonomy, on
+     * the re-vote side: (iv) a PROMOTED wave-1 whose relaunch answers for real,
+     * (v) a REAL wave-1 whose repair answers for real. Neither may be named, and
+     * the `why` must be byte-identical to a plain degraded round in both.
+     *
+     * NAMED MUTANT — REVOTEMARKERUNGUARDED: `const promotedRetry = r2.leg ? …`
+     * at run-debate-revote.js :: repairRevoteLeg. Reds both tests below.
+     */
+    test('RE-VOTE control (iv): a promoted re-vote whose relaunch answers for REAL is not named', async () => {
+      const tmp = mkTmp('run-debate-rx48-revote-real-relaunch-');
+      const input = provisionalInput();
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const gptFlip = revoteOut([{ id: 'A1', verdict: 'agree', reason: 'defense convincing' }]);
+      const REAL_RELAUNCH = 'On reflection I still dispute it, at length, and again without the JSON.';
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (opts.waveId === 'r-d1') {
+            const l = leg('gemini', defended, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          // The relaunch is REAL prose that merely does not parse — it answered,
+          // just not in the asked-for shape. Nothing rode a reasoning channel.
+          const l = leg('gpt', REAL_RELAUNCH, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => ({ exitCode: 0, wave: wave([
+          promotedLeg('gpt', gptFlip, 'r-rv', 1),
+          leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+      });
+      ctx.o.debate = true;
+      const res = await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      // R-X46 case (i): the real relaunch IS the answer, so it supersedes.
+      const rows = res.debatedInput.runStats.filter(r => r.model === 'gpt');
+      expect(rows.find(r => r.role === 'revote')).toMatchObject(
+        { waveId: 'r-rv-gptr', conformance: 'unstructured' });
+      expect('promoted' in rows.find(r => r.role === 'revote')).toBe(false);
+      expect(rows.find(r => r.role === 'superseded')).toMatchObject({ waveId: 'r-rv', promoted: true });
+      // The round still degrades — but no retry answered in a reasoning channel.
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(HEAD);
+    });
+
+    test('RE-VOTE control (v): a REAL re-vote whose repair answers for REAL is not named', async () => {
+      const tmp = mkTmp('run-debate-rx48-revote-real-real-');
+      const input = provisionalInput();
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const REAL_REPAIR = 'Second attempt, still prose, still no fenced JSON block anywhere in it.';
+      const ctx = ctxFor(tmp, {
+        launchSolo: async (opts) => {
+          if (opts.waveId === 'r-d1') {
+            const l = leg('gemini', defended, opts.waveId);
+            return { wave: wave([l]), leg: l, exitCode: 0 };
+          }
+          const l = leg('gpt', REAL_REPAIR, opts.waveId);
+          return { wave: wave([l]), leg: l, exitCode: 0 };
+        },
+        launchWave: async () => ({ exitCode: 0, wave: wave([
+          leg('gpt', REAL_BUT_UNPARSEABLE, 'r-rv', 1),
+          leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]) }),
+      });
+      ctx.o.debate = true;
+      const res = await runDebateStage(ctx, { provisional: tally(input), provisionalInput: input,
+        overBudget: () => false });
+
+      const rows = res.debatedInput.runStats.filter(r => r.model === 'gpt');
+      expect(rows.find(r => r.role === 'revote')).toMatchObject(
+        { waveId: 'r-rv-gptr', conformance: 'unstructured' });
+      expect(rows.some(r => r.promoted === true)).toBe(false);
+      expect(ctx.degrade.all().find(n => n.channel === 'debate-degraded').why).toBe(HEAD);
+    });
+  });
+});
 describe('runDebate — cost ceiling is a WHOLE-ROUND gate before the re-vote wave (spec §5.7)', () => {
   test('over budget after the defense wave skips the re-vote and reports skipped-cost-ceiling', async () => {
     const tmp = mkTmp('run-debate-cc-');

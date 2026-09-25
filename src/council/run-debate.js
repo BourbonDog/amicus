@@ -13,6 +13,9 @@ const fs = require('fs');
 const path = require('path');
 const dbrief = require('./briefings-debate');
 const { parseDebateDefense } = require('./parse-stage2');
+// #257 R-X23: the parse gate for a leg that answered only in its reasoning channel.
+// ./promoted is a LEAF (require-free by its own docblock and pin), so this adds no cycle risk.
+const { isPromotedLeg } = require('./promoted');
 const { applyDebate, debateRunStatsRows, PAST_TENSE,
   allNoResponse, nothingToDebate, disputingJudges, debateTargets, bundleFor } = require('./debate');
 const { materializeDebate } = require('./run-launch');
@@ -62,30 +65,32 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
   // A dead leg gets the SAME spec §5.7 fallback the parser applies to a block-level
   // failure — every expected id 'no-response', never an empty map, so the
   // originals-stand outcome still reaches debate.json and the record decoration.
-  let parsed = leg ? parseDebateDefense(leg.summary, expectedIds)
-    : { ok: false, byId: allNoResponse(expectedIds), errors: [{ code: 'DEAD_LEG', detail: 'no summary' }] };
-  let conformance = leg ? 'clean' : 'unstructured';
-  // v4.7 D2/E4: the repair's loser leg — the ORIGINAL when the repair produced a
-  // usable (complete) leg (today's leg-swap below is unchanged), or the failed
-  // repair attempt itself when it did not — retained so runDebate can turn it
-  // into an extra debate-defense runStats row. Both stay null when no repair is
-  // attempted at all (today's single-row shape, byte-identical).
-  let supersededLeg = null, repairLeg = null;
+  const usable = leg && !isPromotedLeg(leg); // #257 R-X23: a promoted defence is UNPARSEABLE — the leg document is kept for its row (named mutant "DEFENSEPROMOTEDUSED", tests/council/run-debate.test.js)
+  let parsed = usable ? parseDebateDefense(leg.summary, expectedIds)
+    : { ok: false, byId: allNoResponse(expectedIds), errors: [{ code: leg ? 'REASONING_ONLY' : 'DEAD_LEG', detail: leg ? 'answered only in its reasoning channel' : 'no summary' }] };
+  let conformance = usable ? 'clean' : 'unstructured';
+  // v4.7 D2/E4: the repair's loser leg — the ORIGINAL when the repair produced a COMPLETE leg
+  // (usable or not: a promoted repair leg is complete but UNPARSEABLE, and `leg = leg2` below
+  // still makes it the recorded leg, carrying `promoted: true` — #257 R-X26), or the failed
+  // repair attempt itself when the repair did not complete — retained so runDebate can turn it
+  // into an extra debate-defense runStats row. Both null when no repair is attempted at all. #257 R-X48: `promotedRetry` below is the ROUND NOTE's record and is NOT one of those rows — it is set beside `conformance` inside the retry block, regardless of which branch the retry leg then takes, and the commonest promoted retry leaves NO row here at all.
+  let supersededLeg = null, repairLeg = null, promotedRetry = null;
   if (leg && !parsed.ok) {
     const repairId = `${waveId}r`;
     runState.appendStageWave(ctx.o.runDir, 'debate-defense', repairId);
     const res2 = await ctx.launchers.launchSolo({
       ...legOpts(ctx, repairId), model: raiserAlias,
       // ⚠️ LC-12: a repair solo is a fresh session — the defense that failed rides along.
-      prompt: dbrief.buildDefenseRepairPrompt({ errors: parsed.errors, defense: leg.summary }),
+      // #257 R-X33 (owner A′): a promoted defence is RELAUNCHED with its ORIGINAL brief — a repair prompt never carries its deliberation (named mutant "DEFENSERELAUNCHISREPAIR", tests/council/run-debate.test.js).
+      prompt: isPromotedLeg(leg) ? brief : dbrief.buildDefenseRepairPrompt({ errors: parsed.errors, defense: leg.summary }),
     });
     ctx.addWave(res2.wave);
     if (isAbortExit(res2.exitCode)) { return { raiser: raiserKey, aborted: res2.exitCode }; }
     const leg2 = res2.leg && res2.leg.status === 'complete' ? res2.leg : null;
-    parsed = leg2 ? parseDebateDefense(leg2.summary, expectedIds) : parsed;
-    conformance = parsed.ok ? 'repaired' : 'unstructured';
-    if (leg2) { supersededLeg = legRow(raiserAlias, leg, 'unstructured'); leg = leg2; }
-    else { repairLeg = legRow(raiserAlias, res2.leg, 'unstructured'); }
+    parsed = leg2 && !isPromotedLeg(leg2) ? parseDebateDefense(leg2.summary, expectedIds) : parsed; // #257 R-X23 (named mutant "DEFENSEREPAIRPROMOTEDUSED")
+    conformance = parsed.ok ? 'repaired' : 'unstructured'; promotedRetry = res2.leg && isPromotedLeg(res2.leg) ? { alias: raiserAlias, kind: isPromotedLeg(leg) ? 'relaunch' : 'repair' } : null; // #257 R-X48: the EXPLICIT marker the round note is built from, set where the fact is KNOWN — this RETRY answered only in its reasoning channel, complete or not, superseding or not. `leg` is still the WAVE-1 leg on this line, and that is what decides `kind`: a promoted wave-1's retry was a RELAUNCH with the original brief (R-X33), anything else a repair. The capture sits ABOVE the `leg = leg2` on the next line DEFENSIVELY, not because today's behaviour needs it — MEASURED (fix-round-1 review, M1): recomputing it AFTER the reassignment reds 0 of 119, because the supersede arm is only reached with a promoted `leg2` when `isPromotedLeg(leg)` is ALREADY true, so `kind` reads 'relaunch' either way. Widen the next line's condition and that stops holding, so the capture stays here; no named mutant pins the ordering, and none should claim to. Named mutants "DOUBLEPROMOTEDUNNAMED", "PROMOTEDRETRYKINDLOST" (tests/council/run-debate.test.js).
+    if (leg2 && (!isPromotedLeg(leg2) || isPromotedLeg(leg))) { supersededLeg = legRow(raiserAlias, leg, 'unstructured'); leg = leg2; } // #257 R-X46 (D6): supersede ONLY when the retry leg is real, or when the wave-1 leg was itself promoted. The third case — a defence that answered with REAL prose that merely did not parse, whose one repair came back PROMOTED — used to make that non-answer the kept leg, and R-X30 then stood its artifact down, so the seat's real text was written nowhere at all. Now the wave-1 text stays kept ('unstructured', its rebuttal artifact written as before #257 because the kept leg is not promoted) and the promoted repair is the repair row, which carries `promoted: true` off its own leg (R-X26). Named mutant "DEFENSEPROMOTEDREPAIRSUPERSEDES" (restore the bare `if (leg2)`).
+    else { repairLeg = legRow(raiserAlias, res2.leg, 'unstructured', isPromotedLeg(leg)); } // #257 R-X45: a promoted defence's retry was a RELAUNCH (R-X33) — its row says so (named mutant "DEBATERELAUNCHROLEREPAIR")
   }
   // A dead leg (no complete summary) OR an 'unstructured' conformance after the one
   // repair is a debate degradation (spec §5.7) — surfaced via the returned leg.
@@ -93,8 +98,11 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
   return { raiser: raiserKey, byId: parsed.byId,
     leg: leg ? { model: raiserAlias, status: leg.status, durationMs: leg.durationMs, usage: leg.usage,
       conformance, summary: leg.summary, waveId: leg.waveId,
+      // #257 R-X26: the CAUSE rides the kept leg onto its `rebuttal` row (emit-when-true;
+      // debate.js :: mk forwards it — it is the one leg-sourced field that does).
+      ...(leg.promoted === true ? { promoted: true } : {}),
       ...(leg.model ? { resolvedModel: leg.model } : {}) } : stub,
-    supersededLeg, repairLeg };
+    supersededLeg, repairLeg, promotedRetry };
 }
 
 /**
@@ -128,7 +136,9 @@ async function runDefenseWave(ctx, { byRaiser, aliasOf, seatById }) {
   // projection is `aliasOf(d.raiser)`. `model` must stay ALIAS-valued (R3-1);
   // `seat` is what gives two twins two files instead of one clobbered one (R3-3).
   materializeDebate(ctx.o.runDir, defenseResults.map(d => ({ model: aliasOf(d.raiser),
-    summary: d.leg.summary, seat: seatById.get(d.raiser) || null })), 'rebuttal');
+    summary: d.leg.summary, seat: seatById.get(d.raiser) || null,
+    // #257 R-X30: the CAUSE rides this literal too (`d.leg` carries it emit-when-true since R-X26), so materializeDebate stands a promoted defence down — named mutant "DEBATELITERALPROMOTEDDROPPED".
+    ...(d.leg.promoted === true ? { promoted: true } : {}) })), 'rebuttal');
 
   const defenseByRaiser = {};
   for (const dr of defenseResults) { defenseByRaiser[dr.raiser] = { ...dr.byId }; }
@@ -182,7 +192,7 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
   const stampedInput = { ...tallyInput, findings: tallyInput.findings.map(f => ({ ...f, previousTier: previousTier[f.id] })) };
 
   // ---- Re-vote mini-wave (disputing judges only) ----
-  let revoteByJudge = {}, revoteLegs = [], revoteSuperseded = [], revoteRepairs = [];
+  let revoteByJudge = {}, revoteLegs = [], revoteSuperseded = [], revoteRepairs = [], revotePromoted = [];
   const defendedOrAmended = bundleFor(defenseResults, tallyInput);
   // Seat ids (D6: one entry per disputing SEAT, so a twin bench launches two legs
   // where one launched before). runRevoteWave needs the seat OBJECTS too — for the
@@ -205,7 +215,7 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
     revoteByJudge = rv.byJudge;
     revoteLegs = rv.legs;
     revoteSuperseded = rv.supersededLegs;
-    revoteRepairs = rv.repairLegs;
+    revoteRepairs = rv.repairLegs; revotePromoted = rv.promotedRetries; // #257 R-X48: the ROWS and the round-note MARKERS are two different lists — the second is never derived from the first.
     // revote-<model>.md per surviving judge leg, mirroring rebuttal-<model>.md
     // (spec §5.1 'raw outputs revote-<model>.md').
     materializeDebate(ctx.o.runDir, revoteLegs, 'revote');
@@ -284,7 +294,7 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
 
   return { debatedInput, debateFindings, debateSummary, addendumOutcomes,
     defenseLegs: defenseResults.map(d => d.leg), revoteLegs, verdictChanges,
-    degraded, aborted: null, revoteLaunched };
+    degraded, aborted: null, revoteLaunched, promotedRepairs: [...new Map([...defenseResults.map(d => d.promotedRetry), ...revotePromoted].filter(Boolean).map(r => [r.kind + '\0' + r.alias, r])).values()] }; // #257 R-X48 (council round 5 — C1 major, A1 minor, D3 minor, one gap raised three ways): the round's note names EVERY retry that answered in its reasoning channel, whichever BRANCH its leg took. Built from the EXPLICIT `promotedRetry` markers minted by `runDefenseSolo` above and by `run-debate-revote.js :: repairRevoteLeg` — NEVER inferred from the retry ROWS, which is what this line did through fix round 3 and what made membership depend on the branch: a promoted relaunch of an ALREADY-promoted defence or re-vote that COMPLETES takes the supersede arm (R-X46 case ii) and leaves no repair row at all, so it was silent, while the symmetric case (a REAL wave-1 whose promoted repair completes, case iii) WAS named. One fact about one seat, accounted two ways, with the double-promoted seat left visible only through its row's machine `promoted: true` — exactly what R-X36's rule (a `promoted: true` row is never the ONLY record of itself) forbids. Round 4 proved only the TIMED-OUT double-promoted case reachable and missed the complete one; a marker set where the fact is KNOWN removes the derivation altogether. The ROWS do not change: case (ii) still supersedes and its rebuttal/revote row still carries `promoted`. Each marker carries its KIND beside the alias — 'relaunch' when the WAVE-1 leg was promoted (its retry was a relaunch with the ORIGINAL briefing, R-X33), 'repair' otherwise — so run-debate-stage.js :: promotedRepairClause names a relaunch a relaunch and never re-introduces the A3/C2 misnaming R-X45 removed from the record. De-duplicated per (kind, alias): a twin bench gives two seats one alias, and `legRow`'s `model`/the marker's `alias` are both alias-valued. ⚠️ The separator is the TWO-CHARACTER source escape `\0`, never a raw NUL byte — round 4 shipped two raw ones on this line once. run-debate-stage.js renders the clause; the aggregation stays here.
 }
 
 module.exports = { runDebate, nothingToDebate, disputingJudges, debateTargets };

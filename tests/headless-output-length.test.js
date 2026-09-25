@@ -8,6 +8,26 @@
  * leave runHeadless as `completed` with an empty summary -- or, with visible
  * reasoning, with its THINKING promoted to the summary. These tests pin the
  * in-loop exit, the OUTPUT_LENGTH naming, and the new `finish` on the result.
+ *
+ * #257: the same promotion is now a FACT on the result. When the engine
+ * finishes with no text part, conversation-mirror.js :: mirrorMessages puts the
+ * accumulated reasoning into `output` and records the stand-in in
+ * `promotedOutput`; src/headless.js :: runHeadless mints `promoted: true` at its
+ * normal terminal return from that, emit-when-true (no key at all otherwise) and
+ * never on the failed-with-no-usable-output return.
+ *
+ * Named mutants for that mint:
+ *   PROMOTEDDROPPED  delete the `...(mirror.promotedOutput.length > 0 ...)` spread
+ *                    -> reds "finish 'stop' with reasoning only".
+ *   PROMOTEDONDEATH  copy the spread into the failed return above it
+ *                    -> reds "an L2/L4 death ... dies WITHOUT a promoted key".
+ *   PROMOTEDCOERCED  `promoted: !!mirror.promotedOutput` instead of the spread
+ *                    (`promotedOutput` is a string, so this emits the literal
+ *                    `promoted: false` on every leg that promoted nothing)
+ *                    -> reds TWO tests, not one: "a leg with answer text carries
+ *                    NO promoted key" and "finish 'stop' rides out as finish,
+ *                    and a leg with no finish carries no key", whose two
+ *                    `'promoted' in r` pins are the #257 additions to it.
  */
 
 const mockCreateSession = jest.fn();
@@ -116,10 +136,54 @@ describe('#218 PR 3 — a leg whose provider stopped for length', () => {
     const r1 = await run();
     expect(r1.completed).toBe(true);
     expect(r1.finish).toBe('stop');
+    // #257: this answer arrived as a TEXT part, so nothing was promoted — emit-when-true
+    // means the key is ABSENT, not false (mutant PROMOTEDCOERCED).
+    expect('promoted' in r1).toBe(false);
     mockGetMessages.mockResolvedValue([{ info: { role: 'assistant', id: 'm1', time: { completed: 1 } }, parts: [{ id: 'm1:t', type: 'text', text: 'OK' }] }]);
     const r2 = await run();
     expect(r2.completed).toBe(true);
     expect('finish' in r2).toBe(false);
+    expect('promoted' in r2).toBe(false);
+  });
+
+  it("finish 'stop' with reasoning only: completes, carries finish, and carries promoted: true (#257)", async () => {
+    // The :114 harness with the answer arriving as REASONING instead of text: the
+    // mirror's reasoning-only fallback promotes it into `output`, so the leg
+    // completes on a stand-in rather than on an answer the model wrote as output.
+    mockGetMessages.mockResolvedValue(finished({
+      parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }],
+      finish: 'stop', tokens: { input: 5, output: 0, reasoning: 120, cache: CACHE },
+    }));
+    const r = await run();
+    expect(r.completed).toBe(true);
+    expect(r.finish).toBe('stop');
+    expect(r.promoted).toBe(true);
+    expect(r.summary.length).toBeGreaterThan(0); // the stand-in is still the output (solo keeps it)
+  });
+
+  it('a leg with answer text carries NO promoted key at all, even after an earlier promotion (#257)', async () => {
+    // The multi-message shape below: m1's reasoning is promoted on the first poll,
+    // then m2's text replaces the stand-in and clears `promotedOutput`. The leg
+    // delivered an answer, so nothing about it is promoted.
+    const m1 = msg('m1', { parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }] });
+    const m2 = msg('m2', {
+      parts: [{ id: 'm2:t', type: 'text', text: 'Partial review' }],
+      finish: 'length', tokens: { input: 5, output: 8, reasoning: 32, cache: CACHE },
+    });
+    mockGetMessages.mockResolvedValueOnce([m1]).mockResolvedValue([m1, m2]);
+    const r = await run();
+    // Guards the assertion below against passing vacuously on a leg that died:
+    // a death returns through the OTHER return, which never carries the key.
+    expect(r.completed).toBe(true);
+    expect('promoted' in r).toBe(false);
+  });
+
+  it('an L2/L4 death (finish length, reasoning promoted) dies WITHOUT a promoted key — a death has no deliverable to classify (#257, spec R12)', async () => {
+    mockGetMessages.mockResolvedValue(finished({ parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }] }));
+    const r = await run();
+    expect(r.completed).toBe(false);
+    expect(r.error).toMatch(/^OUTPUT_LENGTH:/);
+    expect('promoted' in r).toBe(false);
   });
 
   it("an error the engine put on the message wins over this PR's name", async () => {

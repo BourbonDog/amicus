@@ -3,6 +3,91 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Changed
+
+- **A seat that answers only in its reasoning channel no longer has its deliberation adjudicated
+  as its review.** When the engine's last message carried reasoning and no text part, the mirror
+  promotes the reasoning to the leg's output (so a solo `amicus start` still shows an answer —
+  unchanged, and the leg's `metadata.json` now says `promoted: true`). A council now treats such a
+  Stage-1 leg as no deliverable: it is not materialized as a review, the once-only Stage-1 retry
+  fires, and a seat whose retry repeats it is a lost seat — dead-seat row, a `Notice:`, exit 2, and
+  `seatLoss` when `--critic` was requested — and the census counts it as not reviewed. Every announcement names the cause: `… with
+  no usable output — it answered only in its reasoning channel (40332 reasoning / 1 output tokens,
+  finish 'stop'), which is not a review`. A Stage-2 judge that answers this way is never used as
+  it stands, however well its deliberation happens to parse: it is relaunched once with the
+  original bundle briefing (its first `-q<N>` attempt), a relaunch that answers with real but
+  unparseable text gets the one remaining repair, and a relaunch that answers in its reasoning
+  channel again — or dies — stands the judge down; a `Note:` on `judge-reasoning-only` records
+  which, and when fewer than two judges remain usable the thin-cross-review reason says `answered
+  only in the reasoning channel and was not rescued`. A promoted judge whose relaunch answered for
+  real but did not parse, and whose repair then answered in its reasoning channel, stands down as
+  `relaunch-repair-promoted` and the note says so — a schema failure and a refusal to produce text
+  are different fixes. No `judge-<seat>.md` is written from a promoted leg; the relaunch's real
+  text is the judge artifact. The relaunch is recorded as one: a `role: 'relaunch'` runStats row (a
+  promoted judge's first relaunch; a promoted defence's or re-vote's relaunch that produced nothing
+  usable), a rescued judge's row and its tally/verdict copies carry `rescued: true` beside
+  `promoted: true`, and the `judge-reasoning-only` note's `data` names `relaunchWaveId` and
+  `usedWaveId`; `conformance` keeps its three values and means how many asks it took to parse. A
+  promoted repair of a real defence or re-vote never replaces the real text it failed to repair,
+  and the debate note names whose repair — or relaunch — answered in its reasoning channel. The
+  debate note names a promoted retry whichever branch its leg took — a promoted defence or re-vote
+  whose relaunch came back promoted again is named even when that relaunch superseded the first
+  leg. A judge whose own answer was real but unparseable and whose repair comes back in the
+  reasoning channel is announced too, on the same channel, with a `Note:` that names the repair
+  rather than the judge's answer.
+  Every reader of a leg in the council now treats a promoted leg as no deliverable: Stage-1
+  reviews (not materialized; the once-only retry fires); the Stage-1 `-p<N>` and Stage-2 `-q<N>`
+  repair solos (a promoted repair is a failed repair attempt inside the existing bound); the chair
+  (its walk retries and falls back exactly as for a chair with no output, its verdict-line repair
+  reads no `VERDICT:` line from reasoning, and `chairAttempts[]` records `no-output` with the
+  reason `answered only in its reasoning channel (…); no synthesis to read`); debate defences and
+  re-votes (unparseable: the original stands (a defence as `no-response`; a re-vote leaves the
+  judge's provisional verdict), the one bounded repair is a relaunch with the original briefing,
+  and the row keeps the real leg with `promoted: true`). A promoted defence, re-vote or judge is
+  never repaired against its deliberation: its one retry is a relaunch with its original briefing —
+  the defence brief, the shared re-vote bundle, the Stage-2 bundle — so no repair prompt anywhere
+  carries a promoted deliberation (149 KB in the measured case) as "the text to correct". No
+  `rebuttal-<seat>.md` or `revote-<seat>.md` is written for a promoted defence or re-vote itself (a
+  repair leg that answers with real text is materialized as before): `materializeDebate` skips it as
+  `materializeReviews` does; the reasoning stays in the leg's session `summary.md` and in
+  `wave.json`, and the row is the record. The fallback-substitution chain is unchanged: a
+  reasoning-only answer is not a capacity signal and earns no substitute. The engine's `finish`
+  string is reduced to identifier characters (`A-Z a-z 0-9 _ . : -`, at most 40) before any
+  announcement interpolates it, so a provider-controlled finish cannot open a link, a code span, a
+  tag or emphasis in any prose surface that renders it — the stderr `Notice:` lines, run.json, and
+  the Markdown `amicus council report` prints (the sticky PR comment never renders it); an
+  underscore survives only inside a word, where Markdown cannot open emphasis; the token
+  parenthetical every announcement shares has one home (`promoted.js :: tokenSplit`).
+  The Stage-1 dead-leg announcements bound the engine's error text the same way the Stage-2
+  judge-death prose already did — at its own cap — one line, no control characters, at most 800
+  characters, a cap
+  measured to pass every reason amicus itself mints; every retry announcement bounds the engine's
+  reason text the same way on every arm, and the operator's
+  `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` value is quoted bounded (96 characters), so the longest
+  reason amicus can mint is now a computable worst case rather than a sample — a measured 620
+  characters on the corpus's pinned rows, 660 over all legal inputs, 140 under the 800 cap — while
+  `data.reason` keeps the verbatim text.
+  A promoted leg whose provider reported no token usage says `token usage not reported` in every
+  announcement instead of a fabricated `0 reasoning / 0 output tokens` — a usage record with no
+  positive count is not a report, since a promoted leg produced the reasoning it promoted and a
+  length stop consumed its reservation — and the same rule governs the OUTPUT_LENGTH reason and
+  the output-truncated note, all three homes testing each count the same way (an integer, never
+  negative); the leg document and the spend ledger still carry the summed zeros
+  (filed in `BACKLOG.md` under #257 — `pricing.js :: sumPerMessageUsage`).
+  The fact rides every leg document (`promoted: true`, emit-when-true, declared in
+  `run.schema.json`, the tally schema and, on its open leg objects, `wave.schema.json`).
+  Measured motive: PR #254 round 1, where 40,332 reasoning
+  tokens and 1 output token became a 149 KB "review", 92 % of the Stage-2 bundle; three of four
+  judges died on it. **Upgrade note:** a seat that 4.13.0 counted as reviewed on a promoted answer
+  is now retried and, if it repeats, counted lost, and the run exits 2; a Stage-2 judge, chair,
+  defence or re-vote that 4.13.0 accepted on a promoted answer is now relaunched once or stands down;
+  `finish: 'length'` with no text is still the `OUTPUT_LENGTH` death it was. A seat that answers
+  only in its reasoning channel on every call will lose every council it sits on — retried once,
+  then lost, exit 2 — by design: re-seat it; a pre-flight warning for such a seat is filed. (#257; closes the write-back half of #242's item 1
+  by removing its worst input)
+
 ## [4.13.0] - 2026-09-18
 
 ### Changed

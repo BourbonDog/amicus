@@ -147,7 +147,7 @@ const CASES = [
     agent: 'council-seat', agents: support(), model: KIMI },
   { id: 'A3', what: 'v4.9.8 task-mode stage-1 seat — council-seat, webfetch',
     agent: 'council-seat', agents: buildCouncilAgents({ tools: ['webfetch'] }), model: KIMI },
-  { id: 'A4', what: 'v4.9.7 judge leg — the engine\'s own Plan agent (run-launch.js:120 old default)',
+  { id: 'A4', what: 'v4.9.7 judge leg — the engine\'s own Plan agent (run-launch.js:121, the no-council-agents fallback)',
     agent: 'plan', agents: null, model: KIMI },
   { id: 'A5', what: 'reference — the engine\'s Build agent (the --agent Build escape hatch)',
     agent: 'build', agents: null, model: KIMI },

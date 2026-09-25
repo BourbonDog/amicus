@@ -56,7 +56,8 @@
   // v4.7 D6/E1: three row-per-launch producer roles added alongside the
   // existing chair-attempt (run-chair.js), repair (run-stages.js/
   // run-stage2.js/run-chair.js) and superseded (run-stages.js + debate.js)
-  // rows — launch-accounting extras, not seats, and unlike rebuttal/revote
+  // rows — plus `relaunch` (issue 257 R-X45: run-stage2-judge.js + debate.js ::
+  // mk) — launch-accounting extras, not seats, and unlike rebuttal/revote
   // (F37, kept rendering on purpose below) they have no seats-panel meaning
   // of their own. There is no pre-existing allowlist in this function (E1) —
   // this is a plain exclusion added on top of the untouched id/shape logic.
@@ -67,6 +68,10 @@
   var SEATS_PANEL_EXCLUDED_ROLES = Object.create(null);
   SEATS_PANEL_EXCLUDED_ROLES['chair-attempt'] = true;
   SEATS_PANEL_EXCLUDED_ROLES.repair = true;
+  // Issue 257 R-X45: the SAME launch, renamed. A promoted Stage-2 judge's `-q1` (and a promoted
+  // defence's / re-vote's dead relaunch) was filed as `repair` and hidden here; calling it
+  // what it is must not turn it into a phantom seat row the panel has never shown.
+  SEATS_PANEL_EXCLUDED_ROLES.relaunch = true;
   SEATS_PANEL_EXCLUDED_ROLES.superseded = true;
 
   /** Terminal fallback: derive seat-shaped rows from tally runStats cost rows. */

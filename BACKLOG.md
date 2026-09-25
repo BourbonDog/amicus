@@ -1135,7 +1135,7 @@ unchecked items ride to the next rev.)*
   wording. Net 0 lines (`run-budget.js` held at 283/300, the plan's originally-estimated "71→67"
   companion line in `fanout-budget.js` corrected in review to 71→70). The separate, structurally
   unreachable CLI-flavoured reservation trailer at `fanout-budget.js:62-65` (`errorDoc` never
-  carries `hint` on this path; `quiet:true` unconditional at `run-launch.js:134`) had its
+  carries `hint` on this path; `quiet:true` unconditional at `run-launch.js:178`) had its
   `Override: --max-cost / --no-cost-gate` sentence deleted rather than reworded, since nothing
   renders it. Note the retained hint at `:62` still says "does not fit the `--max-cost` allowance"
   — correct, because that string's only real reader is a direct CLI `amicus fanout`. Both strings pinned in both directions
@@ -1434,7 +1434,7 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   seat** — [S, needs a product decision] `parseModelsList` (`src/sidecar/fanout-validate.js:22`)
   allows duplicate aliases by design (its own docstring: "duplicates allowed"), and council
   callers pass the parsed list through unchecked. Both `lensIndexOf`
-  (`src/council/run-retry-group.js:16` — this entry said `run-retry.js:24`; the function left that
+  (`src/council/run-retry-group.js:18` — this entry said `run-retry.js:24`; the function left that
   file at PR0, re-measured 2026-08-17 — via `o.models.indexOf(model)`) and `roleFor`
   (`src/council/run-stages.js:35`, via `o.models.indexOf(alias)`) resolve a duplicated alias by
   first occurrence only. A duplicated alias whose second occurrence dies could therefore produce
@@ -1504,7 +1504,9 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   drift, not a live defect; record it before something starts reading it. Found during the v4.7
   PR1 final-review consolidated wave, 2026-08-06.
   — recon 2026-08-07: filed as PR1F-3 for v4.7 PR5. **Five** engine-born sites take the `'clean'`
-  default, not two (add `run-stage2.js:122` and `run-stages.js:244`), and the item's proposed
+  default, not two (add `run-stage2.js:122` — re-anchored 2026-09-19, #257: that push is `:230`
+  today and now passes an EXPLICIT `conformance: parsed.ok ? 'clean' : 'unstructured'` (`:231`),
+  so it no longer takes the default — and `run-stages.js:244`), and the item's proposed
   `solo.leg && res.ok ? 'repaired' : 'unstructured'` expression is a **constant**: the push at
   `run-stages.js:181` precedes `res = validateFindings(...)` and sits inside a `while (!res.ok ...)`
   loop, so `res.ok` is always false there. Use a flat literal, or move the pushes below validation —
@@ -3097,7 +3099,8 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       cost was nowhere measured until now.** Both behaviours are now PINNED in
       `tests/council/seat-matrix.test.js` so neither can drift silently.
       ⚠️ **Reachability is the same class as every other shape this PR pins**:
-      `run-stage2.js:61-62` guarantees no engine run emits such a vote, but `council report
+      `run-stage2.js:129-130` (the ROSTER comment and `const judges = reviews.map(r => r.modelInput)`;
+      was `:61-62`, re-anchored 2026-09-19, #257) guarantees no engine run emits such a vote, but `council report
       <verdict.json>`, `council verdict --render` and `amicus_verdict` are all schema-free — which
       is exactly why `''`, a non-string `judge` and an orphan seat id are in scope.
       ⚠️ **This shape also forced a correction to the column's DOCUMENTED MEANING.** The prose
@@ -4402,7 +4405,7 @@ permanently feed `council stats` — which is the authoritative input to bench s
 ### Seat identity — closes #137, and PR1F-1 properly
 
 - PR1F-1's real defect is not that duplicates exist, it is that `lensIndexOf`
-  (`run-retry-group.js:16`; was cited `run-retry.js:24` — it left that file at PR0) and `roleFor`
+  (`run-retry-group.js:18`; was cited `run-retry.js:24` — it left that file at PR0) and `roleFor`
   (`run-stages.js:35`) resolve a seat via `indexOf(alias)` —
   **first occurrence wins** — so a duplicated alias whose second occurrence dies yields two primary
   rows where the row-per-launch bijection expects one.
@@ -4557,7 +4560,8 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   bench pays for two judge legs and clobbers one `judge-<alias>.md`.**
   (⚠️ **2026-08-25, v4.9 W2: the roster line moved — `run-stage2.js :: runStage2`'s
   `const judges = reviews.map(r => r.modelInput)` is `:119` today; `:57` now sits inside the
-  extracted `bindStage2Seats`.**) Pre-existing, not
+  extracted `bindStage2Seats`.** Re-anchored again 2026-09-19, #257: that roster line is `:130`.)
+  Pre-existing, not
   introduced by PR2b, and PR2b did not change how many reviews reach Stage 2: `materializeReviews`
   already returned one in-memory entry per complete leg, so a twin bench already handed Stage 2
   two reviews — only the FILE on disk was clobbered. What PR2b changed is that those two reviews
@@ -4621,7 +4625,8 @@ warning still holds and is now sharper; the authoritative table is *Size gate �
 #### Seat identity — PR3 handoff (2026-08-13)
 
 PR3 carried the seat through Stage 2 and the debate round: `judge-<seat>.md`
-(`run-stage2.js:145`), `judgeResults[].seat`, a seat-keyed Stage-2 conformance merge
+(`run-stage2.js :: runStage2`'s `artifactName(seat, 'judge')` write, **was `:145`; re-anchored BY
+SYMBOL 2026-09-19 after #257 — `:172` today**), `judgeResults[].seat`, a seat-keyed Stage-2 conformance merge
 (`run.js:224-228`), additive **emit-when-different** `adjudications[].seat`
 (`run-assemble.js:166`) and `findings[].raiserSeat` (`anonymize.js:60`), and a debate round that
 joins on the seat at every hop — `debate.js :: debateTargets` (**was `:201`**),
@@ -5046,6 +5051,11 @@ deliberately left alone:
     one alone would make it the odd one out. (`run-stage1-superseded.js:61`'s guard is a different
     case — it takes `degrade` as an OPTIONAL PARAMETER, not off `ctx`.) **A1** (qwen) — the
     file-size headroom — was already filed above. Recorded so neither is re-adjudicated.
+    ⚠️ **Re-measured 2026-09-19 (#257).** The counts and line numbers above are the record of
+    2026-08-22, not of HEAD: the same grep now returns **15** matches, 14 of them call sites
+    (`run-stage2.js:110`/`:122` are `:66`/`:78` today, and that file has two more at `:252`/`:279`;
+    `run-retry.js:216` is `:217`; `run-stages.js` has six). The RULING is unchanged and re-verified
+    — no `ctx.degrade.note(` call site in `src/council/` is guarded.
     **The §3.4 roster hole is NOT regressed.** A hole's own alias IS one of `judgeKeys`
     (`run-debate.js` builds `judgeSeats` as `judgeKeys.map(k => seatById.get(k) || null)`, so a hole
     keeps its `judgeKeys` slot and loses only its seat), so it still publishes and still emits no
@@ -6676,10 +6686,10 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     `:33`, a docblock line, before the 2026-08-17 re-derivation) and
     `unit.firstFailures[].seatId`, so the id is
     reachable there — just not emitted. **Design the producer change against all five arms.**
-  - ⚠️ **`data.seat` must stay the ALIAS.** `run-retry-notes.js:39-45` explains why
+  - ⚠️ **`data.seat` must stay the ALIAS.** `run-retry-notes.js:46-52` explains why
     (`verdict.js:72` compares it against `o.critic`). Add a key; never repurpose that one.
   - ⚠️ Note shapes are pinned by exact `toEqual` in `tests/council/degrade-channels.test.js`;
-    `run-retry-notes.js:39-41` warns that adding a key unconditionally breaks them. Budget for
+    `run-retry-notes.js:46-48` warns that adding a key unconditionally breaks them. Budget for
     fixture updates.
   - ⚠️ `workspace-seats.js:47`'s docblock claimed `retriedSeats` (then `retriedAliases`) mirrors
     `deadSeats`' predicate "EXACTLY, and must keep mirroring it". **PR5b shipped and changed one
@@ -6701,7 +6711,7 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   - **Why it matters:** dead-wave is one of the four alias-only emitter arms the dual lookup
     (`retried[s.seat] || retried[s.model]`, `workspace-seats.js:188` — **was `:117`, long stale;
     this is the SAME expression cited in SI-DUP's Count-2 exclusions, and the two now agree**) exists to serve — it emits
-    `data.models[]` with no `seat` and no `firstFailure` (`run-retry-notes.js:28-47`). On a twin
+    `data.models[]` with no `seat` and no `firstFailure` (`run-retry-notes.js:35-54`). On a twin
     bench it should badge **both** seats sharing the alias, which is the disclosed imprecision in
     the plan's §0.8 and in the CHANGELOG, and nothing currently pins that it does.
   - **Not unexercised, just unpinned at the intersection:** mutant M2 (dropping the `s.model` arm)
@@ -9110,3 +9120,134 @@ Deferred — one line each, none blocks anything:
   session clause records exactly this case (`window extended once … (session: idle)`); if the corpus
   shows it, re-read status every ~60 s during an extension and kill early on idle (never on unknown).
   (#251 item 1, council #269 r2 D2)
+
+## #257 — filed at the PR (2026-09-19)
+
+- [ ] #257 R1 — a solo `amicus start` still prints promoted reasoning as the answer with no stderr
+  line; `metadata.json` says `promoted: true`. Candidate: one `Note:` on stderr.
+- [ ] #257 R1 (fanout surface) — `src/sidecar/fanout-output.js:27` — the `amicus fanout` CLI prints
+  a promoted leg's reasoning as its answer with no marker (R1's sibling on the fanout surface).
+- [x] #257 R10 — readers of a completed status this PR had not changed when this was filed:
+  chair-fallback.js:87, run-chair.js:61, run-debate.js:61/84/267, run-debate-revote.js:172/240,
+  src/sidecar/fanout-leg-fallback.js:203 (the other seven are `src/council/`). A promoted chair
+  verdict or debate defense is the same disease on
+  another surface; the `promoted` fact is on those legs already.
+  ⚠️ **R-X17 (2026-09-19, whole-branch review) completes that enumeration.** Two more surfaces
+  read a leg's **`summary`**, not its status, and a promoted repair leg whose deliberation happens
+  to contain a parseable block is used silently: the Stage-1 `-p<N>` repair solo
+  (`src/council/run-stages.js:214-216` — `const repaired = (solo.leg && solo.leg.summary) || ''`
+  then `validateFindings(repaired)`) and the Stage-2 `-q<N>` repair solo
+  (`src/council/run-stage2.js:224-226` — the same read into `parseJudgeOutput`). Neither is gated
+  on `isPromotedLeg`. Same disease, another surface.
+  ⚠️ The remaining completed-status readers were RULED CORRECT AS-IS at that review, recorded so
+  they are not re-adjudicated: `src/utils/result-schema.js:93`/`:147` (wave-status aggregation — a
+  promoted leg IS complete for wave status); `src/spend-query.js:43`/`:109` (a receipt; `--failed`
+  rightly excludes it); `src/council/report-cost.js:59` (the cost table prints `r.status` verbatim,
+  so a lost seat's row reads `complete` beside the `Notice:` in "What was lost" — exactly the shape
+  an empty-answer dead seat already has); `electron/workspace-ui/workspace-render.js:168` (the
+  stage rail, not a leg). `src/sidecar/models-probe.js:41` was already ruled correct in spec R10.
+  ⚠️ **The record.** 2026-09-19, council round 1, owner decision C: every reader listed here now
+  stands a promoted leg down (`run-debate.js`'s `bad()` through the `conformance` the new gate sets;
+  the rest gated directly), R-X21–R-X26, except the substitution chain — `fanout-leg-fallback.js:203`
+  is unchanged because `isRetryable` is capacity-only (R-X24, measured in the SDD map); a
+  reasoning-only answer earning a substitute would need a new retryable class. One reader this
+  enumeration MISSED — the ch4 chair verdict-line repair, `run-chair.js:205` — was found by the
+  Task 15 docs review and gated under R-X27. Council round 2 (2026-09-19) closed the three leaks
+  the C build left: the repair prompts no longer carry promoted text (R-X29), no debate artifact is
+  written for a promoted leg (R-X30), and the `finish` bound is an identifier allowlist with one
+  shared token fragment (R-X31). The owner then withdrew the Stage-2 judge exception (A′, R-X32):
+  a promoted judge, defence or re-vote is relaunched with its original briefing, never used as it
+  stands and never repaired against its deliberation.
+  Council round 3 (2026-09-19): R-X35–R-X40.
+  Council round 4 (2026-09-20): R-X41–R-X47.
+  Council round 5 (2026-09-20): R-X48–R-X50.
+- [x] #257 (build, E1 review M6) — src/council/run-stage2.js is at 298/300 with two ~250-char
+  lines (`:202` at 275 chars, `:261` at 249) carrying the R-X32 conjuncts; extract the judge
+  leg-loop body (parse → bounded repair/relaunch → result row) into its own module so the next
+  edit is not paid for in line length. Out of #257: the split would break the byte-parity posture
+  this round depends on.
+  ✅ **done at round 3 (R-X37, run-stage2-judge.js).** The loop body moved VERBATIM to
+  `src/council/run-stage2-judge.js :: adjudicateJudgeLeg` (228 lines); `src/council/run-stage2.js`
+  is 177. Byte parity held — the seven `why` sentences are byte-identical and no test string
+  changed for the move itself.
+- [ ] #257 (build) — the ttftMs roster test in tests/council/run-stats-entry.test.js cannot catch a
+  stale IMPORTERS entry on its own: its set-union test passes whether result-schema.js is listed as
+  an importer or a mention. Candidate: assert the importer regex per IMPORTERS entry inside the
+  union test too.
+- [x] #257 (council r2; PRE-EXISTING since #85, `79f03422`) — `leg.error` is interpolated raw into
+  the dead-leg announcement templates. ⚠️ **Two corrections, round 3 (2026-09-19).** (1) The
+  surface named below — "that reach the sticky PR comment" — was never measured and is FALSE: the
+  workflow's comment step (`.github/workflows/council-review.yml:1755`, body at `:1836-1878`)
+  interpolates neither `seatLoss` nor `degrades` anywhere, so no degrade prose reaches it; the true
+  prose surfaces are the stderr `Notice:` lines, run.json/verdict.json as text, and the Markdown
+  `amicus council report` prints (`src/council/report-md.js:59`). (2) The PROSE half is now CLOSED
+  by R-X38: all five Stage-1 sites bound their error text with
+  `collapseExcerpt(…, MAX_LEG_ERROR_CHARS = 800)` — `src/council/run-stages.js:127`,
+  `src/council/run-retry-notes.js:185`, `:225`, `:239`, `:263`. What remains RAW below is the
+  MACHINE half (`data.reason`, `verdict.json :: seatLoss.reason`), which stays raw BY DESIGN. The
+  sites as they were at the filing:
+  `src/council/run-stages.js:120` (Stage-1 skipped leg); `src/council/run-retry-notes.js:147`
+  (still-dead first leg) and `:185`, the `retryCause` fragment rendered into all three arms of the
+  retry note at `:193`, `:196` and `:198`; `src/council/verdict-seat-loss.js:130-131`, where a dead
+  critic's `data.reason` — `leg.error` copied at `run-stages.js:123`, `run-retry-notes.js:150` and
+  `:201` — becomes `seatLoss.reason` verbatim; and, through the first failure's record,
+  `src/council/run-retry-group.js:239` (`reason: leg.error || null` for a `class: 'leg'` failure),
+  rendered raw at `src/council/run-retry-notes.js:197` and `:220` — the other half of the very
+  sentence whose `retryCause` is cited above. These are the same strings whose `finish` #257 bounds
+  to an identifier allowlist. (`src/council/run-retry.js` has no `error` read at all; the Stage-2
+  twin `src/council/run-stage2-notes.js:59` already bounds its copy with
+  `collapseExcerpt(leg.error, 200)` under #219, so Stage 2 is not in this gap.) Bounding the rest
+  changes pinned strings for any error over the bound — its own PR. Noted, not a defect: the raw
+  `finish` still reaches the machine fields unbounded (`src/utils/leg-riders.js:37`,
+  `src/utils/spend-ledger.js:101`, `src/sidecar/session-utils.js:108`) — data fields, not prose; the
+  bound is applied where prose is made (`promotedFacts`).
+
+### Round 3 (2026-09-19) — filed, not fixed
+
+- [ ] #257 (council r3, C2/HQ1) — nothing warns an operator BEFORE a run that a seat has been
+  losing councils by answering only in its reasoning channel: the loss is announced after the money
+  is spent (`src/council/verdict-seat-loss.js:132-133` and the dead-leg `Notice:` at
+  `src/council/run-stages.js:118-131`). R-X40 ruled the run-time behaviour CORRECT (owner decisions
+  A and B) and filed this instead. Candidate: a pre-flight / `doctor` row that reads the recent runs
+  for seats lost by promotion and names them before the bench is launched — the existing doctor-row
+  shape is `src/utils/doctor-output-budget-check.js :: evaluateOutputBudget` (`:131`, exported
+  at `:198`, consumed at `src/cli-handlers-doctor.js:180`).
+- [ ] #257 (council r3, from A1/R-X38) — `src/council/report-md.js :: renderMd` renders EVERY
+  degrade record as a Markdown **list item** (`:59`, and the notes list at `:69`, both `- ` +
+  `src/utils/degrade.js :: formatDegrade`), and `collapseExcerpt`
+  (`src/utils/text-sanitize.js:79`) does NOT neutralise Markdown-active characters — it strips
+  ANSI, bidi and control bytes, collapses whitespace and caps. So a provider error containing
+  Markdown still renders as Markdown in that list item. This affects #219's Stage-2 judge-death
+  prose too (`src/council/run-stage2-notes.js:59`). Candidate: a Markdown-neutral rendering at the
+  ONE renderer rather than a second sanitizer at each producer. (`report.html` is unaffected —
+  `src/council/report-html.js:31` escapes.)
+- [ ] #257 (council r3, F3 concern 3) — the #264 r1 duplicate-reason suppression compares
+  UNSANITISED strings while the prose now renders SANITISED ones: `src/council/run-retry-notes.js`
+  compares `retryRaw.trim()` against `ff.reason.trim()` at `:225` and then renders
+  `collapseExcerpt(retryRaw, MAX_LEG_ERROR_CHARS)`, so a retry error differing from the first
+  failure's ONLY in ANSI or control characters is not suppressed and the same reason renders twice.
+  One-line cure: compare the collapsed forms.
+- [ ] #257 (council r3, F3 concern 4) — `src/council/run-stage2-notes.js :: judgeDeadNote` still
+  caps its leg error at a bare literal `200` (`:63`, #219), so a judge dying `OUTPUT_LENGTH` or at
+  the no-output backstop loses its amicus-minted remedy in that prose — measured, the shortest
+  `OUTPUT_LENGTH` format is 231 characters and the longest minted reason was 518 at round 3 — and
+  is **620** for the pinned rows since round 4 (R-X43; supremum **660** since R-X50), which only widens the gap
+  this 200-char cap opens. R-X38's ruling (a
+  cap bounds provider noise and must pass every minted reason whole) applies here unchanged; it is
+  its own change because it moves a pinned Stage-2 string.
+- [x] #257 (council r3, F3 concern 3) — `src/utils/output-length.js :: formatOutputLengthReason`
+  interpolates the operator-controlled `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` verbatim (`:83`
+  and `:84`), so the minted reason's length is operator-controlled and NO finite prose cap is a
+  proof that a minted reason survives it — R-X38's pin is a tripwire on drift, not a bound. The
+  guarantee belongs at the formatter: run the flag through
+  `src/utils/text-sanitize.js :: safeFragment` before interpolating it.
+  — done at round 4 (R-X43, output-length.js). The flag is bounded before it is quoted while
+  `PLAIN_OUTPUT_TOKEN_FLAG` is still tested on the RAW bytes; the doctor row
+  (`doctor-output-budget-check.js`) took the same split so the two gates agree. The longest
+  minted reason is now MEASURED at 620 for the pinned rows (supremum 627), under the 800 cap,
+  and the pin is a bound.
+
+### Round 4 (2026-09-20) — filed, not fixed
+
+- [ ] pricing.js :: sumPerMessageUsage sums a leg that reported no usage to all-zero totals, indistinguishable from reported zeros; the formatters treat an all-zero record as unreported (R-X44(c)) because their triggers consume tokens, but the leg document and the spend ledger still carry the summed zeros in their TOKEN fields (the cost is already honest there: `resolveLegCost` / `hasObservedTokens` treat an all-zero record as unobserved and resolve it to `unknown`, which `run-budget.js` counts under `unknownLegs`) — the seam should record `usage: null` (or an observed flag) when no message carried usage, so the token fields say what the cost already says (council #270 r4 review of G2, I1 and its re-review).
+- [ ] #257 (council r4, from R-X45) — `src/council/debate.js` reached **300/300** at round 4: the relaunch mark that `legRow` carries is turned into `role: 'relaunch'` by `debate.js :: mk`, and that map cost the file its last line (299 → 300, added in place). The debate cluster now has no headroom at all — `debate.js`, `run-debate.js` and `run-debate-revote.js` are each at **300** and `run-assemble.js` at **298** — so the next edit to any of them must extract first. Candidates: `debate.js`'s row builders; `run-debate-stage.js`'s note builder (174 lines, the one file in the cluster with room). ⚠️ MEASURED on `32fefea4`, and the brief's framing of "four council files at the gate" understates it: `src/council/` also holds `report.js`, `run-retry.js` and `run-server.js` at 300, and `briefings-chair.js`, `run.js`, `run-retry-notes.js` and `seat-tools.js` at 299. The gate is crowded well beyond the files this round touched; a resplit plan for `src/council/` is the real item here.

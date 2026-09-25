@@ -452,7 +452,7 @@ describe('runFanout orchestrator', () => {
     // A leg with no session id still produces a well-formed document: the
     // key is absent on disk (undefined, not a written null — the
     // read-merge-write convention) but the emitted wave doc coerces the
-    // absence to schema-valid null (result-schema.js:72), never undefined.
+    // absence to schema-valid null (result-schema.js:75), never undefined.
     const legMeta2 = JSON.parse(fsReal.readFileSync(
       pathReal.join(project, '.claude', 'amicus_sessions', 'sess1234-2', 'metadata.json'), 'utf-8'));
     expect(legMeta2.status).toBe('complete');
@@ -641,6 +641,52 @@ describe('runFanout orchestrator', () => {
     expect(wave.legs[0].variant).toBe('low');
     expect(wave.legs[0].variantUnverified).toBe(true);
     expect('variant' in wave.legs[1]).toBe(false);
+  });
+
+  it('#257: a completed leg whose result carries promoted: true stamps promoted on the leg patch AND on the wave doc; a result without it stamps no key on either', async () => {
+    // BOTH hops, like the ttftMs sibling above — the leg document is written by
+    // `legPatch` (fanout-leg.js) and the wave doc's leg entry by a SECOND, separately
+    // enumerated literal (result-schema.js :: buildRunResult, which now spreads
+    // utils/leg-riders.js :: legRiders). Two writers, two named mutants:
+    //   LEGPROMOTEDDROPPED    drop the `promoted:` line from `legPatch`
+    //                         -> reds the metadata.json half.
+    //   WAVEPROMOTEDDROPPED   delete the `promoted` spread in src/utils/leg-riders.js
+    //                         -> reds the `wave.legs[0].promoted` half, which the
+    //                         metadata.json half cannot see (the leg patch is written
+    //                         first and is unaffected).
+    // Like its ttftMs sibling this pin mocks runHeadless, so it stays GREEN under the
+    // mint's own mutants (PROMOTEDDROPPED et al.); it pins the THREADING. GREEN-at-HEAD.
+    mockRunHeadless
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), promoted: true }))
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId)); // answered normally: nothing to promote
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'pro12345' });
+    const legMeta1 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'pro12345-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta1.promoted).toBe(true);
+    expect(wave.legs[0].promoted).toBe(true);
+    const legMeta2 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'pro12345-2', 'metadata.json'), 'utf-8'));
+    expect('promoted' in legMeta2).toBe(false);
+    expect('promoted' in wave.legs[1]).toBe(false);
+  });
+
+  it('#257: clearAttemptFields drops promoted before a substitute attempt', () => {
+    // Named mutant "SCRUBKEEPSPROMOTED": remove `'promoted'` from the scrub list in
+    // fanout-leg.js :: clearAttemptFields — a substitute that answers NORMALLY would then be
+    // credited with the dead attempt's promoted reasoning answer, the #251 item 1 carry again.
+    const { clearAttemptFields } = require('../../src/sidecar/fanout-leg');
+    const legDir = fsReal.mkdtempSync(pathReal.join(os.tmpdir(), 'amicus-scrub-'));
+    try {
+      fsReal.writeFileSync(pathReal.join(legDir, 'metadata.json'),
+        JSON.stringify({ taskId: 'w16-1', status: 'error', promoted: true, finish: 'length' }, null, 2));
+      clearAttemptFields(legDir);
+      const meta = JSON.parse(fsReal.readFileSync(pathReal.join(legDir, 'metadata.json'), 'utf-8'));
+      expect('promoted' in meta).toBe(false);
+      expect('finish' in meta).toBe(false); // control: the family it joins still goes
+      expect(meta.taskId).toBe('w16-1');    // only the per-attempt family goes
+    } finally {
+      fsReal.rmSync(legDir, { recursive: true, force: true });
+    }
   });
 
   it('one leg failing yields partial results, sibling summaries intact, exit 2', async () => {

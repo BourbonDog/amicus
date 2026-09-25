@@ -44,7 +44,7 @@ function writeLegPatch(legDir, patch) {
 /**
  * #251 item 1 (whole-branch review F3): before a SUBSTITUTED attempt re-runs in this leg dir, drop the dead
  * attempt's per-attempt fields, so a substitute that COMPLETES is not credited with the primary's `backstop`
- * record (a "saved leg" it was not), nor with its `finish`/`ttftMs`/`variant`/`variantUnverified`. Mirrors
+ * record (a "saved leg" it was not), nor with its `finish`/`ttftMs`/`variant`/`variantUnverified`/`promoted` (#257). Mirrors
  * `src/sidecar/resume.js :: updateSessionStatus`'s reopen deletes; writeLegPatch above drops only `undefined`
  * keys, so nothing else clears them here. Best-effort at BOTH ends (council #269 r1, D3): a missing,
  * unreadable OR unwritable metadata.json is left alone — this runs to tidy the NEXT attempt's document,
@@ -54,7 +54,7 @@ function writeLegPatch(legDir, patch) {
 function clearAttemptFields(legDir) {
   const metaPath = path.join(legDir, 'metadata.json'); let meta;
   try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { return; }
-  for (const k of ['backstop', 'finish', 'ttftMs', 'variant', 'variantUnverified']) { delete meta[k]; }
+  for (const k of ['backstop', 'finish', 'ttftMs', 'variant', 'variantUnverified', 'promoted']) { delete meta[k]; }
   try { writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 }); } catch { /* best-effort: the attempt's own patch follows */ }
 }
 
@@ -187,7 +187,7 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // runSingleAttempt against the SAME legId/legDir (fanout-leg-fallback.js
     // "SAME leg dir under the SAME legId"), and writeLegPatch's read-merge-
     // write only drops keys that are `undefined`, not ones explicitly set to
-    // `null`. This does not disagree with result-schema.js:72's
+    // `null`. This does not disagree with result-schema.js:75's
     // `metadata.opencodeSessionId || null` — that coercion runs downstream,
     // on the per-request OUTPUT run document, where run.schema.json requires
     // the field always present as string|null. The two layers do different
@@ -236,6 +236,9 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // #218 PR 3: the engine's `finish` for the leg's last assistant message
     // ('length' = stopped at the reservation), emit-when-set like ttftMs above.
     finish: (result && typeof result.finish === 'string') ? result.finish : undefined,
+    // #257: the engine answered only in its reasoning channel and the mirror promoted it — emit-when-true,
+    // like variantUnverified below. Named mutant "LEGPROMOTEDDROPPED" (tests/sidecar/fanout.test.js).
+    promoted: (result && result.promoted === true) ? true : undefined,
     // #251 item 1: the backstop's decision record (extended / at-cap / …), emit-when-valid. Named mutant "LEGBACKSTOPDROPPED" (tests/sidecar/fanout.test.js).
     backstop: (result && isBackstopRecord(result.backstop)) ? result.backstop : undefined,
     // #218 PR 4: the effort level SENT (emit-when-sent) and whether the engine's

@@ -149,13 +149,13 @@ function decorateRecord(record, debateFindings) {
 /**
  * runStats rows for the debate legs (spec §5.5), plus v4.7 D2/E4's row-per-launch extras: role is
  * 'rebuttal' | 'revote' for the primary defense/re-vote legs, 'superseded' for an original leg a
- * successful repair replaced, and 'repair' for a repair attempt that itself never became usable
+ * successful repair replaced, 'repair' for a repair attempt that itself never became usable, and — #257 R-X45 — 'relaunch' for such an attempt that was a RELAUNCH rather than a correction: the retry of a PROMOTED defence or re-vote, which carries the original briefing (R-X33), stamped from the normalized row's `relaunch` transport mark by `mk` below
  * (error status rides naturally off the raw leg). The rebuttal/revote legs never enter meta.models,
  * so the ledger stays one row per (run × model × resolvedModel) pair — a debate round can never ADD
  * a row (v4.8 PR4b: meta.models is still the row driver, and the pair fan-out only splits an alias
  * whose own joinable rows resolved differently). DEBATE_ROLES remains the debate-role vocabulary
- * (rebuttal/revote); the ledger's overwrite protection for ALL FOUR of these row-per-launch roles —
- * rebuttal, revote, superseded AND repair — lives in ledger.js's own LEDGER_JOIN_ROLES allowlist
+ * (rebuttal/revote); the ledger's overwrite protection for ALL FIVE of these row-per-launch roles —
+ * rebuttal, revote, superseded, repair AND relaunch — lives in ledger.js's own LEDGER_JOIN_ROLES allowlist
  * (v4.7 D4, Task 7): a role not named there never joins, full stop, regardless of which module
  * produced the row or whether it is even in DEBATE_ROLES.
  * @param {{defenseLegs: Array, revoteLegs: Array, supersededLegs?: Array,
@@ -168,7 +168,7 @@ function debateRunStatsRows({ defenseLegs, revoteLegs, supersededLegs, repairLeg
   // corrected in W14): `mk` hands the entry a SYNTHETIC leg of five fields plus three explicit params,
   // so seat/findingsUnverified/repairRefused/summary — and any future leg-sourced field — reach these
   // rows ONLY by widening THIS list. MEASURED, already shipped: W13's `ttftMs` rides the leg into the
-  // entry and debate rows do not carry it. Widening is a behaviour change needing its own pins; filed.
+  // entry and debate rows do not carry it. #257 R-X26: `promoted` is the ONE leg-sourced field `mk` DOES forward (widened below, emit-when-true, pin G1f) — a reasoning-only leg is the CAUSE of that row's `no-response`/unstructured outcome, which the row would otherwise hide. Every other field, `ttftMs` included, still needs its own decision and its own pins (G1e stays true and stays pinned).
   // ⚠️ The four lists hold NORMALIZED rows, not leg docs, and their model fields MIRROR the entry's
   // `leg` contract: `l.model` is the ALIAS and `l.resolvedModel` the executable id, where the entry
   // reads `leg.model` AS the resolved id and takes the alias as its own `model` — passing `l`
@@ -184,8 +184,9 @@ function debateRunStatsRows({ defenseLegs, revoteLegs, supersededLegs, repairLeg
   // in tests/council/runstats-byte-order.test.js.
   const mk = (role) => (l) => buildRunStatsEntry({
     leg: { status: l.status, durationMs: l.durationMs, usage: l.usage,
-      waveId: l.waveId, model: l.resolvedModel },
-    model: l.model, role, conformance: l.conformance });
+      waveId: l.waveId, model: l.resolvedModel, ...(l.promoted === true ? { promoted: true } : {}) }, // #257 R-X26 (named mutant "DEBATEROWPROMOTEDDROPPED")
+    // #257 R-X45: `relaunch` is a TRANSPORT mark on the normalized row (run-debate-revote.js :: legRow's 4th argument), never a field of the runStats row — a promoted defence's or re-vote's retry is a RELAUNCH (R-X33), so the row it leaves behind when it produces nothing usable says so instead of calling itself a correction. Emit-when-true; every unmarked row keeps its list's role, byte for byte (named mutant "DEBATERELAUNCHROLEREPAIR").
+    model: l.model, role: l.relaunch === true ? 'relaunch' : role, conformance: l.conformance });
   return [
     ...(defenseLegs || []).map(mk('rebuttal')),
     ...(revoteLegs || []).map(mk('revote')),

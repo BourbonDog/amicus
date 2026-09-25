@@ -194,6 +194,9 @@ describe('lostRowsOf — the rows the tally already knows (#242, spec §5)', () 
       // report's repair-refused rows must agree with `seatsReviewed.refused` on both.
       [seatRow('a', { conformance: 'unstructured', repairRefused: { code: 'C', detail: 'd' } })],
       [seatRow('a', { status: 'timeout', conformance: 'unstructured', repairRefused: { code: 'C', detail: 'd' } })],
+      // #257 (decision B): a completed leg promoted to output delivered no review — the census
+      // excludes it from `reviewed`, and it was never flagged, so it renders no row either.
+      [seatRow('a', { promoted: true })],
     ];
     for (const rows of shapes) {
       const key = JSON.stringify(rows.map(r => [r.role, r.status, r.findingsUnverified]));

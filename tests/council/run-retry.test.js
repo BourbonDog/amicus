@@ -1335,3 +1335,137 @@ describe('retryStage1Losses seat tools (spec 2026-09-11 §4, PR 2 review r1)', (
     expect(launchWave.mock.calls[0][0].prompt).toContain("You run as the engine's Plan agent");
   });
 });
+
+/**
+ * #257 — a promoted Stage-1 leg is no deliverable, and the retry says why.
+ *
+ * `materializeReviews` (run-launch.js) is the ONE gate: it rejects a leg
+ * carrying `promoted: true` even though the leg is `complete` and carries text,
+ * because that text is the model's reasoning, promoted to output when no answer
+ * text part arrived. Two consequences land in THIS module:
+ *
+ *   1. the first-failure record the retry mints carries the reasoning-channel
+ *      FACTS (`ff.promoted` = `promotedFacts(leg)`), so every announcement can
+ *      name the cause without re-reading the leg; and
+ *   2. run-retry.js:186's `usable` set is that same function over the RETRY
+ *      wave — so a retry leg that is itself promoted is still-dead, never healed.
+ */
+describe('#257 a promoted leg is retried once, and the notes name the reasoning channel', () => {
+  const CLAUSE = ' — it answered only in its reasoning channel '
+    + "(40332 reasoning / 1 output tokens, finish 'stop'), which is not a review";
+  // A real promoted leg document: `complete`, carrying its deliberation as text,
+  // with NO error at all — which is exactly why the pre-#257 prose was mute.
+  const promotedLeg = (m, waveId, slot) => ({
+    modelInput: m, status: 'complete',
+    summary: 'Let me carefully analyze the diff before I answer.',
+    promoted: true, finish: 'stop', usage: { tokens: { reasoning: 40332, output: 1 } },
+    ...(waveId != null ? { taskId: `${waveId}-${slot}`, waveId } : {}),
+  });
+
+  test('the heal note names the reasoning channel, and firstFailure carries the facts', async () => {
+    // retry roster (r1-s1r1): the one leg-origin loss ['a'] alone -> a=slot1.
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    const r = await retryStage1Losses(ctx, { deadWaves: [],
+      deadLegs: [promotedLeg('a', 'r1-s1', 1)], counts: COUNTS });
+    expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['a']);
+    expect(ctx._notes).toHaveLength(1);
+    expect(ctx._notes[0]).toMatchObject({ channel: 'stage1-retry', kind: 'heal',
+      what: 'seat a reviewed on retry',
+      why: `its first leg ended 'complete' with no usable output${CLAUSE} and was relaunched once`,
+      effect: 'The seat is in this council; nothing was lost' });
+    // The machine-readable half of the same fact, minted in run-retry-group.js.
+    expect(ctx._notes[0].data.firstFailure.promoted)
+      .toEqual({ reasoning: 40332, output: 1, finish: 'stop' });
+    expect(ctx._notes[0].data.firstFailure).toMatchObject({ seat: 'a', class: 'leg',
+      status: 'complete', reason: null });
+  });
+
+  test('a leg that is NOT promoted mints no `promoted` key and its heal text is byte-identical', async () => {
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    await retryStage1Losses(ctx, { deadWaves: [],
+      deadLegs: [deadLeg('a', undefined, undefined, 'r1-s1', 1)], counts: COUNTS });
+    expect(ctx._notes[0].why)
+      .toBe("its first leg ended 'error' with no usable output and was relaunched once");
+    // Emit-when-true: absent, never `promoted: null` or `false`.
+    expect('promoted' in ctx._notes[0].data.firstFailure).toBe(false);
+  });
+
+  test('a promoted RETRY leg is still-dead, never recovered — the usable set IS materializeReviews', async () => {
+    // retry roster (r1-s1r1): ['a'] alone -> slot1, and its retry answers in the
+    // reasoning channel too. Both halves of the still-dead why carry the clause.
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [promotedLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    const r = await retryStage1Losses(ctx, { deadWaves: [],
+      deadLegs: [promotedLeg('a', 'r1-s1', 1)], counts: COUNTS });
+    expect(r.recoveredLegs).toEqual([]);
+    expect(ctx._notes).toEqual([]); // this module never notes a degrade itself
+    expect(r.stillDeadRetryLegs.map(l => l.waveId)).toEqual(['r1-s1r1']);
+    expect(r.stillDeadNotes).toHaveLength(1);
+    expect(r.stillDeadNotes[0]).toMatchObject({ channel: 'dead-leg',
+      what: 'seat a did not review',
+      why: `the leg ended 'complete' with no usable output${CLAUSE}; `
+        + `its once-only retry also ended 'complete'${CLAUSE}` });
+  });
+});
+
+/**
+ * #257 R-X42 — the HEAL note's wave and missing arms bound their reason too.
+ *
+ * Council round 4 (run 35476684772), A1 (glm, Confirmed 3-0): the R-X38 sweep bounded
+ * the still-dead builders' leg arms and left the heal note — built inline in this
+ * module's orchestrator — interpolating `ff.reason` raw on both wave-origin arms. A
+ * heal is the note a user is MOST likely to read to the end, because it is the good
+ * news; a provider's ANSI-laden multi-line refusal reached it unfiltered.
+ *
+ * `boundReason` comes from run-retry-notes.js through the destructure this file already
+ * has, so there is ONE cap and one spelling. `data.firstFailure` keeps the RAW bytes.
+ *
+ * Named mutant "HEALARMRAW": restore `${ff.reason}` at run-retry.js:223.
+ */
+describe('#257 R-X42 the heal note bounds its reason on every arm', () => {
+  const { MAX_LEG_ERROR_CHARS } = require('../../src/council/run-retry-notes');
+  const ESC = String.fromCharCode(27);
+  const RAW = `${ESC}[31mPROVIDER_ERROR: upstream refused${ESC}[0m\nsecond line\n${'y'.repeat(900)}`;
+  const OK = `PROVIDER_ERROR: upstream refused second line ${'y'.repeat(754)}…`;
+
+  test('the fixture is hostile and the expectation is bounded (non-vacuity)', () => {
+    expect(RAW).toContain('\n');
+    expect(RAW).toContain(`${ESC}[`);
+    expect(OK).toHaveLength(MAX_LEG_ERROR_CHARS);
+  });
+
+  test('the WAVE arm: one bounded line in the why, the raw string on data.firstFailure', async () => {
+    // retry roster (r1-s1r1): the whole first wave died naming ['a'] alone -> a=slot1.
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['a'], reason: RAW }], deadLegs: [], counts: COUNTS });
+    expect(ctx._notes).toHaveLength(1);
+    expect(ctx._notes[0].why).toBe(`its first wave r1-s1 produced no legs (${OK}) and was relaunched once`);
+    expect(ctx._notes[0].why).not.toContain('\n');
+    expect(ctx._notes[0].why).not.toContain(ESC);
+    expect(ctx._notes[0].data.firstFailure.reason).toBe(RAW);
+  });
+
+  test('the MISSING arm: one bounded line in the why, the raw string on data.firstFailure', async () => {
+    // A `partial` dead wave is ONE seat of a wave that DID return legs, so
+    // run-retry-group.js :: lossClass mints `class: 'missing'` for it.
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['a'], reason: RAW, partial: true }],
+      deadLegs: [], counts: COUNTS });
+    expect(ctx._notes).toHaveLength(1);
+    expect(ctx._notes[0].why).toBe(`${OK} in wave r1-s1, and it was relaunched once`);
+    expect(ctx._notes[0].why).not.toContain('\n');
+    expect(ctx._notes[0].why).not.toContain(ESC);
+    expect(ctx._notes[0].data.firstFailure.reason).toBe(RAW);
+  });
+});

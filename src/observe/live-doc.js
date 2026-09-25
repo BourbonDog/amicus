@@ -29,7 +29,7 @@ const { resolveUsage, sumWaveUsage } = require('../utils/pricing');
 //                 over the stale progress.json snapshot" branch in council-legs.js :: buildLegRow
 //                 and reported an under-counted cost; and markLive kept stamping view:'live' on a
 //                 finished single-session doc.
-// NOTE this is deliberately NOT the same list as src/utils/result-schema.js:13 TERMINAL_STATUSES
+// NOTE this is deliberately NOT the same list as src/utils/result-schema.js:15 TERMINAL_STATUSES
 // (the leg set, no 'partial'). Two mirrors of THIS list exist — src/workspace/run-detail.js:26 and
 // electron/workspace-ui/live-model.js:14 — byte-identical, held by drift pins. Edit all three.
 const TERMINAL = new Set(['complete', 'partial', 'error', 'crashed', 'aborted', 'timeout', 'timed-out', 'idle-timeout']);
