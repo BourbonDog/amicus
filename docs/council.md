@@ -1422,8 +1422,8 @@ A leg can end `complete` and still deliver nothing a council can read. When the 
 message carries reasoning and **no text part**, the mirror promotes that reasoning into the leg's
 output — the leg ends `status: complete`, no error, with a finish other than `'length'` (typically
 `'stop'`, sometimes absent) — and its document carries
-`promoted: true` (emit-when-true: a leg with real answer text has no such key). Since the next
-minor after 4.13.0 that is not a review (#257): Stage 1 skips the leg instead of materializing it,
+`promoted: true` (emit-when-true: a leg with real answer text has no such key). Since
+4.14.0 that is not a review (#257): Stage 1 skips the leg instead of materializing it,
 so the seat takes the same once-only retry an empty leg takes, and a retry that answers the same
 way loses the seat — a dead-seat row keeping the leg's true `status: complete`, a `reviewed` count
 that excludes it, a `Notice:`, exit 2, and `seatLoss` when `--critic` was requested. Every announcement names the cause
