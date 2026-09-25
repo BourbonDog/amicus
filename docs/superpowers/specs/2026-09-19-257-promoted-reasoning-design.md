@@ -559,10 +559,13 @@ reservation (finish 'length') and only reasoning was streamed, no answer text �
 Output budget)`. 64,000 reasoning tokens and 0 output tokens against an `outputBudget` of 64,000:
 the whole reservation spent on deliberation, the `and only reasoning was streamed, no answer text`
 arm choosing itself over the no-output arm, and the counts carried because the provider reported
-them — exactly the shape #257 exists for, on the run reviewing #257. The once-only Stage-1 retry
-healed it (`stage1-retry`, `seat deepseek reviewed on retry`, `retryWaveId 9efa78dd-s1r1`), no seat
-was lost and the run exited 0. That seat's findings then came through one `-p1` repair, which is
-why `seatsReviewed.unverified` is 1.
+them — #218's shape, a death this spec's R12 leaves unclassified. Its retry `9efa78dd-s1r1` is the
+shape #257 exists for, on the run reviewing #257: `complete`, finish `stop`, 4,095 reasoning / 3
+output tokens, and `review-deepseek.md` is that leg's deliberation, cut off mid-sentence with no
+findings block. The released once-only retry counted it as a heal (`stage1-retry`, `seat deepseek
+reviewed on retry`), no seat was lost and the run exited 0, and one `-p1` repair turned the
+deliberation into D1–D3, which is why `seatsReviewed.unverified` is 1. Under this branch that leg
+carries `promoted: true`, `materializeReviews` skips it, the seat is lost and the run exits 2.
 
 **10 findings** (glm A1–A3, qwen B1–B2, gpt C1–C2, deepseek D1–D3): **9 Confirmed, 1 Contested
 (D2)** — C1, C2 and D1 major; A1, A2, B1, B2, D2, D3 minor; A3 a nit.
