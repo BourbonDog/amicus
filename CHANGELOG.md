@@ -3,6 +3,19 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **Three moderate `hono` advisories in the published dependency tree.** `hono` reaches it through
+  `@modelcontextprotocol/sdk` (directly and through `@hono/node-server`), and 4.13.0 sat inside all
+  three advisories' ranges: GHSA-g6gw-c38x-mqfc (unbounded dot-notation nesting in `parseBody()` can
+  exhaust memory), GHSA-crvj-82cr-hjcx (the query parser reads parameters after the URL fragment) and
+  GHSA-gqvv-2mrq-wpjv (an incomplete fix for `toSSG()` writing outside its output directory). Fixed by
+  a targeted update of that one package from 4.13.0 to 4.13.9, one lockfile entry, inside the SDK's
+  `^4.11.4` range. `npm audit --omit=dev` now reports only `extract-zip`, which still has no fixed
+  version at any release (see 4.9.5).
+
 ## [4.14.0] - 2026-09-25
 
 ### Changed
