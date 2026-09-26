@@ -32,7 +32,7 @@
  * the shipping function, not replicated by hand. The `chat` case uses the same
  * literal opencode-client.js:637-646 builds. `plan`/`build` are the engine's.
  *
- * Usage: node scripts/probe-agent-wire.js [--out read-B/wire-capture.json] [--only A1,A4]
+ * Usage: node scripts/probe-agent-wire.js [--out docs/probes/read-B/wire-capture.json] [--only A1,A4]
  * One line per case: `id — agent — tools: N — tool_choice — system chars`.
  */
 
@@ -63,7 +63,7 @@ function runOuter(args) {
     const innerArgs = [...args];
     const outIdx = innerArgs.indexOf('--out');
     if (outIdx >= 0 && innerArgs[outIdx + 1]) { innerArgs[outIdx + 1] = path.resolve(innerArgs[outIdx + 1]); }
-    else { innerArgs.push('--out', path.resolve('read-B', 'wire-capture.json')); }
+    else { innerArgs.push('--out', path.resolve('docs', 'probes', 'read-B', 'wire-capture.json')); }
     const result = spawnSync(process.execPath, [__filename, INNER, ...innerArgs],
       { env, stdio: 'inherit', cwd: projectDir });
     if (result.error) { process.stderr.write(`probe: inner run failed to launch: ${result.error.message}\n`); return 1; }

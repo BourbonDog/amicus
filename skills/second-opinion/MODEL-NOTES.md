@@ -4,9 +4,12 @@ This file is the `second-opinion` skill's evolving memory of **how to actually d
 well**. Read it before Stage 0 (council selection and launch); update it, with the user's
 approval, at the end of each run (Stage 6). Keep it tight — merge and prune rather than append.
 
-_Last updated: 2026-09-18 (the once-only extension, #251 item 1 — the backstop now reads
-`session.status` at its deadline and buys a busy session one more window; four stale line citations
-in the `NO_OUTPUT_BACKSTOP` bullet re-anchored to symbols). Prior: 2026-09-16 (the
+_Last updated: 2026-09-25 (the #135 record — the CI egress's first-token ranges, the busy tail,
+the input-size refutation, the single-upstream pin result — and the promoted-reasoning rule as
+4.14.0 ships it, #257; per-model CI notes for glm, qwen, deepseek and gpt). Prior: 2026-09-18 (the
+once-only extension, #251 item 1 — the backstop now reads `session.status` at its deadline and buys
+a busy session one more window; four stale line citations in the `NO_OUTPUT_BACKSTOP` bullet
+re-anchored to symbols); 2026-09-16 (the
 `NO_OUTPUT_BACKSTOP` global-rule and kimi-section bullets corrected —
 300s default, not 120s; the retry escalation formula; the tool-call disarm; `ttftMs` as the disarm
 moment; see changelog, #245); 2026-08-25 (per-section fold-back, both directions — the
@@ -97,6 +100,36 @@ peer-consensus≠evidence rule upstreamed)._
     every leg in the process, so raising it loses the genuine dead-endpoint fast-fail for the whole
     bench.
   Originally filed upstream as BourbonDog/amicus#129; corrected under #245.
+- **First-token time on the CI egress (one OpenRouter key, concurrent legs) is continuous and
+  wide, and input size does not drive it — size a window from `ttftMs`, never from the briefing
+  (the #135 record, closed at v4.13.0).** Measured on three CI rounds: gpt 8–18 s, the gemini-pro
+  chair 14–18 s, deepseek 34–260 s, qwen 80–275 s, glm 157–411 s, with no gap in the sequence; a
+  411 s first token still completed. Across 27 local artifact sets (295 legs) first-token time
+  grows ~1.6 ms per input token pooled (~0.17 ms on Stage-1 first attempts), so an input-derived
+  window never binds against the 480 s floor — shrink a briefing for quality, never to buy a seat
+  time.
+  - **The tail is a busy provider stream.** On 4.12.0 every backstop kill read `(session: busy)` —
+    8 of 8 across four CI rounds — and the once-only retry healed most of them, with first tokens
+    that vary widely for the same seat under the same briefing shape (qwen 402 s and 154 s on the
+    same day; 503 s once, saved only by the 912 s retry window). That is the case the once-only
+    extension in the bullet above answers.
+  - **A single-upstream pin does not remove it.** qwen pinned to one OpenRouter upstream (`reka`)
+    for two rounds was served by it and still lost 3 of 5 pinned legs at the backstop; the CI pin
+    channel ships blank. A pin buys attribution, not speed.
+- **A seat that answers only in its reasoning channel has delivered nothing — since 4.14.0 the
+  council treats it that way (#257).** When the engine's last message carries reasoning and no
+  text, the mirror promotes the reasoning to `output` and the leg document says `promoted: true`;
+  a solo `amicus start` still prints it as the answer. A council never adjudicates it: a promoted
+  Stage-1 review fires the once-only retry, and a seat whose retry repeats it is lost (a `Notice:`
+  names the cause; exit 2); a promoted judge, defence or re-vote is relaunched once with its
+  original briefing, never repaired against its deliberation; a promoted chair is handled as a
+  chair with no output. Before 4.14.0 it was adjudicated as a review: once in three CI rounds the
+  qwen seat answered with 40,332 reasoning tokens and 1 output token, the 149 KB deliberation
+  became 92 % of the Stage-2 bundle, and three of four judges died on it. A seat that does this on
+  every call loses every council it sits on — re-seat it. On the manual path (`fanout`, solo legs)
+  read `promoted` on the leg document before bundling a review; a build older than 4.14.0 sets no
+  flag, and there a `review-<seat>.md` that opens in the first person with no fenced block is this
+  case — keep it out of any bundle you assemble.
 - **Transient provider errors** (502s, connection drops): re-run the affected leg (solo
   `amicus start --json`, same briefing file) or the wave — see per-model notes for
   model-specific signals. Never present a half-finished run as an answer.
@@ -271,6 +304,13 @@ peer-consensus≠evidence rule upstreamed)._
 - **Stub-on-fanout / clean-on-solo-retry:** its Stage-1 fanout leg has returned a sub-100-char
   narration stub despite the anti-narration preamble, then produced a full review on a plain solo
   retry with the identical briefing — retry solo before substituting the model.
+- **On the CI bench: first token 34–260 s, and with glm the seat most often killed as a JUDGE at
+  the 480 s wall** — judges get no retry (the 4.13.0 once-only extension is their only second
+  window), so a deepseek judge lost at the backstop is a lost adjudication, not a delay. Its
+  Stage-1 retries heal (retry first tokens of 282 s, 388 s and 133 s observed). It has also
+  answered once entirely in its reasoning channel, on a Stage-1 retry on
+  `openrouter/deepseek/deepseek-v4-flash-0731` (4,095 reasoning / 3 output tokens) — the #257 case
+  is not a qwen quirk.
 
 ### GPT  (`--model gpt` → via OpenRouter)
 - **Strengths:** reachable via the OpenRouter key; resilient; very thorough structured critique
@@ -287,6 +327,11 @@ peer-consensus≠evidence rule upstreamed)._
   couple of findings against peers' 8 — both real, both confirmed, so this is shallow rather than
   wrong; its lifetime confirm-rate held. Put a slower, deeper model on coverage and let gpt anchor
   calibration on artifacts like this.
+- **The one fast seat on the CI egress:** 8–35 s first token in every measured round while its
+  peers sat 100–400 s out; in those rounds it never narrated and never died at the backstop (its
+  one loss was a credit refusal, a different class). When a round loses judges to the wall, gpt is
+  usually the judge that survived — read a gpt-only adjudication as `thin-cross-review`, not as
+  consensus.
 
 ### Grok  (`--model grok` → via OpenRouter)
 - Very fast legs; credible judge and chair (rejected its own weak findings as chair; honest blind self-rank).
@@ -373,6 +418,11 @@ peer-consensus≠evidence rule upstreamed)._
 - **First use as chair was clean and notably good:** recognized when two surviving reviews had
   split the labor rather than duplicated it and synthesized across that seam instead of flattening
   it. A viable chair candidate alongside deepseek.
+- **Slowest first token on the CI egress:** 157–411 s measured, 468 s once (12 s from the 480 s
+  line), and a 411 s first token still completed. Its Stage-1 first attempt has died at the wall
+  and healed on the once-only retry more than once (retry first tokens of 28 s and 34 s). Size a
+  window from glm's `ttftMs`, not gpt's. As a judge it has answered entirely in its reasoning
+  channel (0 output tokens) — 4.14.0 relaunches such a judge rather than using it.
 
 ### Qwen  (`--model qwen` → qwen3.8-max via OpenRouter; distinct from `qwen-coder`)
 - Very large context (1M tokens per catalog). As a red-team substitute it has produced a thorough,
@@ -389,6 +439,12 @@ peer-consensus≠evidence rule upstreamed)._
   agentic file reads) it has tied for most findings on the bench and ranked #2 by every judge —
   the counterpart to the multi-file-read stalls above. Seat qwen for inlined verification-
   scaffolding review; keep it off agentic multi-file reads.
+- **On the CI bench's qwen seat** (a different model: `openrouter/qwen/qwen3.8-27b` since
+  2026-08-27): first token 80–275 s, with same-day swings of 402 s against 154 s and one retry
+  saved only by the 912 s window, at 503 s; and once in three rounds an answer entirely in its
+  reasoning channel (40,332 reasoning / 1 output tokens) — the #257 case, which 4.14.0 retries
+  instead of adjudicating. Pinning it to one upstream (`reka`) served the model and did not remove
+  the first-token tail (3 of 5 pinned legs failed).
 
 ### minimax  (`--model minimax` → minimax-m2.7 via OpenRouter)
 - Fast (~2 min review legs), cheap, `clean` findings-JSON conformance on debut.
@@ -526,3 +582,11 @@ This section keeps only per-model **qualitative quirks** and **structural-confor
   `runStats` allowlist correction to the spend-tracking rule (the local copy's v4.6
   judge-exclusion description was superseded). No client/engagement material, run identifiers, or
   dollar figures carried over.
+- **2026-09-25 (v4.14.0; #135 closed at v4.13.0)** — The #135 record folded in: the CI egress's
+  per-seat first-token ranges (continuous, gpt 8–18 s … glm 157–411 s), the input-size refutation
+  (~1.6 ms per input token pooled), the `(session: busy)` tail that the 4.13.0 once-only extension
+  answers, and the single-upstream pin result (it serves the model and does not remove the tail).
+  The promoted-reasoning class as 4.14.0 handles it (#257): no deliverable, retried or relaunched,
+  never adjudicated. Per-model: glm's slowest first token, qwen's CI seat, deepseek as a judge the
+  wall kills and a second reasoning-only seat, gpt as the one fast seat. No run identifiers or
+  dollar figures carried in.

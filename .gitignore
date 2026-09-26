@@ -82,10 +82,11 @@ test_output*.txt
 # on the next incremental rebuild). Deleting this directory is not free.
 graphify-out/
 
-# Wave 3.0 Read D probe output: the DIGESTS beside the two probe scripts are
-# committed (read-D/*-digest.json, a few KB each); the full request/response
-# captures they are derived from are ~1 MB each and live only in the evidence
-# store under .superpowers/. This line keeps one from ever landing here if a
-# probe is run with --out pointing at the repo.
-read-D/*-capture.json
-read-D/wire64k.json
+# Wire-probe records: probe-agent-wire, probe-provider-routing, probe-shared-server
+# and probe-wire-64k write their full request/response capture under
+# docs/probes/<probe>/ by default, with a -digest.json beside it. The DIGESTS are
+# committed (a few KB each); the captures are ~1 MB each, regenerable, and live
+# only in the evidence store under .superpowers/. These two lines keep a capture
+# from ever landing here.
+/docs/probes/**/*.json
+!/docs/probes/**/*-digest.json

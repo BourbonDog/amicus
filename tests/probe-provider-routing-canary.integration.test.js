@@ -41,9 +41,9 @@
  * ~6 s measured here. Integration tier: CI's keyless job runs it on every push.
  *
  * `--out` is redirected into a temp directory ON PURPOSE. The probe's default is
- * `probe-3/wire-capture.json`, and it writes a `-digest.json` beside whatever it
- * is given — `probe-3/wire-capture-digest.json` is a TRACKED record of the full
- * 15-case matrix, and a 2-case run must never overwrite it.
+ * `docs/probes/probe-3/wire-capture.json`, and it writes a `-digest.json` beside
+ * whatever it is given — `docs/probes/probe-3/wire-capture-digest.json` is a TRACKED
+ * record of the full 15-case matrix, and a 2-case run must never overwrite it.
  */
 
 const fs = require('fs');

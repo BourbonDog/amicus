@@ -26,7 +26,7 @@
  * discipline all come from scripts/probe-sandbox.js (itself the #218 harness).
  * The provider is a local capture server; nothing paid is reachable.
  *
- * Usage: node scripts/probe-shared-server.js [--out read-D/r1-capture.json]
+ * Usage: node scripts/probe-shared-server.js [--out docs/probes/read-D/r1-capture.json]
  *          [--hold-ms 90000] [--arms A,B,C,D3]
  */
 
@@ -228,5 +228,5 @@ async function main() {
 if (process.argv.slice(2).includes(sb.INNER)) {
   main().catch((err) => { process.stderr.write(`probe failed: ${err.stack || err.message}\n`); process.exit(1); });
 } else {
-  process.exit(sb.runOuter(__filename, process.argv.slice(2), path.resolve('read-D', 'r1-capture.json')));
+  process.exit(sb.runOuter(__filename, process.argv.slice(2), path.resolve('docs', 'probes', 'read-D', 'r1-capture.json')));
 }

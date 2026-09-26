@@ -23,7 +23,7 @@
  * undefined, HOME is a probe sandbox and cwd is inside it. `apiKey: 'probe-key'`
  * is defence in depth: the provider points at a local capture server, so nothing
  * leaves the box. R11-R15 write `opencode.json` inside that sandbox cwd only.
- * Usage: node scripts/probe-provider-routing.js [--out probe-3/wire-capture.json] [--only R1,R3]
+ * Usage: node scripts/probe-provider-routing.js [--out docs/probes/probe-3/wire-capture.json] [--only R1,R3]
  * One line per case: `case id — path — carried: yes/no — shape`.
  */
 
@@ -57,7 +57,7 @@ function runOuter(args) {
     const innerArgs = [...args];
     const outIdx = innerArgs.indexOf('--out');
     if (outIdx >= 0 && innerArgs[outIdx + 1]) { innerArgs[outIdx + 1] = path.resolve(innerArgs[outIdx + 1]); }
-    else { innerArgs.push('--out', path.resolve('probe-3', 'wire-capture.json')); }
+    else { innerArgs.push('--out', path.resolve('docs', 'probes', 'probe-3', 'wire-capture.json')); }
     const result = spawnSync(process.execPath, [__filename, INNER, ...innerArgs],
       { env, stdio: 'inherit', cwd: projectDir });
     if (result.error) { process.stderr.write(`probe: inner run failed to launch: ${result.error.message}\n`); return 1; }

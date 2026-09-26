@@ -8764,10 +8764,12 @@ merged on an in-branch review at the owner's call). Left open, in the order the 
   (today one Notice per converted key — three on the owner's own config at the cut).
 - [ ] `amicus aliases` list: ids longer than the 44-column pad (the 67-char
   `dolphin-mistral-24b-venice-edition`) push the state column right; cosmetic.
-- [ ] Prod audit at the cut (`npm audit --omit=dev`, unchanged since v4.9.8's lock): `extract-zip`
+- [x] Prod audit at the cut (`npm audit --omit=dev`, unchanged since v4.9.8's lock): `extract-zip`
   (high, no fix; amicus's own Electron extraction refuses symlink/traversal entries in
   `electron-refuse.js`) and `hono ≤4.13.4` (moderate, fix available) — take the hono bump in a
-  reviewed PR, not at a cut.
+  reviewed PR, not at a cut. — hono DONE 2026-09-25: PR #271 (council round 1, "Ship it") moved
+  the lockfile to 4.13.9, merged as fd7bbe22; it ships in the next release. `extract-zip` stays
+  accepted: 2.0.1 is its latest release and no version fixes it.
 
 ## Council infrastructure — observed on PR #250's two rounds (2026-09-15)
 
@@ -8792,7 +8794,8 @@ session status before the backstop kills; size the Stage-1 window to the briefin
   Candidate: the chair packet carries each finding's computed tier and raiser severity, and the
   synthesis prompt forbids re-tiering (it may argue, not relabel); `report.html` should render the
   tally's tier beside the chair's sentence so a mismatch is visible. Evidence: runs 34931984881
-  and 34969014154, `chair-output.md` vs `verdict.json.findings[].tier`.
+  and 34969014154, `chair-output.md` vs `verdict.json.findings[].tier`. → FILED as #259
+  (2026-09-16); it rides the Cluster B PR (the policy item in the v4.9.8 section above).
 
 ## v4.11.0 cut — #238 Phases 2–4 dispositions (2026-09-16)
 
@@ -8855,10 +8858,11 @@ processed (rulings R-P4-1..22 in the committed plan). Parked at the cut, one lin
   as PR #255 (d3f579ac, test-only, no council label at the owner's call): the walker reads through
   `readIfPresent` like the four before it, the helper's caller registry counts five, and a scratch
   `setupFiles` injector reproduced the exact ENOENT at `:322` before the fix.
-- [ ] Prod audit at the cut (`npm audit --omit=dev`): the lockfile is unchanged since v4.9.8
+- [x] Prod audit at the cut (`npm audit --omit=dev`): the lockfile is unchanged since v4.9.8
   except the version pin, so the same two advisories ship — `extract-zip` (high, no fix; the
   in-house extraction refuses symlink/traversal entries) and `hono ≤4.13.4` (moderate, fix
-  available). Take the hono bump in a reviewed PR, not at a cut.
+  available). Take the hono bump in a reviewed PR, not at a cut. — hono DONE 2026-09-25 in PR
+  #271 (see the v4.10.0 cut entry above); `extract-zip` unchanged.
 
 ## Wave 1 — open-issues review dispositions (2026-09-16/17)
 
@@ -8893,7 +8897,9 @@ waiver) and merged on the owner's in-branch call after verified fix waves:
   seams where engine prose becomes a death reason, with a perimeter test enumerating the seams.
   ⚠️ INERT until a release ships the module (the workflow loads it from the global install by
   design) — at the next cut, read the first post-release council run's step log for the
-  `OpenRouter key limit ok` notice.
+  `OpenRouter key limit ok` notice. ✅ SEEN on 4.12.0: #266 round 2, the first published-build
+  round, printed it — the notice's real wording is `OpenRouter credit ok` (see #266's frequency
+  record below).
 
 Deferred by the reviews — one line each, none blocks anything:
 
@@ -8969,7 +8975,8 @@ measured. Shipped on the back of them:
 
 - #265 — `scripts/probe-provider-routing.js` + `probe-3/wire-capture-digest.json`: a keyless probe
   that shows what `provider.openrouter.models.<id>.options.provider` puts on the wire. No council
-  round (probe script only, owner's call).
+  round (probe script only, owner's call). The digest moved to `docs/probes/probe-3/` on
+  2026-09-25 (the post-ship batch at the end of this file).
 - **v4.12.0** (2026-09-18; window v4.11.0 → #265). Ships #263's `(session: …)` clause, #264's
   credit preflight, #260–#262. The #263 CHANGELOG bullet was corrected at the window sweep: the
   released formatter had been reading an SDK **map keyed by session id** as if it were a status
@@ -8983,7 +8990,9 @@ measured. Shipped on the back of them:
   finding fixed or refuted with evidence; merged on the in-branch reviews.
 - #267 filed — the hidden title-generation request (below). #268 open, unlabelled — the Wave 3.0
   probe scripts (`probe-agent-wire.js`, `probe-shared-server.js`, `probe-wire-64k.js`,
-  `probe-sandbox.js`, `probe-session-obs.js`) and digests; the same class as #265.
+  `probe-sandbox.js`, `probe-session-obs.js`) and digests; the same class as #265. #268 MERGED
+  2026-09-18 as a74ed58c (no council round, like #265); its two digests moved from a root-level
+  `read-D/` to `docs/probes/read-D/` on 2026-09-25.
 
 **Records — measured, for the next person to read before designing against #251 / #202**
 - **`k × input` never binds.** 27 local artifact sets, 295 legs, 57 backstop kills: TTFT slope
@@ -9038,7 +9047,9 @@ measured. Shipped on the back of them:
 Deferred — one line each, none blocks anything:
 
 **Council leg lifecycle**
-- [ ] #251 item 1 — build it as specified above; it is the first change the busy clause unlocks.
+- [x] #251 item 1 — build it as specified above; it is the first change the busy clause unlocks.
+  SHIPPED in v4.13.0: PR #269, merged 2026-09-18 as a1c7326f; its own filings are the next
+  section.
 - [ ] Two post-boundary **repair-solo** deaths carry an EMPTY `deathReason` (55 of 57 kills carry a
   reason string) — a surface gap of the #251-item-3 class; name the cause on that path.
 - [ ] #267 — reconcile the OpenRouter dashboard against `spend-ledger.jsonl` for one known round
@@ -9061,7 +9072,8 @@ Deferred — one line each, none blocks anything:
 - [ ] The 27-set corpus behind every number above is local-only
   (`.superpowers/sdd/2026-09-17-wave2-probes/probe-4/legs.tsv`, 295 rows, + `rounds.tsv`) in a
   gitignored directory, and the CI artifacts it was built from expire. Archive both files under
-  `docs/` or a data branch before the next boundary question needs them.
+  `docs/` or a data branch before the next boundary question needs them. (2026-09-25:
+  `docs/probes/` now exists as the home for probe records — see the post-ship batch at the end.)
 
 **Council infrastructure — frequency record, #266's three rounds (continues the Wave 1 record)**
 - r1 (4.11.0, $0.41): qwen, pinned to reka, died at 480,637 ms and 913,975 ms → seat lost;
@@ -9262,3 +9274,22 @@ Council round 6 (run 36150179459) reviewed the final head `be0c78bd`. The owner'
 - [ ] #257 (council r6 A3) — a stood-down `judge-reasoning-only` record omits `relaunchWaveId` even when the relaunch ran; R-X45 set it on the rescued arm only.
 - [ ] #257 (council r6 D4, reported, not yet measured) — `src/utils/leg-riders.js`'s docblock gives the leg document's rider key order as `ttftMs, finish, variant, variantUnverified, backstop, promoted`, while `src/headless.js`'s terminal return is reported to spread `backstop` before `finish`. Measure, then reconcile the docblock or the order.
 - [ ] #257 / #218 (council r6, observed) — glm's Stage-2 judge leg in run 36150179459 finished `length` with 64,002 reasoning and 0 output tokens and still ended `status: complete` under 4.13.0, instead of dying `OUTPUT_LENGTH`. Its reasoning, promoted by the mirror, was repaired into 20 adjudications. From 4.14.0 such a leg is promoted and the judge is relaunched, but why #218's `OUTPUT_LENGTH` classification did not fire for a `length` finish with no text is unexplained. Investigate before relying on that classification for judge legs.
+
+## Post-ship batch (2026-09-25)
+
+One commit on main after v4.14.0 and the #271 merge. Recorded so nobody re-derives it:
+
+- **Probe records have one home: `docs/probes/<probe>/`.** #265 and #268 committed their digests
+  in root-level `probe-3/` and `read-D/` because each wire probe's default `--out` was a root-level
+  path; #268's `.gitignore` rewrite also dropped the line that kept probe 3's 1.4 MB raw capture
+  out, and `probe-agent-wire.js`'s `read-B/` capture was never ignored. The three digests moved
+  (`git mv`, content unchanged), the four scripts' default `--out` moved with them, and one rule
+  pair covers every capture: `/docs/probes/**/*.json` is ignored, `!/docs/probes/**/*-digest.json`
+  is kept. `docs/probes/` does not ship (`files` takes `docs/*.md` only).
+- **The #135 record reached the shipped `MODEL-NOTES.md` seed**, with #257's rule written as 4.14.0
+  ships it rather than as the interim manual rule the #135 closing comment promised "until #257
+  lands" (it landed first). Machine-local copies are never overwritten: `src/utils/claude-register.js`
+  installs the seed `if-missing`.
+- The `[Unreleased]` hono bullet in `CHANGELOG.md` now says what the reply to PR #271's council
+  round promised (D2): the repository's locked production tree, not the published one, and
+  `extract-zip`'s status in its own words.

@@ -30,7 +30,7 @@
  * Zero spend, no keys: sandbox, capture server and flag discipline all come from
  * scripts/probe-sandbox.js (the #218 harness). The provider is local.
  *
- * Usage: node scripts/probe-wire-64k.js [--out read-D/wire64k.json] [--only D2-4]
+ * Usage: node scripts/probe-wire-64k.js [--out docs/probes/read-D/wire64k.json] [--only D2-4]
  */
 
 'use strict';
@@ -203,5 +203,5 @@ async function main() {
 if (process.argv.slice(2).includes(sb.INNER)) {
   main().catch((err) => { process.stderr.write(`probe failed: ${err.stack || err.message}\n`); process.exit(1); });
 } else {
-  process.exit(sb.runOuter(__filename, process.argv.slice(2), path.resolve('read-D', 'wire64k.json')));
+  process.exit(sb.runOuter(__filename, process.argv.slice(2), path.resolve('docs', 'probes', 'read-D', 'wire64k.json')));
 }
