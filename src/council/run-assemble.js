@@ -37,7 +37,7 @@ const { writeVerdictFiles } = require('./run-verdict-files');
 // survives the move untouched.
 const { buildRunStatsEntry } = require('./run-stats-entry');
 
-const CONFORMANCE_RANK = { clean: 0, repaired: 1, unstructured: 2 };
+const CONFORMANCE_RANK = { none: -1, clean: 0, repaired: 1, unstructured: 2 }; // #244: none = no ask was checked; ranks BELOW clean so it never wins a merge (ledger.test.js T13d)
 
 /** v4.1 §4.4: the reserved seat name for the file-sourced Claude review. */
 const CLAUDE_SEAT = 'claude';

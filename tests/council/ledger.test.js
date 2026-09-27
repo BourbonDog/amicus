@@ -1341,6 +1341,25 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     expect(rows[0].conformance).toBe('weird');   // a 'clean' seed would rewrite it
   });
 
+  test('T13d — none (#244: no checked output) ranks BELOW clean in both tables, so a real value wins from either position', () => {
+    // An unknown value ranks 0 and survives in position 0 (T13c), so without its own rank a
+    // dead twin listed first would fold a model's ledger row to none although its other twin
+    // reviewed cleanly. Named mutants: NONERANKLEDGER (delete `none: -1` from ledger.js) and
+    // NONERANKASM (delete it from run-assemble.js) each red this test, and T13a's table
+    // equality, on their own.
+    expect([CONFORMANCE_RANK.none, ASM_CONFORMANCE_RANK.none]).toEqual([-1, -1]);
+    for (const merge of [mergeConformance, worseConformance]) {
+      expect([merge('none', 'clean'), merge('clean', 'none')]).toEqual(['clean', 'clean']);
+      expect([merge('none', 'repaired'), merge('unstructured', 'none')]).toEqual(['repaired', 'unstructured']);
+      expect(merge('none', 'none')).toBe('none');
+    }
+    const row = (conformance) => rsRow({ model: 'alpha', conformance, resolvedModel: 'v/a',
+      status: conformance === 'none' ? 'error' : 'complete' });
+    const fold = (a, b) => buildLedgerRows(rec({ models: ['alpha'], runStats: [row(a), row(b)] }))[0].conformance;
+    expect([fold('none', 'clean'), fold('clean', 'none')]).toEqual(['clean', 'clean']);
+    expect(fold('none', 'none')).toBe('none');
+  });
+
   // ⚠️ REPLACED at v4.8 T3.3 — SI-17's normalise, owner ruling R4. This test
   // WAS the BACKLOG's "today's answer, T14": keep accepting chair-on-bench with
   // the accidental merge documented. R4 rules against that answer, so the pin
