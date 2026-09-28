@@ -9293,3 +9293,214 @@ One commit on main after v4.14.0 and the #271 merge. Recorded so nobody re-deriv
 - The `[Unreleased]` hono bullet in `CHANGELOG.md` now says what the reply to PR #271's council
   round promised (D2): the repository's locked production tree, not the published one, and
   `extract-zip`'s status in its own words.
+
+## Dispositions recorded at the 2026-09-27 consolidation
+
+This file was frozen at `8e08a63d` on 2026-09-27: every line above this section is the old `BACKLOG.md`, byte for byte.
+Its line numbers are the old BACKLOG.md line numbers, so every `L<n>` and `BACKLOG.md:<n>` citation into it still resolves.
+`BACKLOG.md` is the live list now; this file changes only by appending dispositions like these.
+
+**Cluster B rulings (owner, 2026-09-27)**
+
+- L8721, "should an unverified or refused MAJORITY degrade the run?" (exit 2) — SUPERSEDED, no exit-code change: the seat census, the report rows, the CI title and the end-of-run stderr line already carry the signal, and `unverified-repair` / `repair-refused` stay render-time rows that never flip the exit code (src/utils/degrade.js:52-59). This replaces the owner's 2026-09-16 ruling recorded at L8721.
+- #242 item 3, vacuity grading (named inside L8721) — REFUSED, no code: the unverified row names the seat, a seat with no findings has no findings rows, and the token heuristic has no measured threshold. #242 stays open for item 1, the write-back (`#242-1` in BACKLOG.md).
+- L8790, #259 (the chair's prose re-tiers findings) — CLOSED, no code: the CI comment's tier lists and the report already carry the tally's tiers, and its Ask 2 named report.html, which never renders the chair's prose (src/council/briefings-chair.js:164-250).
+- L8943, #256 Ask item 3 (a provider-refusal class in the census) — REFUSED, no code: the dead-seat notice already quotes the provider's refusal verbatim, and the #264 CI preflight addresses the root (`seatsReviewed.refused` counts refused repairs: src/council/verdict-seats-reviewed.js:85-89, :122). Not covered: a refusal that arrives after the leg produced output (N-01 in BACKLOG.md).
+- #244's dead-row `conformance: clean` residue (named inside L8721) — IN PROGRESS on branch `fix/244-conformance-none`, as a fourth value, `none`: refused legs' runStats rows read `status:"error"`, `conformance:"clean"` (the refusal survey, §3a).
+
+**Closed at this consolidation**
+
+The audit's CLOSE list, copied verbatim (§9 of the consolidation proposal; a two-line entry is joined onto one line): 141 rows from the eight slice audits, grouped by slice, one line each as `L<n> item — VERDICT: evidence`. DONE and DROP rows carry the evidence the slice cited. RECORD rows are rulings, holds or accepted limits: not work, and kept findable. MERGED rows are twins whose target is closed or is a record.
+
+**Slice 1 (23 rows)**
+- L45 BL-7 per-run fold nonce — DONE: 8ab75948; src/utils/fold-marker.js:25; src/headless.js:532-537.
+- L104 H9 fence tally/verdict — DONE: 8b4e2298; src/mcp-server.js:1494-1497, :1523; tests/mcp-server.test.js:2374.
+- L355 divergence check in the canonical default — DONE: #214, eb6c1e68; src/utils/model-canonicalization.js:27-31; .eslintrc.js:23-33.
+- L442 CA-4 runStats omits judges/solos/chairs — DONE: PR #115 (8c960d00), 5cbd8ecf; src/council/run-assemble.js:225-229.
+- L442 LC-5 chair fallback leaves no trace — DONE: d6c57de5 (PR #105); src/council/run-chair.js:72-91.
+- L442 RN-1 `sanitizeName` collisions — DONE: 36516fa8, 588b00a9; src/workspace/artifact-names.js:67-88.
+- L442 RN-5 blind-mode flip repaints twice — DONE: 73850c73, 079e761d; electron/workspace-ui/workspace-app.js:130-135.
+- L443 RN-11 `renderSeats` never reorders — DONE: b68ad6e8; electron/workspace-ui/workspace-render.js:217-229.
+- L443 TST-2 `lens:<slug>` coverage — DONE: ca1003d2; tests/observe/council-legs.test.js:253-256.
+- L443 TST-3 abort confirm on the real DOM — DONE: a724b597; tests/electron-workspace-e2e.integration.test.js:433.
+- L498a MCP-client timer leaks — DONE: c16aeeb8; tests/mcp-protocol.integration.test.js:48, :97-102.
+- L680a doctor `ANTHROPIC_BASE_URL` row — DONE: 2c607f22; src/utils/doctor-base-url-check.js:3-17.
+- L680b base-URL normalization decision — DONE: daaeac3e; src/opencode-client.js:617-626.
+- L693 LC-5 evidence (run 0084d48c) — DONE: see LC-5.
+- L705 zero-leg seat gets no row — DONE: fd939f83, 0f54d81f; electron/workspace-ui/live-dead-seats.js:52-80.
+- L715a stored-alias drift warning — DONE: 826412f8; src/utils/alias-audit.js:175.
+- L715b `models --check --live` — DONE: b9521dff (PR #100); src/sidecar/models-probe.js:6-61.
+- L24 BL-2 async `buildContext` — RECORD (won't do): owner dropped it as B39 (docs/superpowers/plans/2026-07-02-backlog-execution-phases-11-20.md:22); still sync at src/sidecar/context-builder.js:196.
+- L124 L2 dead `tool_use` branch — RECORD (won't do): owner dropped it as B32 (same plan :22); src/jsonl-parser.js:171-175.
+- L518 `no-var` rewrite — RECORD (OBSOLETE): superseded by ruling R17 (v4.8 spec :39, :696-720); .eslintrc.js:87.
+- L658 SL-3 `--critic` fail-soft — RECORD: ruling R16 of the v4.8 spec (:38, :667-694).
+- L74 and L144 — MERGED into the L24 and L124 records above.
+
+**Slice 2 (11 rows)**
+- L759 v4.6 CHANGELOG behaviour change — DONE: CHANGELOG.md:3099.
+- L771 v4.6 judge-leg cost note — DONE: CHANGELOG.md:3101-3102.
+- L774 #87 Stage-5 rebuild drops `seatLoss` — DONE: 8857215b (PR #90); #87 closed.
+- L808 cli-handlers-council-run.js at 299 — DONE: 40189515 (the file is 295 now; see B-SZ-1).
+- L1315a GOA-7 resolved-model ledger — DONE: 095652c5, 9c28bfd7 (PR #118), df173f37; src/council/ledger.js:19. Keep the id (docs/ROADMAP.md:245).
+- L1343 release-gate gpt-pro STALE / fable form — DONE: PR #107 (2017b381); src/utils/gateway-route-audit.js:77-89.
+- L729 v4.5 ledger pointer — DROP: the worktree is gone and the ledger was destroyed (`.superpowers/sdd/progress.md:314`).
+- L841 stale size table and warnings — DROP: superseded by B-SZ-1.
+- L870 v4.8.0-plan size note — DROP: v4.8.0 shipped (CHANGELOG.md:1647); #130 closed.
+- L788 Plan 3 voice ruling — RECORD: src/utils/remediation-hints.js:82-86, :127-129; tests/remediation-hints.test.js:61-67.
+- L1112 W1-M4 `amicus_start` remainder — MERGED into L1561 (DONE, 95e5aafa).
+
+**Slice 3 (14 rows)**
+- L1433a PR1F-1 twin primary rows — DONE: a24562b5, 60213b04, 33e2ecf7; src/council/run-retry-group.js:18-23; #137 closed.
+- L1455 PR1F-2 runStats builders (twin of L4339e, L6566a) — DONE: 41d41f77 (PR #205); src/council/run-stats-entry.js:70.
+- L1561 W1-M4 `amicus_start` spawn fallback (twin of L6558) — DONE: 95e5aafa (PR #206); src/mcp-server.js:429-431, :718-720.
+- L1759 continue/resume rows `(unattributed)` — DONE: 461b1b35; src/sidecar/continue.js:110.
+- L1776 `--tag` + `--retry-failed` — DONE: 96c9bc00; src/sidecar/fanout-retry.js:79.
+- L1801 F-1 MCP tool params (twin of L4340b, L6564a) — DONE: 95e5aafa; tests/mcp-tool-params-docs.test.js:97.
+- L1811 F-2 README command list — DONE: 26d802d1; tests/docs-command-coverage.test.js:12.
+- L1820 F-3 `generate-docs --check` in jest — DONE: 53f0e8e8; tests/scripts/generate-docs-check.test.js:33-64.
+- L1831 F-4 dead drift helpers — DONE: 592bfa31.
+- L1839 F-5 `routing.tier` docs (twin of L4340c, L6564b) — DONE: 95e5aafa; docs/configuration.md:264, :301.
+- L1868 Rider A `fanout --quiet` — DONE: 26d802d1; tests/sidecar/fanout.test.js:917.
+- L1878 Rider B `(unattributed)` — DONE: 461b1b35; tests/continue-resume-spend.test.js:451-464.
+- L1433b `council save` accepts duplicates — DROP (OBSOLETE): twin benches are the supported feature (#137); tests/council/preset-trim-twin-bench.test.js.
+- L1594a statSync Option B ruling — RECORD: src/utils/session-index-tmp-sweep.js:37-48 (9ee781f8).
+
+**Slice 4 (32 rows)**
+- L2596 PR #170 round-2 B1–B3 owed — DONE: 4413eb25, 1e385895; src/council/run-retry-group.js:150; run-retry.js:203, :266.
+- L2671 `NEXT TASK` Phase 3 — DONE: 15cba4cf (PR #176), 1832b9c7 (PR #177).
+- L3168 `NEXT TASK` Phase 4 R5 — DONE: 9ef275e5 (PR #178).
+- L3254 `NEXT TASK` Phase 6 — DONE: a3e71203, 919cb202, d5378684, ecf90f19, b0e3a158.
+- L3362 `NEXT TASK` Wave 2 — DONE: 78ed7a40, d5378684, 86a069a6, ecf90f19, 3e3e29a0.
+- L3404 `NEXT TASK` Wave 2.5 — DONE: dda1b8cf (PR #187).
+- L3440 `NEXT TASK` Wave 3 — DONE: c0745013 (PR #188).
+- L3523 `NEXT TASK` Wave 3 remainder — DONE: 1e9107ed (PR #191; in v4.8.0).
+- L4019a #135 C5 alias-shadow warning — DONE: 55bc231e, 68465b39; src/utils/alias-shadow.js.
+- L4019b #135 C2 TTFT probe — DONE: 55bc231e; src/utils/ttft.js.
+- L4035 council runs in CLI `amicus list` (twin of L4340d, L6561) — DONE: 95e5aafa; src/sidecar/list-council.js:116.
+- L4042 #138 Pieces 1+2 — DONE: 3e3e29a0 (PR #196).
+- L4337a task mode + #146 — DONE: f597f6bc (PR #200).
+- L4337b SI-02 + R4 dead-seat surface — DONE: 5830ece3 (PR #204).
+- L4338a PR5b-1 — DONE: 5830ece3 (ruling V15); electron/workspace-ui/workspace-banners.js:73.
+- L4338b SI-16 splits — DONE: 9ec5f299.
+- L4339a cross-file `seatKey` consolidation — DONE: 9ec5f299; src/council/run-retry-keys.js:15.
+- L4339b #133 Pieces 2–3 — DONE: 739e2af8 (PR #201).
+- L4339e PR1F-2 (twin of L1455) — DONE: 41d41f77.
+- L4339f PR1F-3 — DONE: c16aeeb8 (ruling V18).
+- L4340a the prune check — DONE: dda1b8cf.
+- L4340b F-1 (twin of L1801) — DONE: 95e5aafa.
+- L4340c F-5 (twin of L1839) — DONE: 95e5aafa.
+- L4340d the CLI `list` merge (twin of L4035) — DONE: 95e5aafa.
+- L4340e `KNOWN_VARIABLES` — DONE: c16aeeb8.
+- L4341 SI-22.4 rider (2) — DONE: 5830ece3; electron/workspace-ui/workspace-matrix.js:169.
+- L4088 `seedSession` rot in a dated plan — DROP: dated record (docs/CITATIONS.md:85-90).
+- L4339c #138 Piece 3 — DROP (OBSOLETE): never specified (L4351, L6537-6546).
+- L4339d #135 C4 — DROP (OBSOLETE): never specified.
+- L2132 R2 accepted cost (the `waveId` filter twin trap) — RECORD: tests/council/run-cost-bijection.test.js:34-47, :184.
+- L4342 the Holds (SI-21, PR5a-1, PR5c-DOMKEY, PR5c-STANDING) — RECORD: owner holds, "not work, do not re-scope".
+- L3963 SI-22.1/.2 under R2 — MERGED into the SI-22.1/.2 records (L5537, L5589).
+
+**Slice 5 (27 rows)**
+- L4377 task-mode declaration and frames — DONE: dc4a64db, 71955d64; CHANGELOG.md:1298.
+- L4390 skip the ledger row — DONE: ec71d4a8; src/council/run-finish.js:52.
+- L4407 PR1F-1 `lensIndexOf` (twin of L1433a) — DONE: src/council/run-retry-group.js:18-24.
+- L4412 distinct seat identities — DONE: src/council/seats.js:53; #137 closed.
+- L4414 the `council save` duplicates rider — DONE: tests/council/preset-trim-twin-bench.test.js.
+- L4559 Stage-2 roster for a twin bench — DONE: 57dda4f1; src/council/run-stage2-judge.js:72.
+- L5747 `location` stripped on the MCP tally path — DONE: d5378684 (PR #183); src/mcp-tools.js:469.
+- L5911 SI-DUP — DONE: c0745013, 9ec5f299; src/council/run-retry-keys.js:15.
+- L6246 TTFT in runStats — DONE: 55bc231e, 2e8ce85c; src/council/run-stats-entry.js:117.
+- L6253 OpenRouter-vs-direct variance in MODEL-NOTES — DONE: 8e08a63d; skills/second-opinion/MODEL-NOTES.md:103-116.
+- L6452 quote the engine's log line — DONE: 5563f2e6; src/headless.js:320.
+- L6558 W1-M4 `amicus_start` (twin of L1561) — DONE: 95e5aafa.
+- L6561 council runs in CLI list (twin of L4035) — DONE: 95e5aafa.
+- L6564a F-1 (twin of L1801) — DONE: 95e5aafa.
+- L6564b F-5 (twin of L1839) — DONE: 95e5aafa.
+- L6566a PR1F-2 (twin of L1455) — DONE: 41d41f77.
+- L6566b PR1F-3 repair-row conformance — DONE: c16aeeb8, 51a13230; src/council/run-stages.js:228.
+- L4383 divergence into `degrades[]` — DROP (OBSOLETE): the detector was deliberately not built (CHANGELOG.md:1376-1379).
+- L4386 calibrate the `location` heuristic — DROP (OBSOLETE): same.
+- L4395a per-population tiers — DROP (OBSOLETE): same.
+- L6249 per-model thresholds from TTFT — DROP (OBSOLETE): the #135 ruling; replaced by #251 item 1 (a1c7326f).
+- L4922 a refused `-rv` leg gets no `applied:false` row — RECORD: a consequence of ruling R8; src/council/run-debate.js:257-258, :270.
+- L5505 SI-21 HOLD — RECORD: ruling R4c-7; src/council/run-assemble.js:155, :165.
+- L5537 SI-22.1, with L3963 and L5741 merged — RECORD: held under ruling R2; src/council/peer-split.js:151; tests/council/tally.test.js:529.
+- L5589 SI-22.2 — RECORD: held under ruling R2; tests/council/tally.test.js:503.
+- L4525 R-W9b (twin of L6780) — RECORD, grouped with the PR5c residuals. Slices 5 and 6 each merged it into the other and gave no verdict. It affects documents written before `criticSeat` existed (L6778-6782) and is pinned known-wrong at tests/workspace/dead-seat-twins.test.js:405.
+- L5741 the "sixth shape" — MERGED into the SI-22.1 record; tests/council/seat-matrix.test.js:363.
+
+**Slice 6 (26 rows)**
+- L6727 PR5b-1 two-document split — DONE: 5830ece3 (ruling V15); electron/workspace-ui/workspace-banners.js:73-94.
+- L6926 heading edit in the machine-local skill copy — DONE: ~/.claude/skills/second-opinion/SKILL.md:339.
+- L7271 Info-ZIP containment on macOS/Linux — DONE: 5103f588; tests/sidecar/native-extractor-containment.test.js:127-150.
+- L7418a v4.9.5 M8 extraction containment — DONE: 54b559fd.
+- L7418b v4.9.5 M10 weak success signal — DONE: 54b559fd (`promoteDist`).
+- L7425 twelve v4.9.5 commits straight to main — DONE: reviewed on PR #236 (4395cf09).
+- L8153 the tarball's ROADMAP names the previous release — DONE: pinned in the release commit since v4.9.5.
+- L8165a `fast-uri` / `qs` advisories — DONE: 58699aa2.
+- L8073 (iii) "log, don't refuse" soft landing — DROP (OBSOLETE): the refusal shipped in v4.9.4 (src/utils/engine-variants.js:247-272).
+- L6604 PR5a-1 — RECORD (owner HOLD, L4342): src/council/run-state.js:129.
+- L6752 PR5c "wrong lever" finding and residuals R1–R3 — RECORD: tests/workspace/dead-seat-twins.test.js:328-345.
+- L6836 PR5c-DOMKEY — RECORD (owner HOLD): electron/workspace-ui/workspace-seats.js:262.
+- L6868 PR5c-STANDING — RECORD (owner HOLD): src/workspace/seat-space.js:130.
+- L7004 darwin-lane coverage residuals — RECORD: their home is docs/electron-testing.md:552-575.
+- L7110 CI chair runs at effort `high` — RECORD: consult it before re-pricing the chair.
+- L7156 B1, "NOT a defect" — RECORD: src/sidecar/electron-rescue-notice.js:60-95.
+- L7257 the hostile-name set is permanently terminal — RECORD: src/sidecar/electron-repair-cache.js:141; docs/troubleshooting.md:473-475.
+- L7267 a hostile cache-planter can deny provisioning — RECORD: src/sidecar/electron-native-rescue.js:223-225.
+- L8007 council seats have no effort knob — RECORD: #218's closing ruling (2026-09-18).
+- L8029 the direct openai provider has no output reservation — RECORD: src/utils/doctor-output-budget-check.js:22-23, :80-86.
+- L8051 measured counterexamples to the naive models.dev rule — RECORD: do not re-propose.
+- L8061 `VARIANT_UNVERIFIABLE`, CLOSED-REFUTED — RECORD: do not rebuild.
+- L8069 `--thinking-force` must be per-invocation only — RECORD: the rule for any future build.
+- L8081 #235 r3 C2 watch item — RECORD.
+- L8087 #235 r3 C1/B1 tripwire — RECORD: src/utils/engine-variants.js:76; tests/probe-config-only-row.integration.test.js.
+- L6780 R-W9b (twin of L4525) — MERGED into the L4525 record (slice 6 §3.7 names L4525 as canonical).
+
+**Slice 7 (5 rows)**
+- L8256 "#135 stays open" — DONE: #135 closed 2026-09-18 (v4.13.0).
+- L8407b two `headless.js` self-citations — DONE: c7336ff4; src/headless.js:2082-2084, :2205-2207.
+- L8736a the `doctor-alias-check` 24 h flake — DONE: cacc3c1c.
+- L8639 #207 r6 A1 `armStream` has no removal seam — RECORD: a design note whose trigger has not occurred; src/utils/alias-shadow-writer.js:168-209.
+- L8834 the same-instant stamp race — RECORD (accepted): src/utils/alias-notice-state.js:18-20.
+
+**Slice 8 (3 rows)**
+- L9120 result-schema.js at 300/300 — DONE: 0e5d3cf5; it is 291 now, with the riders in src/utils/leg-riders.js.
+- L8938a `KEY_PATH_ID` can match a ≥32-char doc slug — RECORD: the accepted length-floor ruling; src/utils/redact-provider-error.js:42.
+- L9066 `providerRouting` only if a pin earns its place — RECORD: the "only if" ruling; .github/workflows/council-review.yml:934.
+
+**Record corrections**
+
+Stale premises and wrong records the audits found (NEW-ITEMS §C, plus N-03 and N-13, whose disposition is "record"). Each line names the archive line it corrects; that line stays as it was. "Home" is where the corrected fact lives now: an item or decision in BACKLOG.md, or "record" (this line).
+
+- L4370 (`### Task mode — closes #134, finishes #130`; rows L4383-4395) — #130's closing comment says "BACKLOG records the disposition". It does not: only CHANGELOG [4.9.0] does (gh #130 comment; CHANGELOG.md:1374-1379). Home: record (this line points at CHANGELOG).
+- L671 (SL-4), L1271 (GOA-2) — the v4.8 spec :66 lists GOA-2 and SL-4 under "BACKLOG.md's refuted/closed sections"; no such records exist (slices 1, 2). Home: D-04, D-07.
+- L4460 — says the unattributed-artifact surface is "filed, not built"; the filing does not exist (slice 5). Home: D-25.
+- L8834 — says the same-instant race is documented in docs/usage.md; it is not (slice 7). Home: record.
+- L1210 — cites "T6-m2 above"; T6-m2 is defined nowhere (slice 2). Home: record.
+- L1676-1677 — cite `a6e8f4b3` and `cf35bd9a` as on-main commits; neither is an ancestor of HEAD, and both are inside squash `dda1b8cf` (slice 3). Home: record.
+- L371, L460, L729, L1809-1836, L9072 — the local-only pointers are not on GitHub: `.superpowers/` (L371's Appendices A/B/C and §4b rulings, task-8-report §2 at L460, GATE-2…5 at L1809-1836, the 27-set corpus at L9072) is excluded by .git/info/exclude:8, and the v4.5 ledger (L729) was destroyed (slices 1, 2, 3, 8). Home: BACKLOG.md's Reference index labels them local-only.
+- L7183 — B3's cited home `zip-name-scan.js :: scanLocalNames` is really src/sidecar/zip-local-name-scan.js:164 (slice 6). Home: record.
+- L6976 — calls the "v4.9.7 candidates" section "above"; it is below, at L7120 (slice 6). Home: record.
+- L3377, L3431, L4043, L6535, L6542 — the `:6023` pointer (L3377, L3431, L4043) has rotted: the #138 entry is at L6514. The pruned v4.8 phasing doc's `:769` (L6535, L6542) dangles (slices 4, 5). Home: recover the doc with `git show v4.8.0:docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`.
+- L821 — its heading says the tight-file table "is current"; it is not (slice 2). Home: B-SZ-1 supersedes.
+- L1666, L3878, L3902, L9120 — the size gate is worse than recorded: at 8e08a63d, 18 files are at 300/300 (3 when warned, L3878) and 42 at ≥291; L9120's result-schema.js is 291 (done); session-index-prune.js is 297, not 221 (L1666); cli-handlers-doctor.js is 297, not 299 (L3902) (slices 2, 3, 4, 8). Home: B-SZ-1.
+- L1717 — its cited route has no production caller, but the `AMICUS_PROJECT_DIR` route is real (slice 3). Home: B-IO-1.
+- L5795 — there are 38 module-level tables now, not the 34 it counted when filed (slice 5). Home: B-SEC-1.
+- L8604 — there are two call sites now, not "exactly one" (slice 7). Home: #206-r4-C3.
+- L8509 — "the disclosure names no judges" is no longer true (slice 7). Home: D-21.
+- L9059 — its premise ("reached by no check") does not match the code (slice 8). Home: D-41.
+- L1583, L1590 — call the fix a "data-layer change"; it is a render-layer change (slice 3). Home: PR1F-4.
+- L223 — the CLI path does not persist a client either, and "B11 `enrichWithProgress`" never existed (slice 1). Home: D-35.
+- L2928 — T2.4 citation 3 has now actually rotted (slice 4). Home: B-CI-3.
+- L1910, L1930 — the rationale of ruling 1 of the seven (2026-08-09) is refuted by errata E-2a (npx never evaluates amicus's ranges; the pin's value is determinism), and L1930's "package.json only" by errata E-2b (docs/superpowers/plans/2026-08-09-v471-diagnostics.md; slice 3). Home: the Reference index note; the ruling itself stands.
+- L8741 — "a split is a prerequisite of #259"; the owner closed #259 on 2026-09-27 (slice 7). Home: report.js stays in B-SZ-1.
+- L1331 — GOA-8's join hazard changed shape: `LEDGER_JOIN_ROLES` is now fail-closed (src/council/ledger.js:53) (slice 2). Home: noted on GOA-8.
+- L9-12 — say "Changes are uncommitted … not pushed"; they shipped as CHANGELOG [1.7.5]/[1.7.6] (slice 1). Home: the new BACKLOG.md header replaces them.
+- L204 — its "Still open" prose contradicts its own `[x]` (slice 1). Home: record.
+- L3096-3111, L3112-3166 — misplaced text: the exclusion-3 record of ruling R20 (2026-08-20) at L3096-3111 sits under the UI-click bullet, and L3112-3166 sits under the Phase 3 bullet (slice 4). Home: indexed by line range; the text stays verbatim.
+- L6694 — the drift pin it describes still calls PR5b's M3/M4 "deferred" at tests/workspace/workspace-seats.test.js:447-449 (slice 6). Home: B-GUI-3.
+- No archive line — tests and docs use refusal shapes never observed ('402 insufficient credits', 'provider returned 402', 'HTTP 402 no credits', '402 Payment Required') (the refusal survey, §7.3). Home: none now; a future classifier should use the five measured texts (the refusal survey, §2 and §8).
+- L8847 — records one refused round (#254 round 3), but the #256 hidden-retry defect (a refused retry rendered as "its once-only retry also ended error" after a backstop death) hit 5 runs: 31992246307, 32459121461, 32669104371, 34074371082 (attempt 1) and 35143585179. It was fixed in 4.12.0 (N-03; the refusal survey, §3d). Home: record; a comment on closed #256 is optional.
+- L1433 — PR1F-1 residual: an unbound twin still takes the first twin's lens, because `roleFor`'s first-occurrence `indexOf` still runs for unbound legs (src/council/run-stages.js:38-44; N-13, slice 3). It affects the label only. Home: record; no work unless someone reports it.
+
+Sources named in this section are the audit's files, outside this repo: "the refusal survey" is C:/Users/sendt/OneDrive/AIProjects/SecondBrain/output/2026-09-27-amicus-cluster-b/refusal-signatures.md, and the slices, NEW-ITEMS (N-nn) and the consolidation proposal are in C:/Users/sendt/OneDrive/AIProjects/SecondBrain/output/2026-09-27-amicus-backlog-audit/.
