@@ -1,6 +1,6 @@
 # Distribution channels
 
-Amicus ships through three channels. This doc is the runbook for each — what's
+Amicus ships through several channels. This doc is the runbook for each — what's
 live today, what the submission/publish steps are, and what to check before
 pulling the trigger on a release-facing action.
 
@@ -22,8 +22,9 @@ CHANGELOG's Unreleased section).
 
 ## 2. Claude Code community marketplace (claude-community)
 
-**Status: submitted 2026-07-01 — awaiting Anthropic review.** (Update this
-line as the process advances: `submitted <date> / approved <date> / listed <date>`.
+**Status: submitted 2026-07-01 — never listed (re-checked 2026-09-28); resubmission
+planned.** (Update this line as the process advances: `submitted <date> / approved
+<date> / listed <date>`.
 Note: the submission predates the Phase-9 polish on `main` — reviewers pulling
 the repo see the current surface, including `commands/` and a clean
 `claude plugin validate . --strict`.)
@@ -260,3 +261,55 @@ publish attempt 422'd on a 199-char description (2026-07-03); now pinned by
    `gh release create <tag> --generate-notes --latest`. The "Generate release
    notes with Claude" step is optional polish — skip it or run it manually
    against the API.
+
+## 4. Chocolatey (Windows)
+
+**Status: drafted, not published.** Package id `amicus` confirmed unclaimed on
+`community.chocolatey.org` (checked 2026-09-28). The package wraps a global npm
+install (`npm install -g amicus@<version>`) behind a `nodejs-lts` dependency,
+rather than bundling a Node binary — Chocolatey installs the dependency first.
+
+**Repo home:** `packaging/chocolatey/amicus.nuspec` and
+`packaging/chocolatey/tools/chocolateyInstall.ps1` /
+`chocolateyUninstall.ps1`. Not part of the npm tarball — `package.json`'s
+`files` field is unrelated to this channel.
+
+**The postinstall-under-elevation risk.** `choco install` commonly runs
+elevated, sometimes under a different admin account or as SYSTEM.
+`scripts/postinstall.js`'s skill/MCP registration resolves
+`os.homedir()`/`%APPDATA%`, which in that case belongs to the elevated
+account, not the interactive user — a silent misplacement, not a visible
+failure (`runCli()`'s wrapper always exits 0). `chocolateyInstall.ps1` sets
+`AMICUS_SKIP_POSTINSTALL=1` before the npm install (the same guard the
+Claude Code plugin channel already relies on) and prints instructions to run
+`amicus init` / `amicus setup` / `amicus doctor` afterward from an ordinary,
+non-elevated prompt.
+
+**Before the first submission:** a real elevated local install (`choco pack`
+then `choco install -s .`) has not been run — this package is untested
+against a real Chocolatey install. Test that first, ideally on a second
+Windows account, then create a community.chocolatey.org account + API key
+and `choco push`.
+
+**Version:** `amicus.nuspec`'s `<version>` is a manual pin site, kept in
+lockstep with `package.json`/`server.json`/`.claude-plugin/plugin.json` by
+hand at release time (`docs/publishing.md`'s checklist) — no automated test
+enforces this one yet, unlike `server.json`
+(`tests/scripts/package-manifest.test.js`).
+
+## 5. Third-party MCP directories
+
+Status as of 2026-09-28:
+
+| Directory | Status | Action needed |
+|---|---|---|
+| Glama | Listed (auto-indexed from the MCP Registry), **unclaimed** | Owner: claim via GitHub OAuth, HTTP, or DNS at glama.ai/mcp/servers/BourbonDog/amicus |
+| PulseMCP | Listed (auto-ingested from the MCP Registry) | None — submissions/changes are globally paused |
+| mcp.so | Not listed | Owner: submit at mcp.so/submit (free reviewed queue, or a paid immediate track) |
+| Smithery | Not listed — **deferred** | None planned. Its current publish flow needs either a hosted Streamable-HTTP endpoint or a pre-built MCPB bundle; amicus's MCP server is stdio-only (`server.json`'s `transport.type`) and has neither. Owner-deferred 2026-09-28. |
+| `punkpeye/awesome-mcp-servers` | Not listed | Owner: fork + one-line README PR under "Coding Agents" |
+
+Pattern: the two directories that already carry amicus (Glama, PulseMCP) are the
+two that auto-ingest the official MCP Registry (§3) — amicus has been
+registry-published since 2026-07-03. The other three each need a distinct,
+separate submission regardless of registry status.
