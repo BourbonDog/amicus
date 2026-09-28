@@ -52,6 +52,7 @@ src/
 │   ├── run-finalize.js
 │   ├── run-finish.js
 │   ├── run-launch.js
+│   ├── run-retry-gate.js  # The once-only Stage-1 retry's death-class gate (D-06): an OUTPUT_LENGTH death is held, never relaunched.
 │   ├── run-retry-group.js
 │   ├── run-retry-keys.js
 │   ├── run-retry-launch.js
@@ -577,6 +578,7 @@ evals/
 | `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
 | `council/run-finish.js` |  | `finishRun()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
+| `council/run-retry-gate.js` | The once-only Stage-1 retry's death-class gate (D-06): an OUTPUT_LENGTH death is held, never relaunched. | `isOutputLengthLoss()`, `outputLengthSkipClause()`, `OUTPUT_LENGTH_SKIP_CLAUSE()` |
 | `council/run-retry-group.js` |  | `lensIndexOf()`, `recordFailure()`, `groupStage1Losses()`, `planStillDeadSources()`, `seatKey()` |
 | `council/run-retry-keys.js` |  | `seatKey()`, `twinAliases()`, `legLossKey()`, `srcLegClaimer()` |
 | `council/run-retry-launch.js` |  | `briefingFor()`, `bindRetryWave()` |
