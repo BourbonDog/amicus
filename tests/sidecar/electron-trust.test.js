@@ -137,9 +137,9 @@ describe('isUnlisted — WHICH of the two null digests (D-02)', () => {
   //   UNLISTEDASLEGACY electron-trust.js :: isUnlisted -- `return false;`.
   //     RED: the third test below.
   //   EMPTYTABLEUNLISTED electron-trust.js :: isUnlisted -- drop the empty-table test, so a
-  //     `{ table: {} }` anchor reads as unlisted (refused). RED: the fourth test below.
+  //     `{ table: {} }` anchor reads as unlisted (refused). KILLED (R-B5, 2026-09-28): tests/sidecar/electron-trust.test.js:166.
   //   EMPTYTABLEANCHOR electron-trust.js :: readChecksumTable -- return a row-less table
-  //     instead of null. RED: the fourth test below.
+  //     instead of null. KILLED (R-B5, 2026-09-28): tests/sidecar/electron-trust.test.js:167, and the older :74 and :126 too.
   const withRow = { table: { [ZIP_NAME]: ZIP_SHA256 }, source: '<test>' };
   const without = { table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 }, source: '<test>' };
 

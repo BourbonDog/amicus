@@ -325,15 +325,15 @@ describe('F5: the gate and the download route cannot forge a line either, whatev
   //
   // NAMED MUTANTS (each drops ONE collapseExcerpt() around `fileName`)
   //   GATEWARNRAW      electron-trust.js :: verifyArtifactBytes, the unlisted hatch WARNING.
-  //     RED: the "gate, unlisted under the hatch" row.
+  //     KILLED (R-B5, 2026-09-28): tests/electron-unlisted-refusal.test.js:364, in its own row only.
   //   GATENOTERAW      electron-trust.js :: verifyArtifactBytes, the no-digest NOTE.
-  //     RED: the "gate, no table" row.
+  //     KILLED (R-B5, 2026-09-28): tests/electron-unlisted-refusal.test.js:364, in its own row and the "download, no table" row.
   //   GATEMISMATCHRAW  electron-trust.js :: verifyArtifactBytes, the mismatch hatch WARNING.
-  //     RED: the "gate, mismatch under the hatch" row.
+  //     KILLED (R-B5, 2026-09-28): tests/electron-unlisted-refusal.test.js:364, in its own row only.
   //   PROVISIONWARNRAW electron-provision.js :: controlledProvision, the dropped-pin WARNING.
-  //     RED: the "download, pin dropped" row.
+  //     KILLED (R-B5, 2026-09-28): tests/electron-unlisted-refusal.test.js:364, in its own row only.
   //   PROVISIONNOTERAW electron-provision.js :: controlledProvision, the unpinned NOTE.
-  //     RED: the "download, no table" row.
+  //     KILLED (R-B5, 2026-09-28): tests/electron-unlisted-refusal.test.js:364, in its own row only.
   const { verifyArtifactBytes } = require('../src/sidecar/electron-trust');
   const NAME = `electron-v${NASTY}-win32-x64.zip`;
   const HATCH = { allowUnverified: true };
@@ -375,7 +375,7 @@ describe('D-02 x D-03: a refused re-provision is never promised a path.txt rewri
   //
   // NAMED MUTANT
   //   NOTEPROMISES electron-ensure.js :: ensureElectron -- restore the unconditional
-  //     "re-provisioning Electron below rewrites path.txt." RED: the test below.
+  //     "re-provisioning Electron below rewrites path.txt." KILLED (R-B5, 2026-09-28): tests/electron-unlisted-refusal.test.js:412 (ensure and smoke stay GREEN).
   test('a tampered path.txt on a skewed copy: the repair refuses, path.txt is untouched, and nothing promised otherwise (NOTEPROMISES)', async () => {
     const ee = require('../src/sidecar/electron-ensure');
     ee._resetEnsureElectron();

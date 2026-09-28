@@ -316,9 +316,9 @@ describe('evaluateElectronInteractive (--fix): an unlisted refusal is not sent b
   //
   // NAMED MUTANTS
   //   INTERACTIVEUNLISTEDHINT doctor-electron-mcp-check.js :: evaluateElectronInteractive --
-  //     keep HINTS.doctorFix for an `unlisted` refusal. RED: the first test below.
+  //     keep HINTS.doctorFix for an `unlisted` refusal. KILLED (R-B5, 2026-09-28): tests/utils/doctor-electron-mcp-check.test.js:340.
   //   INTERACTIVEHINTDROPPED doctor-electron-mcp-check.js :: evaluateElectronInteractive --
-  //     drop the hint for every failure. RED: the second test below.
+  //     drop the hint for every failure. KILLED (R-B5, 2026-09-28): tests/utils/doctor-electron-mcp-check.test.js:347.
   const HEX = 'a'.repeat(64);
   const run = (res) => evaluateElectronInteractive(
     { getElectronPath: () => null, fix: true, repairElectron: async () => res }, { fixTimeoutMs: 1000 },
