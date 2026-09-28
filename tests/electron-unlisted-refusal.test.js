@@ -84,7 +84,7 @@ describe('D-02: the unlisted refusal names the version, the table and the fix', 
   //     collapseExcerpt() around `anchor.source`. RED: the third test below.
   //   RAWNAMEVERSION electron-refuse.js :: refuseUnlistedArtifact -- drop the
   //     collapseExcerpt() around `fileName` and `version`.
-  //     RED: the fourth test below.
+  //     KILLED (R-B3, 2026-09-28): tests/electron-unlisted-refusal.test.js:161, `expect(l).not.toMatch(CONTROL_CHARS)`.
   const NASTY = `${ESC}[31mEVIL${ESC}[0m\n${FORGED_LINE}\n\u202eTNEMHCATTA`;
   const SOURCE = path.join(os.tmpdir(), 'electron', 'checksums.json');
 
@@ -232,7 +232,7 @@ describe('D-02: the name check runs BEFORE the unlisted pre-check (F5 ordering)'
   // NAMED MUTANT
   //   PRECHECKBEFORENAME electron-install.js :: repairElectron -- move `policy`, `anchor`
   //     and the D-02 pre-check above the `isSafeArtifactName` check.
-  //     RED: the test below.
+  //     KILLED (R-B3, 2026-09-28): tests/electron-unlisted-refusal.test.js:253, the 'unsafe-name' toMatchObject; both older unsafe-name suites stay GREEN under it.
   test('a planted version that climbs, colours and forges a line is refused as unsafe-name, never echoed as unlisted (PRECHECKBEFORENAME)', async () => {
     const planted = `43.6.0/../../${ESC}[31mEVIL${ESC}[0m\n${FORGED_LINE}`;
     const { dir } = fakeElectronDir({ withExe: false, platform: 'win32', version: planted });

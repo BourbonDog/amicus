@@ -293,7 +293,7 @@ describe('A2/B3 — the mark is READ, not merely written (MARKUNREAD)', () => {
   // doctor-electron-mcp-check.js). RED: the matching test here.
   // NAMED MUTANT INTERACTIVEMARKUNREAD doctor-electron-mcp-check.js ::
   //   evaluateElectronInteractive -- ignore `res.unverified` (the fourth reader).
-  //   RED: the last test here.
+  //   KILLED (R-B3, 2026-09-28): tests/electron-unverified-mark.test.js:382, the UNVERIFIED message toMatch; tests/doctor-fix.test.js stays GREEN under it.
 
   test('INSTALL TIME: postinstall says so on a successful but unverified repair', async () => {
     // eslint-disable-next-line global-require

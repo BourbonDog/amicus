@@ -139,7 +139,7 @@ describe('resolveElectronBinary refuses a path.txt name that climbs out of its d
   //     RED: every "is refused, never resolved" row below.
   //   USABLENULL electron-install.js :: isElectronUsable -- delete the `if (!exe)` guard, so a
   //     refused name reaches fs.existsSync(null) (equal in value under a real fs: false).
-  //     RED: the last test below.
+  //     KILLED (R-B3, 2026-09-28; SURVIVED as equivalent in Task 6): tests/electron-install.test.js:184, `.toBe(false)`.
   const ESCAPES = [...new Set(['..', '.', '../SIBLING', 'a/../../SIBLING', path.join('..', 'SIBLING')])];
 
   for (const platform of ['win32', 'darwin', 'linux']) {

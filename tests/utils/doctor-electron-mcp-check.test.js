@@ -236,10 +236,10 @@ describe('evaluateElectronMcp (--fix)', () => {
   // NAMED MUTANTS
   //   UNLISTEDHINTGENERIC doctor-electron-mcp-check.js :: evaluateElectronMcp -- keep
   //     `after.hint` even when every failure is `unlisted`.
-  //     RED: the first test below.
+  //     KILLED (R-B3, 2026-09-28): tests/utils/doctor-electron-mcp-check.test.js:252, `expect(r.hint).toContain('npx -y ...')`.
   //   UNLISTEDHINTANY doctor-electron-mcp-check.js :: evaluateElectronMcp -- `.every` ->
   //     `.some`, so a MIXED failure loses the generic hint too.
-  //     RED: the second test below.
+  //     KILLED (R-B3, 2026-09-28): tests/utils/doctor-electron-mcp-check.test.js:265, `expect(r.hint).toBe(HINTS.doctorFix)`.
   test('a repair REFUSED as unlisted points the hint at the refusal\'s own command, not back at doctor --fix (UNLISTEDHINTGENERIC)', async () => {
     const refused = refuseUnlistedArtifact({
       anchor: { table: { 'electron-v43.1.1-win32-x64.zip': 'a'.repeat(64) }, source: '<test>' },
