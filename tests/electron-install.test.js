@@ -133,10 +133,13 @@ describe('resolveElectronBinary refuses a path.txt name that climbs out of its d
   // (`distHeldExe`). Every target below EXISTS, which is exactly what made it
   // "usable" before.
   //
-  // NAMED MUTANT
+  // NAMED MUTANTS
   //   RESOLVERUNBOUNDED electron-install.js :: resolveElectronBinary -- return
   //     `path.join(base, heldExeRel(raw, platform))` instead of `containedExe(...)`.
   //     RED: every "is refused, never resolved" row below.
+  //   USABLENULL electron-install.js :: isElectronUsable -- delete the `if (!exe)` guard, so a
+  //     refused name reaches fs.existsSync(null) (equal in value under a real fs: false).
+  //     RED: the last test below.
   const ESCAPES = [...new Set(['..', '.', '../SIBLING', 'a/../../SIBLING', path.join('..', 'SIBLING')])];
 
   for (const platform of ['win32', 'darwin', 'linux']) {
@@ -173,6 +176,13 @@ describe('resolveElectronBinary refuses a path.txt name that climbs out of its d
     expect(ei.isElectronUsable({ electronDir: dir, env: {}, platform: 'win32' })).toBe(true);
 
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('a refused path.txt never reaches fs.existsSync: the null guard answers first (USABLENULL)', () => {
+    const fakeFs = { readFileSync: () => '../SIBLING', existsSync: jest.fn(() => true) };
+    const electronDir = path.join(os.tmpdir(), 'amicus-usablenull');   // never touched: fs is injected
+    expect(ei.isElectronUsable({ electronDir, env: {}, platform: 'win32', fs: fakeFs })).toBe(false);
+    expect(fakeFs.existsSync).not.toHaveBeenCalled();
   });
 });
 

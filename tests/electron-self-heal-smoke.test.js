@@ -301,26 +301,42 @@ describe('#58 ensureElectron drives the REAL repair on first GUI use', () => {
     expect(fs.readFileSync(path.join(dir, 'SIBLING'), 'utf8')).toBe('NOT-ELECTRON');
   });
 
-  test('deferred real repair surfaces ok:false with a doctor --fix pointer', async () => {
+  test('a real repair with no cache and a failed download surfaces ok:false with a doctor --fix pointer', async () => {
     const dir = fakeElectronDir({ withExe: false });
-    const result = await ee.ensureElectron({
-      deps: {
-        isElectronUsable: () => ei.isElectronUsable({ electronDir: dir, env: {}, platform: 'win32' }),
-        resolveElectronBinary: () => ei.resolveElectronBinary({ electronDir: dir, env: {}, platform: 'win32' }),
-        // Real repair, no cache -> {deferred}; exe never materializes -> still broken.
-        repairElectron: (opts) => ei.repairElectron({
-          ...opts,
-          electronDir: dir,
-          platform: 'win32',
-          version: '43.1.1',
-          arch: 'x64',
-          deps: { ...SELF_ANCHOR_OFF, cachedZip: () => null, extract: jest.fn(), spawn: jest.fn(), ...noopLock() },
-        }),
-        logProgress: () => {},
-      },
-    });
+    // NO NETWORK ON ANY ROUTE. ensureElectron calls the repair with cacheOnly:false, so the
+    // cache miss falls through to the download, and this rejection stands in for it. Without
+    // it the repair reaches the real @electron/get (today Jest's CommonJS runtime happens to
+    // reject that dynamic import, which is all that kept it off the network).
+    const downloadArtifact = async () => { throw new Error('network is forbidden in this test'); };
+    const said = [];
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation((c) => { said.push(String(c)); return true; });
+    let result;
+    try {
+      result = await ee.ensureElectron({
+        deps: {
+          isElectronUsable: () => ei.isElectronUsable({ electronDir: dir, env: {}, platform: 'win32' }),
+          resolveElectronBinary: () => ei.resolveElectronBinary({ electronDir: dir, env: {}, platform: 'win32' }),
+          // Real repair: no cache, then the download rejects -> repaired:false; the exe
+          // never materializes -> still broken.
+          repairElectron: (opts) => ei.repairElectron({
+            ...opts,
+            electronDir: dir,
+            platform: 'win32',
+            version: '43.1.1',
+            arch: 'x64',
+            deps: { ...SELF_ANCHOR_OFF, cachedZip: () => null, extract: jest.fn(), spawn: jest.fn(), downloadArtifact, ...noopLock() },
+          }),
+          logProgress: () => {},
+        },
+      });
+    } finally {
+      stderrSpy.mockRestore();
+    }
     expect(result.ok).toBe(false);
     expect(result.reason).toMatch(/amicus doctor --fix/);
+    // ...and the failure is the injected leaf's, not a dynamic import of @electron/get.
+    expect(result.reason).toMatch(/The controlled download failed: network is forbidden in this test/);
+    expect(said.join('')).toMatch(/the controlled Electron download did not complete: network is forbidden in this test/);
   });
 });
 
