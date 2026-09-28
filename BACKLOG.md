@@ -30,7 +30,7 @@ mint ids as `B-<theme>-<n>`; cite symbols, not line numbers; no size tables (the
 - **#256 Ask item 3 (a provider-refusal class in the census)** — REFUSED, no code.
   - Reasons: the dead-seat notice already quotes the provider's refusal verbatim, and the #264 CI preflight addresses the root. (was L8943; #256 closed) — `seatsReviewed.refused` counts refused repairs (src/council/verdict-seats-reviewed.js:85-89, :122).
   - ⚠️ The ruling's reason does not cover one case: a refusal that arrives after the leg produced output. That leg is recorded `complete`, and no notice quotes the refusal (N-01, under council-legs).
-- **#244 dead-row `conformance: clean` residue** — IN PROGRESS on branch `fix/244-conformance-none` (a fourth value, `none`), now PR #272 (open; its council-review run is in progress on 2026-09-28). (was: named inside L8721; #244 closed) — the refusal survey measured refused legs' runStats rows reading `status:"error"`, `conformance:"clean"` (refusal-signatures.md §3a).
+- **#244 dead-row `conformance: clean` residue** — MERGED in #272 (`5577667b`, 2026-09-28; a fourth value, `none`) after two council rounds, both "Fix these first"; the owner ruled reply-only after round 2. Ships in 4.14.1. (was: named inside L8721; #244 closed) — the refusal survey measured refused legs' runStats rows reading `status:"error"`, `conformance:"clean"` (refusal-signatures.md §3a).
 - **Knock-on:** L8741 gave "a prerequisite of #259" as the reason to split report.js, and that reason is gone. report.js stays in B-SZ-1 only.
 
 ### council-verdict
