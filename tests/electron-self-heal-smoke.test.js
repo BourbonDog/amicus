@@ -292,6 +292,7 @@ describe('#58 ensureElectron drives the REAL repair on first GUI use', () => {
     expect(result).toEqual({ ok: true, path: path.join(dir, 'dist', WIN_EXE) });
     expect(fs.readFileSync(path.join(dir, 'path.txt'), 'utf8')).toBe(WIN_EXE);
     expect(extract).toHaveBeenCalledTimes(1);
+    expect(lines.join('\n')).toMatch(/points outside its own directory/);
     expect(fs.readFileSync(path.join(dir, 'SIBLING'), 'utf8')).toBe('NOT-ELECTRON');
   });
 

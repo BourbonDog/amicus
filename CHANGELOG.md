@@ -3,6 +3,20 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Security
+
+- **A `path.txt` that names a file outside `dist/` is no longer launched.** `resolveElectronBinary`
+  joined the name onto `dist/` unchecked, and `isElectronUsable` only asked whether the result
+  existed, so a `path.txt` of `../SIBLING` made any existing file read as the installed Electron: the
+  repair never ran, and that file was what the GUI spawned. The resolver now applies the containment
+  bound the promote guard (`distHeldExe`) already had, through one shared predicate (`containedExe`).
+  A name that climbs out of `dist/`, or out of `ELECTRON_OVERRIDE_DIST_PATH`, resolves to nothing; the
+  GUI launch says so and re-provisions, and the provision rewrites `path.txt`. Nothing that installs
+  Electron writes such a name (Electron's own installer and amicus each write one of three fixed
+  names), so this closes a tampered or corrupted file, not an acquisition path.
+
 ## [4.14.1] - 2026-09-28
 
 ### Added

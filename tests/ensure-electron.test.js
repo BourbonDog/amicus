@@ -160,6 +160,47 @@ describe('ensureElectron — once-guard / single-flight (#55)', () => {
   });
 });
 
+describe('ensureElectron — a path.txt the resolver REFUSED (D-03, B-SEC-6)', () => {
+  // resolveElectronBinary returns null ONLY when path.txt names a location that
+  // climbs out of its own directory (electron-exe-rel.js :: containedExe). That
+  // Electron is never launched: ensureElectron says so, then re-provisions, and
+  // the repair's promote rewrites path.txt (electron-layout.js :: promoteDist).
+  //
+  // NAMED MUTANT
+  //   ENSURENOTELESS electron-ensure.js :: ensureElectron -- delete the
+  //     `resolve() === null` notice. RED: the first test below.
+  test('a REFUSED path.txt is announced, then re-provisioned, never launched (ENSURENOTELESS)', async () => {
+    let usable = false;
+    const lines = [];
+    const repairElectron = jest.fn(async () => { usable = true; return { repaired: true }; });
+    const result = await ee.ensureElectron({
+      deps: {
+        isElectronUsable: () => usable,
+        resolveElectronBinary: () => (usable ? '/fake/dist/electron.exe' : null),
+        repairElectron,
+        logProgress: (m) => lines.push(String(m)),
+      },
+    });
+    expect(repairElectron).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: true, path: '/fake/dist/electron.exe' });
+    expect(lines.join('\n')).toMatch(/path\.txt points outside its own directory/);
+  });
+
+  test('a binary that is merely MISSING is not announced as a refused path.txt (control)', async () => {
+    let usable = false;
+    const lines = [];
+    await ee.ensureElectron({
+      deps: {
+        isElectronUsable: () => usable,
+        resolveElectronBinary: () => '/fake/dist/electron.exe',
+        repairElectron: async () => { usable = true; return { repaired: true }; },
+        logProgress: (m) => lines.push(String(m)),
+      },
+    });
+    expect(lines.join('\n')).not.toMatch(/points outside its own directory/);
+  });
+});
+
 describe('getElectronPath / checkElectronAvailable remain PURE PROBES (#55)', () => {
   test('the probes never trigger provisioning side-effects', () => {
     // Spy on repairElectron at the module boundary: a pure probe must never
