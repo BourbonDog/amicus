@@ -1474,10 +1474,12 @@ seat that delivered nothing — and `rescued` travels through `tally.js` into `t
 `usedWaveId` (the ask whose text was adjudicated — the two differ when the relaunch's own answer
 needed its one repair); its `what` and `why` are unchanged. `conformance` is the
 ASKS-TO-PARSE axis and nothing else: `clean` = the first ask parsed, `repaired` = a later ask
-parsed, `unstructured` = no ask parsed, `none` = no ask was checked at all (#244: a leg that
-never returned or whose output was never used — a dead seat or judge, a superseded first
-attempt, a failed chair attempt, the chair give-up row; earlier releases stamped such a row
-`clean` by default). So a relaunch-rescued judge is `repaired` because a later
+parsed, `unstructured` = no ask parsed, `none` = no ask was checked at all (#244: a seat, judge
+or chair row whose leg did not complete, or a Stage-1 leg or chair attempt whose output was
+never used — a dead seat, a first attempt its retry superseded, a judge that never returned, a
+failed chair attempt, the chair give-up row; earlier releases stamped such a row `clean` by
+default; a dead repair, relaunch or debate row and a judge that answered empty keep
+`unstructured`). So a relaunch-rescued judge is `repaired` because a later
 ask parsed, and a stood-down promoted judge is `unstructured` because none did; the CAUSE lives
 on the row's `role`/`promoted` and in the note, never on `conformance`. The record therefore tells a relaunch from a repair on its own — the `Note:`'s prose
 is no longer the only thing that does. A promoted `-q<N>` *repair* is still a `role: 'repair'`

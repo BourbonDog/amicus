@@ -151,7 +151,7 @@ JSON in prose).
 
 Per-model **conformance** (`clean` | `repaired` | `unstructured`) is recorded and carried into
 the tally input's `runStats` (§5.1) → Stage-6 MODEL-NOTES note + a structural-reliability signal
-in the ledger. (2026-09-27: a fourth value, `none` — no ask was checked — marks a leg that never returned or whose output was never used; see `2026-09-27-244-conformance-none-design.md`.)
+in the ledger. (2026-09-27: a fourth value, `none` — no ask was checked — marks a seat, judge or chair row whose leg did not complete, or a Stage-1 leg or chair attempt whose output was never used; a dead repair, relaunch or debate row and a judge that answered empty keep `unstructured`. See `2026-09-27-244-conformance-none-design.md`.)
 
 The **red-team** leg obeys the same contract (one schema for all reviewers).
 
