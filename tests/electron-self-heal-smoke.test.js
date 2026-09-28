@@ -271,6 +271,11 @@ describe('#58 ensureElectron drives the REAL repair on first GUI use', () => {
     const extract = jest.fn(async (_zip, opts) => {
       fs.writeFileSync(path.join(opts.dir, WIN_EXE), 'MZextracted');
     });
+    // NO NETWORK ON ANY ROUTE. The cache route is expected to do the whole repair; were
+    // it ever to miss, the repair would fall through to the download, and this rejection
+    // makes that fall-through fail the first assertion, quoting this message, instead of
+    // reaching the real @electron/get.
+    const downloadArtifact = async () => { throw new Error('network is forbidden in this test'); };
     const lines = [];
 
     const result = await ee.ensureElectron({
@@ -283,7 +288,7 @@ describe('#58 ensureElectron drives the REAL repair on first GUI use', () => {
           platform: 'win32',
           version: '43.1.1',
           arch: 'x64',
-          deps: { ...SELF_ANCHOR_OFF, cachedZip: () => zip, extract, spawn: jest.fn(), ...noopLock() },
+          deps: { ...SELF_ANCHOR_OFF, cachedZip: () => zip, extract, spawn: jest.fn(), downloadArtifact, ...noopLock() },
         }),
         logProgress: (m) => lines.push(String(m)),
       },
