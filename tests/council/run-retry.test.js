@@ -1046,10 +1046,7 @@ describe('v4.8 T2.2 review C1/D4: the two invariants supersededKeys rests on', (
   // Two independent reviewers said the comment ARGUING it safe — (1) skipping is all-or-nothing
   // per UNIT, (2) two UNBOUND LEG-origin twins always share a unit — was not enough, so since v4.8
   // T-A5 that join also CHECKS the one statement both facts exist to make true. These two pins
-  // stay: they are WHY the check never fires, and run-stages.test.js pins the check itself.
-  // D-06 is the one exception to (2): an OUTPUT_LENGTH twin is held in a unit of its own
-  // (`run-retry-gate.js :: isOutputLengthLoss`), so the check does meet a held twin, and refuses
-  // its superseded row silently: it was never relaunched (run-stages.test.js's T-A5 describe).
+  // stay: they are WHY the check never fires but for a D-06 held twin, and run-stages.test.js pins both.
   const TWIN_MODELS = ['deepseek', 'deepseek'];
   const unboundTwinLegs = () => [deadLeg('deepseek', undefined, undefined, 'r1-s1', 1),
     deadLeg('deepseek', undefined, undefined, 'r1-s1', 2)];
