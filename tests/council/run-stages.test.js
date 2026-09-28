@@ -2175,6 +2175,9 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
   // row was ever its due, and there is nothing to refuse aloud. These drive the real runStage1
   // through the REAL sink (`run-degrade.js :: createDegradeSink`), so run.json's `degrades` and the
   // stderr text are read as well as the notes. Reasons are minted with the real formatter.
+  // ⚠️ SCOPE: on unbound twins whose legs carry no taskId, a held twin keeps R2's collapse: a
+  // superseded row, and the healed twin's first leg counted twice. The last test below pins that
+  // floor. No fanout leg lacks a taskId (`leg-ids.js :: deriveLegIds`).
   const { formatOutputLengthReason } = require('../../src/utils/output-length');
   const cost = (amount) => ({ cost: { amount, source: 'reported' } });
   const CLAUSE = '; its once-only retry was skipped: a relaunch reserves the same output budget';
@@ -2258,6 +2261,32 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
       { ...seatOf(slot), usage: cost(slot === 1 ? 0.02 : 0.03) })));
     expect(r.reviews).toEqual([]);
     expect(r.degraded).toBe(true);
+  });
+
+  test('D-06 SCOPE: on R2\'s taskId-less floor a held twin keeps R2\'s collapse — recorded 0.08 against billed 0.06, and no notice', async () => {
+    // Final-review Minor 1, re-measured here through the real runStage1. With no taskId,
+    // `rowKeyOf` cannot mint, so the twins share one row key. The healed twin is FIRST in
+    // deadLegs0, so `willTakeItsOwnLeg(held)` is false. The held leg is then written a superseded
+    // row that nothing superseded, and its primary row borrows the healed twin's first leg, which
+    // lands on two rows. (With the held twin first the refusal is taken and 6 of 6 cents are
+    // recorded.) No fanout leg lacks a taskId (`leg-ids.js :: deriveLegIds`), so no production
+    // input reaches this; it is pinned so that the next change to it is a decision, not drift.
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+      budget: null, reasoningOnly: false, ambientFlag: null });
+    const bare = (leg) => Object.fromEntries(Object.entries(leg).filter(([k]) => k !== 'taskId'));
+    const boom = bare({ ...deadLeg('deepseek', 'error', 'boom', 'abc123-s1', 1), usage: cost(0.02) });
+    const held = bare({ ...deadLeg('deepseek', 'error', MINTED, 'abc123-s1', 2), finish: 'length',
+      usage: cost(0.03) });
+    expect(['taskId' in boom, 'taskId' in held]).toEqual([false, false]);   // non-vacuity: the floor
+    const retryLeg = usableLeg('deepseek', 'abc123-s1r1', 1);
+    const { r, notes, said } = await heldTwinRun([boom, held], [retryLeg]);
+    expect(r.extraRows).toEqual([twinRow('superseded', { usage: cost(0.02) }),
+      twinRow('superseded', { usage: cost(0.03) }), twinRow('seat', { usage: cost(0.02) })]);
+    const cents = (legs) => legs.reduce((sum, l) => sum + Math.round(l.usage.cost.amount * 100), 0);
+    expect(cents([...r.extraRows, ...r.reviews.map((x) => x.leg)])).toBe(8);   // recorded
+    expect(cents([boom, held, retryLeg])).toBe(6);                              // billed
+    expect(notes.map((n) => n.channel)).toEqual(['seat-unbound', 'seat-unbound', 'stage1-retry', 'dead-leg']);
+    expect(said).not.toContain('a superseded row for seat');                    // silent
   });
 });
 

@@ -88,12 +88,21 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
   // it just cannot reach this join.) Break either fact and the skipped twin takes its own
   // first leg as a primary row AND gets a superseded row for it: one billed leg counted
   // twice.
-  // ⚠️ D-06 is the ONE sanctioned exception to (2). A leg `run-retry-gate.js :: isOutputLengthLoss`
-  // names rides a zero-model `held` unit of its own (`run-retry-group.js :: groupStage1Losses`)
-  // and is never relaunched, so an UNBOUND held twin IS skipped while its sibling is retried. That
-  // is not a split: no retry replaced the held leg, so no superseded row was ever its due. The loop
-  // below decides its row exactly as for any skipped leg (the refusal still turns on
-  // `willTakeItsOwnLeg`), but never announces a held leg: there is no disagreement to report.
+  // ⚠️ D-06 is the ONE sanctioned exception to (2). A leg that
+  // `run-retry-gate.js :: isOutputLengthLoss` names rides a zero-model `held` unit of its own
+  // (`run-retry-group.js :: groupStage1Losses`) and is never relaunched, so an UNBOUND held twin IS
+  // skipped while its sibling is retried. That is not a split: no retry replaced the held leg, so
+  // no superseded row was ever its due. The loop below decides its row exactly as for any skipped
+  // leg (the refusal still turns on `willTakeItsOwnLeg`), but never announces a held leg: there is
+  // no disagreement to report.
+  // ⚠️ SCOPE, MEASURED: on unbound twins whose legs carry no taskId, a held twin keeps R2's collapse
+  // (R2's taskId-less floor, where `rowKeyOf` cannot mint; see the COLLIDING measurement below).
+  // When the healed twin precedes it in `deadLegs0`, `willTakeItsOwnLeg` is false, so the held leg
+  // gets a superseded row that nothing superseded, and its primary row is built from the healed
+  // twin's first leg, which is then counted twice, silently: recorded 0.08 against billed 0.06, and
+  // no notice. Pinned in run-stages.test.js's T-A5 describe, so a change to it is a decision, not
+  // drift. No fanout leg lacks a taskId: each carries one minted by `leg-ids.js :: deriveLegIds`,
+  // which `seats.js :: bindSeats` binds by slot, so production twins arrive bound.
   // ⚠️ v4.8 T-A5 — and the paragraph above is now the DERIVATION, not the safety. Both facts
   // exist to make ONE statement true: no first leg is SKIPPED while its alias key is superseded.
   // `retry.skippedDeadLegs` states that directly, in leg OBJECTS — the very members of
