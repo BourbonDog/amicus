@@ -22,9 +22,9 @@ plugin-channel-only by design; see the npm-vs-plugin note in CHANGELOG.md's
 
 ## 2. Claude Code community marketplace (claude-community)
 
-**Status: submitted 2026-07-01 — never listed (re-checked 2026-09-28); resubmission
-planned.** (Update this line as the process advances: `submitted <date> / approved
-<date> / listed <date>`.
+**Status: submitted 2026-07-01 — never listed (re-checked 2026-09-28). Owner:
+resubmit through the Console form.** (Update this line as the process advances:
+`submitted <date> / approved <date> / listed <date>`.
 Note: the submission predates the Phase-9 polish on `main` — reviewers pulling
 the repo see the current surface, including `commands/` and a clean
 `claude plugin validate . --strict`.)
@@ -211,7 +211,9 @@ Release' step does not run on that path. If that trade-off proves unwanted
 in practice, add `continue-on-error: true` to the 'Publish to MCP Registry'
 step.
 
-**First-publish de-risk:** before relying on CI for the first real publish,
+**First-publish de-risk (historical — the first publish, v1.9.1, happened on
+2026-07-03; the manual recovery path below reuses these steps):** before
+relying on CI for the first real publish,
 run once locally: download `mcp-publisher` (Windows: the tarball flow from
 the quickstart docs), `mcp-publisher login github` (device-flow auth as
 BourbonDog), then `mcp-publisher publish` — to fail fast on any
