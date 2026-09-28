@@ -83,7 +83,7 @@ module.exports = {
         // Left 'off' rather than 'warn' on purpose: lint-staged runs
         // `eslint --fix`, which auto-fixes warnings too, so 'warn' would
         // silently perform at commit time exactly the var→let rewrite this
-        // comment defers.
+        // comment rules out.
         'no-var': 'off',
       },
     },
