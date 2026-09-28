@@ -135,6 +135,10 @@ async function retryFailedWave(origWaveId, project, opts = {}) {
   }
 
   const origWaveDir = getSessionDir(project, origWaveId);
+  // NO TEMPLATE PROVENANCE: this reads the ORIGINAL wave's already-rendered
+  // briefing.md back verbatim as the retry's prompt — it never re-renders the
+  // template, so fanoutOpts below carries no promptMeta/templateMeta the way
+  // a template-launched wave's does.
   let briefing = '';
   try { briefing = fs.readFileSync(path.join(origWaveDir, 'briefing.md'), 'utf-8'); } catch { /* legacy — empty */ }
 

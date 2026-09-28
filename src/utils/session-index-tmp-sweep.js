@@ -44,8 +44,8 @@ function listSessionIndexTmpFiles() {
       // never follow). Following here means a symlink named like an orphaned
       // tmp file is still swept (unlink removes only the link); the one real
       // consequence is AGE_THRESHOLD_MS reading the TARGET's mtime, so a fresh
-      // link to an old file is swept with no grace window. Filed, not fixed —
-      // see the BACKLOG entry above for the full inclusion/unfiled-delta split.
+      // link to an old file is swept with no grace window. Accepted under the
+      // owner's Option B ruling (v4.7 PR7, 2026-08-08) — by design, not filed.
       try { st = fs.statSync(path.join(dir, name)); } catch { /* raced away */ }
       return { name, mtimeMs: st && st.isFile() ? st.mtimeMs : null };
     })
