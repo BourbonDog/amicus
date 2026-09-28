@@ -211,6 +211,13 @@ function listPointers(project) {
  * child's pid goes to spawn.pid), `initCouncilRun` always writes one, and `!rec.pid` is
  * the test `mcp-council-awareness.js :: enginePid` reads it with. An id outside the
  * task-id grammar is never echoed: this run did not write the file.
+ * Accepted limits: the check is a read, not a lock, so two runs started into one folder
+ * before either writes run.json can both pass it, and merge. And a reused `--run-id` passes
+ * over that id's DEAD pid-less record too (a failed MCP spawn's or crash detection's
+ * `status:'error'`, or an abort that beat the child's `initCouncilRun`): the merged record
+ * keeps the failed attempt's `createdAt` and any additive key the new seed lacks (`pack`,
+ * `template`, `droppedMembers`), shows its stale `error`/`completedAt` until finalize, and
+ * after that abort reads `aborted` (exitCode 143) for good.
  * @param {string} runDir
  * @param {string} runId the run about to start
  * @returns {{runId: (string|null)}|null} null when the dir holds no other run's record;

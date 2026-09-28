@@ -160,6 +160,7 @@ async function handleCouncilRunTool(input, project, helpers) {
       // template. Same preserved-across-the-child's-own-initRun precedent as
       // `pack`/`droppedMembers` above (run-state.js:104-110).
       ...(templateMeta ? { template: templateMeta } : {}),
+      // Never add `pid` here: `council/run-state.js :: otherRunInDir` exempts only a pid-less same-id record, and a refused child is silent (its stdout is discarded).
       usage: null, createdAt: new Date().toISOString(),
     });
     runState.writePointer(project, runId, runDir);
