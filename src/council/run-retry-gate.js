@@ -21,6 +21,11 @@
  * message wins the leg's reason (`headless.js :: runHeadless`), and that leg is not the named
  * death. The one require is that module, whose closure holds src/utils modules only; nothing
  * under src/utils requires council/, so no cycle can form.
+ *
+ * Downstream, "held" is read as "skipped by the retry, and of this class": by run-stages.js's
+ * skipped-leg clause, `run-stage1-superseded.js :: supersededRows` and
+ * `run-stage1-rows.js :: pushDeadSeatRows`. That is exact while `groupStage1Losses` holds every leg
+ * this names, which run-retry.test.js's D-06 describe pins, so a routing change there reds first.
  */
 'use strict';
 

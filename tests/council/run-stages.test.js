@@ -2177,9 +2177,8 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
   // row was ever its due, and there is nothing to refuse aloud. These drive the real runStage1
   // through the REAL sink (`run-degrade.js :: createDegradeSink`), so run.json's `degrades` and the
   // stderr text are read as well as the notes. Reasons are minted with the real formatter.
-  // ⚠️ SCOPE: on unbound twins whose legs carry no taskId, a held twin keeps R2's collapse: a
-  // superseded row, and the healed twin's first leg counted twice. The last test below pins that
-  // floor. No fanout leg lacks a taskId (`leg-ids.js :: deriveLegIds`).
+  // ⚠️ SCOPE: on R2's taskId-less floor too, a held twin keeps its OWN row and gets no superseded
+  // row (council round 1). The last test below pins every floor cell.
   const { formatOutputLengthReason } = require('../../src/utils/output-length');
   const cost = (amount) => ({ cost: { amount, source: 'reported' } });
   const CLAUSE = '; its once-only retry was skipped: a relaunch reserves the same output budget';
@@ -2269,30 +2268,43 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
     expect(r.degraded).toBe(true);
   });
 
-  test('D-06 SCOPE: on R2\'s taskId-less floor a held twin keeps R2\'s collapse — recorded 0.08 against billed 0.06, and no notice', async () => {
-    // Final-review Minor 1, re-measured here through the real runStage1. With no taskId,
-    // `rowKeyOf` cannot mint, so the twins share one row key. The healed twin is FIRST in
-    // deadLegs0, so `willTakeItsOwnLeg(held)` is false. The held leg is then written a superseded
-    // row that nothing superseded, and its primary row borrows the healed twin's first leg, which
-    // lands on two rows. (With the held twin first the refusal is taken and 6 of 6 cents are
-    // recorded.) No fanout leg lacks a taskId (`leg-ids.js :: deriveLegIds`), so no production
-    // input reaches this; it is pinned so that the next change to it is a decision, not drift.
+  // D-06 on R2's taskId-less floor (council round 1: A1, B1, C1, C4, D1). With no taskId, `rowKeyOf`
+  // cannot mint, so twins share one row key. MEASURED before this change (scratch matrix, the real
+  // runStage1): a held twin after a healed one was written a superseded row that nothing
+  // superseded and borrowed its twin's first leg (recorded 8 against 6 billed, silently); after a
+  // twin whose retry died it sat on a superseded row beside ONE collapsed primary row; and two held
+  // twins collapsed onto ONE row (2 of 5, a billed leg lost). A held leg now gets no superseded row,
+  // and its dead-seat row is its OWN first leg, keyed by the leg itself
+  // (run-stage1-rows.js :: pushDeadSeatRows). No fanout leg lacks a taskId
+  // (`leg-ids.js :: deriveLegIds`); the floor is pinned so that it is right even so.
+  const floorRow = (role, cents) => twinRow(role, { usage: cost(cents / 100) });
+  const BORROWED = { model: 'deepseek', role: 'seat', wasChair: false, conformance: 'none',
+    status: 'error', durationMs: null, usage: cost(0.01) };   // a still-dead twin's leg-less row, billing only
+  test.each([
+    ['held after a healed twin', ['boom', 'held'], 'healed', [floorRow('superseded', 2), floorRow('seat', 3)]],
+    ['held before a healed twin', ['held', 'boom'], 'healed', [floorRow('superseded', 3), floorRow('seat', 2)]],
+    ['held after a twin whose retry died', ['boom', 'held'], 'dead',
+      [floorRow('superseded', 2), floorRow('seat', 3), BORROWED]],
+    ['both twins held', ['held', 'held'], null, [floorRow('seat', 2), floorRow('seat', 3)]],
+  ])('D-06: on R2\'s taskId-less floor a held twin keeps its OWN row and no superseded row (%s); recorded equals billed', async (_label, kinds, retry, rows) => {
     const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
       budget: null, reasoningOnly: false, ambientFlag: null });
     const bare = (leg) => Object.fromEntries(Object.entries(leg).filter(([k]) => k !== 'taskId'));
-    const boom = bare({ ...deadLeg('deepseek', 'error', 'boom', 'abc123-s1', 1), usage: cost(0.02) });
-    const held = bare({ ...deadLeg('deepseek', 'error', MINTED, 'abc123-s1', 2), finish: 'length',
-      usage: cost(0.03) });
-    expect(['taskId' in boom, 'taskId' in held]).toEqual([false, false]);   // non-vacuity: the floor
-    const retryLeg = usableLeg('deepseek', 'abc123-s1r1', 1);
-    const { r, notes, said } = await heldTwinRun([boom, held], [retryLeg]);
-    expect(r.extraRows).toEqual([twinRow('superseded', { usage: cost(0.02) }),
-      twinRow('superseded', { usage: cost(0.03) }), twinRow('seat', { usage: cost(0.02) })]);
-    const cents = (legs) => legs.reduce((sum, l) => sum + Math.round(l.usage.cost.amount * 100), 0);
-    expect(cents([...r.extraRows, ...r.reviews.map((x) => x.leg)])).toBe(8);   // recorded
-    expect(cents([boom, held, retryLeg])).toBe(6);                              // billed
-    expect(notes.map((n) => n.channel)).toEqual(['seat-unbound', 'seat-unbound', 'stage1-retry', 'dead-leg']);
-    expect(said).not.toContain('a superseded row for seat');                    // silent
+    const legs = kinds.map((kind, i) => bare({
+      ...deadLeg('deepseek', 'error', kind === 'held' ? MINTED : 'boom', 'abc123-s1', i + 1),
+      ...(kind === 'held' ? { finish: 'length' } : {}), usage: cost(i === 0 ? 0.02 : 0.03) }));
+    expect(legs.some((l) => 'taskId' in l)).toBe(false);                      // non-vacuity: the floor
+    const retryLegs = retry === null ? null : [retry === 'healed' ? usableLeg('deepseek', 'abc123-s1r1', 1)
+      : deadLeg('deepseek', 'timed-out', null, 'abc123-s1r1', 1)];
+    const { r, said } = await heldTwinRun(legs, retryLegs);
+    // Named mutant "HELDROWBYKEY" (key a held leg by `rowKeyOf` again in
+    // run-stage1-rows.js :: pushDeadSeatRows): the held twin borrows or collapses onto its twin's
+    // row, and this line reds on every cell but the order control.
+    expect(r.extraRows).toEqual(rows);
+    const cents = (usages) => usages.reduce((sum, u) => sum + Math.round(((u && u.cost && u.cost.amount) || 0) * 100), 0);
+    const billed = cents([...legs, ...(retryLegs || [])].map((l) => l.usage));
+    expect(cents([...r.extraRows.map((x) => x.usage), ...r.reviews.map((x) => x.leg.usage)])).toBe(billed);
+    expect(said).not.toContain('a superseded row for seat');                    // and nothing to refuse
   });
 });
 

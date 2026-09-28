@@ -92,17 +92,13 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
   // `run-retry-gate.js :: isOutputLengthLoss` names rides a zero-model `held` unit of its own
   // (`run-retry-group.js :: groupStage1Losses`) and is never relaunched, so an UNBOUND held twin IS
   // skipped while its sibling is retried. That is not a split: no retry replaced the held leg, so
-  // no superseded row was ever its due. The loop below decides its row exactly as for any skipped
-  // leg (the refusal still turns on `willTakeItsOwnLeg`), but never announces a held leg: there is
-  // no disagreement to report.
-  // ⚠️ SCOPE, MEASURED: on unbound twins whose legs carry no taskId, a held twin keeps R2's collapse
-  // (R2's taskId-less floor, where `rowKeyOf` cannot mint; see the COLLIDING measurement below).
-  // When the healed twin precedes it in `deadLegs0`, `willTakeItsOwnLeg` is false, so the held leg
-  // gets a superseded row that nothing superseded, and its primary row is built from the healed
-  // twin's first leg, which is then counted twice, silently: recorded 0.08 against billed 0.06, and
-  // no notice. Pinned in run-stages.test.js's T-A5 describe, so a change to it is a decision, not
-  // drift. No fanout leg lacks a taskId: each carries one minted by `leg-ids.js :: deriveLegIds`,
-  // which `seats.js :: bindSeats` binds by slot, so production twins arrive bound.
+  // no superseded row is ever its due, and the loop below skips a held leg (skipped, and of that
+  // class) before the join. Its dead-seat row is its OWN first leg, keyed by the leg itself in
+  // `run-stage1-rows.js :: pushDeadSeatRows`, so no billed usage can drop, and there is nothing to
+  // refuse or announce. MEASURED on R2's taskId-less floor too (council round 1), where `rowKeyOf`
+  // cannot mint: recorded equals billed in every held cell. Before, the held leg was written a
+  // superseded row and borrowed its twin's first leg (8 against 6 billed, silently), or two held
+  // twins collapsed onto one row (2 of 5).
   // ⚠️ v4.8 T-A5 — and the paragraph above is now the DERIVATION, not the safety. Both facts
   // exist to make ONE statement true: no first leg is SKIPPED while its alias key is superseded.
   // `retry.skippedDeadLegs` states that directly, in leg OBJECTS — the very members of
@@ -145,9 +141,9 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
   // hands that row the HEALED twin's first leg, which already carries a superseded row: one leg,
   // two rows. Probed at the push site — `finalLeg` is that leg (not null), `borrowed` null, spare
   // pool empty. A borrow needs `attemptedSeats.has(join)` TRUE: the negation of this shape.
-  // It is announced either way (a held leg aside, per the D-06 exception above: nothing about it
-  // was corrected), because a silently corrected number is the failure mode this join is watched
-  // for; a THROW would be wrong here, aborting a paid-for council over a row miscount.
+  // It is announced either way (a held leg never reaches it: see the D-06 exception above),
+  // because a silently corrected number is the failure mode this join is watched for; a THROW
+  // would be wrong here, aborting a paid-for council over a row miscount.
   // Channel `internal` — the runtime disagreed with itself, which is not a seat loss. All FOUR
   // readers of a note's `data.seat` (verdict.js, workspace-seats.js, live-dead-seats.js,
   // workspace/seat-space.js) gate on dead-leg/dead-wave/seat-unbound first, so it reaches none, and it cannot
@@ -166,12 +162,9 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
       data: { seat: alias, taskId: dead.taskId || null } });
   };
   for (const dead of deadLegs0) {
+    if (skippedLegs.has(dead) && isOutputLengthLoss(dead)) { continue; } // D-06: HELD, never superseded (above)
     if (!supersededKeys.has(keyOf(dead))) { continue; }
-    if (skippedLegs.has(dead) && willTakeItsOwnLeg(dead)) {
-      // D-06: a HELD leg is refused its row like any skipped leg, but silently: it is not a split.
-      if (!isOutputLengthLoss(dead)) { refuseSupersede(dead); }
-      continue;
-    }
+    if (skippedLegs.has(dead) && willTakeItsOwnLeg(dead)) { refuseSupersede(dead); continue; }
     rows.push(buildRunStatsEntry({ leg: dead, model: dead.modelInput || dead.model,
       role: 'superseded', wasChair: false }));
   }

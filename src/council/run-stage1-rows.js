@@ -25,6 +25,9 @@ const { seatKey, twinAliases, legLossKey } = require('./run-retry-group');
 // eliminating stays eliminated. Re-exported at the foot of this file, which is what gives the
 // extraction a second import path to pin function identity across.
 const { supersededRows } = require('./run-stage1-superseded');
+// D-06: the one spelling of the held death class, for the held-leg row below. A leaf for this
+// file: its one require is ../utils/output-length, and nothing under src/utils requires council/.
+const { isOutputLengthLoss } = require('./run-retry-gate');
 
 /**
  * Push superseded-seat and primary-error dead-seat rows onto extraRows.
@@ -132,12 +135,17 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   }
 
   // `exact` says the key names ONE seat; `join` is what the lookups below ask with.
-  const deadSeats = new Map();   // row key -> { seat, alias, exact, join }
+  // D-06: a HELD leg (skipped, and of the class `run-retry-gate.js :: isOutputLengthLoss` names) was
+  // never relaunched, so its OWN first leg is its row. It is keyed by the leg itself, never by
+  // `rowKeyOf`, so on R2's taskId-less floor no twin can share its key or lend it a leg.
+  const skipped = new Set(retry.skippedDeadLegs || []);
+  const deadSeats = new Map();   // row key -> { seat, alias, exact, join, own }
   for (const l of stillDeadLegs) {
     const seat = seatOf.get(l) || null;
     const alias = l.modelInput || l.model;
-    const key = rowKeyOf(l);
-    deadSeats.set(key, { seat, alias, exact: !!seat || !twins.has(alias), join: key });
+    const own = skipped.has(l) && isOutputLengthLoss(l) ? l : null;
+    const key = own || rowKeyOf(l);
+    deadSeats.set(key, { seat, alias, exact: !!seat || !twins.has(alias), join: key, own });
   }
   for (const w of stillDeadWaves) {
     // `models` and `seats` are narrowed in LOCKSTEP by run-retry.js's
@@ -159,7 +167,7 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
     });
   }
 
-  for (const [, { seat, alias, exact, join }] of deadSeats) {
+  for (const [, { seat, alias, exact, join, own }] of deadSeats) {
     // ⚠️ Safe only because `stage1-bind.js :: bindPaddedWave` — which
     // `run-retry-launch.js :: bindRetryWave` calls — DROPS every placeholder bind and keeps
     // placeholder ids unique. Together they guarantee a BOUND still-dead retry leg always
@@ -171,7 +179,7 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
     // both went out of range, and `check:citations` stayed GREEN — its CITATION regex
     // requires a `.js` path immediately before `:NNN`, so a bare-paren line ref is invisible
     // to the gate. A green citation gate proves nothing about that form.
-    let finalLeg = exact ? retryLegBySeat.get(join) : undefined;
+    let finalLeg = own || (exact ? retryLegBySeat.get(join) : undefined);
     // v4.8 council A1: claim the spare HERE, and never as `finalLeg`. It is consumed exactly
     // as before — same pool, same `shift()`, same one-apiece hand-out, so the SET of billed
     // legs on the record is unchanged — but it reaches the row through `usage` alone below.
