@@ -285,16 +285,38 @@ Claude Code plugin channel already relies on) and prints instructions to run
 `amicus init` / `amicus setup` / `amicus doctor` afterward from an ordinary,
 non-elevated prompt.
 
-**Before the first submission:** a real elevated local install (`choco pack`
-then `choco install -s .`) has not been run — this package is untested
-against a real Chocolatey install. Test that first, ideally on a second
-Windows account. After the install, open an ordinary (non-elevated) prompt,
-run `amicus doctor`, and confirm it finds the OpenCode engine binary, because
-the package installs through `npm install -g`, npm 11 warns about install
-scripts that are not on its allow-scripts list (a later phase of that policy
-is to block them), and opencode-ai's install script is what places the
-engine binary. Then create a community.chocolatey.org account + API key and
-`choco push`.
+**Same-account elevation only, for now.** The guard fixes only the
+registration half. The package currently supports same-account elevation
+only: npm's global prefix is per-account (Node's bundled npmrc sets
+`prefix=${APPDATA}\npm`), so under a different admin account or SYSTEM,
+amicus and its `amicus`/`am` shims land in that account's `%APPDATA%\npm`,
+off the interactive user's PATH — and the install still exits 0. A
+machine-wide prefix is the alternative; choosing it is an owner decision
+(B-REL-5), not part of this draft.
+
+**Before the first submission:** a real elevated local install has not been
+run — this package is untested against a real Chocolatey install. Test it
+first on a real Windows account, ideally a second one, elevating as that same
+account (same-account elevation only, above):
+
+1. Run `choco pack` in `packaging/chocolatey/`.
+2. From an elevated prompt in that same directory (`choco install` needs an
+   admin shell by default), run
+   `choco install amicus --source "'.;https://community.chocolatey.org/api/v2/'"`.
+   The community feed after the semicolon is what lets the `nodejs-lts`
+   dependency resolve.
+3. From the interactive account, in an ordinary (non-elevated) prompt,
+   `where.exe amicus` must resolve before `amicus init` is run (`where.exe`,
+   because in PowerShell `where` is an alias for Where-Object). Then confirm
+   `amicus init` finds Node on PATH and completes.
+4. After the install, open an ordinary (non-elevated) prompt, run
+   `amicus doctor`, and confirm it finds the OpenCode engine binary, because
+   the package installs through `npm install -g`, npm 11 warns about install
+   scripts that are not on its allow-scripts list (a later phase of that
+   policy is to block them), and opencode-ai's install script is what places
+   the engine binary.
+
+Then create a community.chocolatey.org account + API key and `choco push`.
 
 **Version:** `amicus.nuspec`'s `<version>` is a manual pin site, kept in
 lockstep with `package.json`/`server.json`/`.claude-plugin/plugin.json` by

@@ -1,15 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  UNTESTED until an elevated local install passes. Before the first `choco push`, run
-  `choco pack` then `choco install -s .` on a real Windows account (ideally elevated, and
-  ideally a second/different account from the one that built the package) and confirm
-  `amicus init` afterward finds Node on PATH and completes. See the postinstall-elevation
-  note in tools/chocolateyInstall.ps1 for the specific risk this guards against. After the
-  install, open an ordinary (non-elevated) prompt, run `amicus doctor`, and confirm it finds
-  the OpenCode engine binary, because the package installs through `npm install -g`, npm 11
-  warns about install scripts that are not on its allow-scripts list (a later phase of that
-  policy is to block them), and opencode-ai's install script is what places the engine
-  binary.
+  UNTESTED until an elevated local install passes. Before the first `choco push`, test it on
+  a real Windows account, ideally a second one rather than the account that built the
+  package, elevating as that same account: the package currently supports same-account
+  elevation only (see the KEY RISK note in tools/chocolateyInstall.ps1).
+    1. Run `choco pack` in packaging/chocolatey/.
+    2. From an elevated prompt in that same directory (`choco install` needs an admin shell
+       by default), run
+       `choco install amicus -s "'.;https://community.chocolatey.org/api/v2/'"`.
+       `-s` is choco's short form of its source option, used here because an XML comment
+       cannot contain a double hyphen; the community feed after the semicolon is what lets
+       the nodejs-lts dependency resolve.
+    3. From the interactive account, in an ordinary (non-elevated) prompt, `where.exe amicus`
+       must resolve before `amicus init` is run (`where.exe`, because in PowerShell `where` is
+       an alias for Where-Object). Then confirm `amicus init` finds Node on PATH and
+       completes.
+    4. After the install, open an ordinary (non-elevated) prompt, run `amicus doctor`, and
+       confirm it finds the OpenCode engine binary, because the package installs through
+       `npm install -g`, npm 11 warns about install scripts that are not on its
+       allow-scripts list (a later phase of that policy is to block them), and
+       opencode-ai's install script is what places the engine binary.
 
   Fields sourced from:
     - id/authors/projectUrl: package.json (name, author, repository)
@@ -54,9 +64,13 @@ other, and a non-Claude chair synthesizes a verdict. Or fork a single conversati
 Gemini, GPT, DeepSeek, or another model, work in parallel, and fold the result back.
 
 This package installs the `amicus` npm package globally (`npm install -g amicus`) via its
-Node.js LTS dependency (`nodejs-lts`). It does **not** run amicus's own interactive setup
-during `choco install` — after installing, open an ordinary (non-elevated) prompt and run
-`amicus init`, `amicus setup`, and `amicus doctor`.
+Node.js LTS dependency (`nodejs-lts`). It currently supports same-account elevation only:
+npm's global prefix is per-account (Node's bundled npmrc sets `prefix=${APPDATA}\npm`), so
+under a different admin account or SYSTEM, amicus and its `amicus`/`am` shims land in that
+account's `%APPDATA%\npm`, off the interactive user's PATH. It does **not** run amicus's
+postinstall registration during `choco install` — after installing, open an ordinary
+(non-elevated) prompt, check that `where.exe amicus` finds it, and run `amicus init`,
+`amicus setup`, and `amicus doctor`.
 
 Requires at least one model API key (OpenRouter recommended) or a local OpenAI-compatible
 server (Ollama / LM Studio / vLLM) — see `amicus setup`.
