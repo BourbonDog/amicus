@@ -33,7 +33,9 @@ const os = require('os');
 const path = require('path');
 
 const ei = require('../src/sidecar/electron-install');
+const { extractZipBuffer } = require('../src/sidecar/zip-from-buffer');
 const { fakeElectronDir, SELF_ANCHOR_OFF, ZIP_BODY } = require('./helpers/fake-electron-dir');
+const { buildZip } = require('./helpers/zip-fixture');
 
 const VERSION = '43.1.1';
 const PLATFORM = 'win32';
@@ -44,6 +46,9 @@ const ESC = '\u001b';
 /** The payload: colour codes, a forged amicus line, and a bidi override. */
 const FORGED_LINE = '[amicus] Electron artifact verified. Nothing further is required.';
 const NASTY = `../${ESC}[31mEVIL${ESC}[0m\n${FORGED_LINE}\n\u202eTNEMHCATTA`;
+/** General-purpose bit 11: the entry name is UTF-8. Without it yauzl decodes the
+ *  name as CP437, which already turns ESC and LF into printable glyphs. */
+const FLAG_UTF8 = 0x0800;
 
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
@@ -125,6 +130,19 @@ describe('F5 — an unsafe archive cannot write the refusal it is refused with (
     expect(lines.some((l) => l.startsWith(FORGED_LINE))).toBe(false);
     expectSafe(flatStderr(stderr));
   });
+
+  test('one layer down, the in-memory extractor throws an already-safe refusal (RAWCOMPOSE)', async () => {
+    // The LIVE composer, not a mock: real yauzl refuses the name, and
+    // `zip-entry-write.js :: failure` builds the UNZIP_UNSAFE_ARCHIVE through
+    // collapseExcerpt before anyone quotes it.
+    const bytes = buildZip([{ name: NASTY, body: 'x', flags: FLAG_UTF8 }]);
+    const err = await extractZipBuffer(bytes, { dir: mkTmp('amicus-compose-') }).catch((e) => e);
+
+    expect(err.code).toBe('UNZIP_UNSAFE_ARCHIVE');
+    expectSafe(err.message);
+    expect(err.message).not.toContain('\n');
+    expect(err.message).toContain('EVIL');            // cleaned, not emptied
+  });
 });
 
 describe('F5 — an attacker-named cache path cannot write the refusal either', () => {
@@ -179,7 +197,7 @@ describe('F5 — an attacker-named cache path cannot write the refusal either', 
 });
 
 describe('F5 — the sanitizer did not eat the message', () => {
-  test('an ordinary refusal still reads exactly as it did before', async () => {
+  test('an ordinary refusal reaches the user verbatim: the sanitizer leaves plain text alone', async () => {
     const { dir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     const extract = jest.fn(async () => {
       // The same live shape as above, without the payload.

@@ -418,6 +418,18 @@ describe('extractZipBuffer — extraction with no filesystem source', () => {
     expect(fs.existsSync(path.join(dir, '..', '..', 'evil'))).toBe(false);
   });
 
+  test('an EMBEDDED backslash dot-segment is refused the same way, by yauzl, before any write', async () => {
+    // `sub\..\..\evil` becomes `sub/../../evil` in the same rewrite, and yauzl's
+    // own `..` check refuses it before the entry is ever placed: the wording is
+    // yauzl's, not the realpath bound's `Out of bound path`.
+    const dir = mkTmp();
+    const err = await extractZipBuffer(buildZip([{ name: 'sub\\..\\..\\evil', body: 'x' }]), { dir }).catch((e) => e);
+
+    expect(err.code).toBe('UNZIP_UNSAFE_ARCHIVE');
+    expect(err.message).toBe('invalid relative path: sub/../../evil');
+    expect(fs.existsSync(path.join(dir, '..', 'evil'))).toBe(false);
+  });
+
   test('an entry that escapes through a pre-planted directory symlink is REFUSED', async () => {
     // extract-zip's own out-of-bound check, kept VERBATIM and re-run per entry:
     // `realpath(destDir)` resolving outside the root is the shape a symlink an

@@ -132,6 +132,13 @@ describe('no phantom dependencies in shipped code', () => {
   it('tiktoken is not declared in package.json', () => {
     expect(declared.has('tiktoken')).toBe(false);
   });
+
+  it('no file under src/, bin/, electron/ or scripts/ requires tiktoken', () => {
+    // The phantom sweep above already fails on an undeclared require in the
+    // first three; scripts/, which ships the postinstall, it never scans.
+    expect(required.has('tiktoken')).toBe(false);
+    expect(collectExternalRequires(path.join(ROOT, 'scripts')).has('tiktoken')).toBe(false);
+  });
 });
 
 describe('engine version pinning (#133)', () => {
