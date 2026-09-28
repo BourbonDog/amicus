@@ -71,15 +71,15 @@ try {
   # npm writes its warnings to stderr, and Windows PowerShell 5.1 (the engine Chocolatey runs
   # this under) turns every stderr line that 2>&1 redirects into a terminating error while
   # $ErrorActionPreference is 'Stop'. Relax it for this one call; $LASTEXITCODE is the real
-  # failure signal.
+  # failure signal. The finally restores it on every path, including a throw from the call.
   $ErrorActionPreference = 'Continue'
   $env:AMICUS_SKIP_POSTINSTALL = '1'
   & npm @npmArgs 2>&1 | Write-Host
-  $ErrorActionPreference = 'Stop'
   if ($LASTEXITCODE -ne 0) {
     throw "npm install -g $packageName exited with code $LASTEXITCODE"
   }
 } finally {
+  $ErrorActionPreference = 'Stop'
   Remove-Item Env:\AMICUS_SKIP_POSTINSTALL -ErrorAction SilentlyContinue
 }
 
