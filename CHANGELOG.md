@@ -3,6 +3,27 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Added
+
+- A Chocolatey package is drafted at `packaging/chocolatey/` (untested until a local
+  elevated install passes) — not yet published to the community feed.
+
+### Changed
+
+- `node scripts/generate-docs.js --check`'s cross-link validation now also covers `README.md`
+  and every top-level `docs/*.md` file (previously `CLAUDE.md` only), resolving each file's
+  relative links against its own directory rather than the project root.
+
+### Fixed
+
+- Corrected two stale distribution-status claims: `docs/DISTRIBUTION.md` said the MCP Registry
+  publish was still pending; amicus has been published there since v1.9.1 (2026-07-03).
+  `docs/ROADMAP.md`'s "Deferred out of v4.4.1 into v4.5 (2026-07-27)" table struck through only
+  LC-5 as closed; CA-4, RN-1, RN-5, RN-11 and TST-3 (shipped v4.5-v4.7) and TST-2 (shipped
+  2026-07-27) now strike through too.
+
 ## [4.14.1] - 2026-09-28
 
 ### Added
