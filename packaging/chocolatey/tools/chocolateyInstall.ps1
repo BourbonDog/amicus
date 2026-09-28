@@ -7,7 +7,10 @@
 $ErrorActionPreference = 'Stop'
 
 $packageName = 'amicus'
-$packageVersion = $env:chocolateyPackageVersion
+# The npm spec takes the first three segments: a Chocolatey package-fix re-push for the same
+# amicus release appends a fourth, numeric one (4.14.1.20261001), which is not a valid npm
+# version. Any other version string passes through unchanged.
+$packageVersion = $env:chocolateyPackageVersion -replace '^(\d+\.\d+\.\d+)\.\d+$', '$1'
 
 # --- THE KEY RISK (read before changing this) -------------------------------------------
 # amicus's own npm postinstall (scripts/postinstall.js) registers the MCP server and copies

@@ -322,7 +322,10 @@ Then create a community.chocolatey.org account + API key and `choco push`.
 lockstep with `package.json`/`server.json`/`.claude-plugin/plugin.json` by
 hand at release time (`docs/publishing.md`'s checklist) — no automated test
 enforces this one yet, unlike `server.json`
-(`tests/scripts/package-manifest.test.js`).
+(`tests/scripts/package-manifest.test.js`). A Chocolatey package-fix re-push
+for the same amicus release adds a fourth, numeric segment (for example
+`4.14.1.20261001`); `chocolateyInstall.ps1` passes only the first three to
+npm, so it still installs `amicus@4.14.1`.
 
 ## 5. Third-party MCP directories
 
