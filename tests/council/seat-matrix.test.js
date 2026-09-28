@@ -1817,10 +1817,14 @@ describe('ONE shared predicate decides seat space for BOTH renderers (council A3
 /**
  * `report.js`'s SYMBOL was a plain object literal, so an inherited/unknown
  * vote key (e.g. "toString") resolved Object.prototype's own method instead
- * of `undefined` — report-md.js and report-html.js have no fallback at all,
- * and matrix-model.js's `|| '?'` is defeated because a function is truthy.
- * Fixed on the table (`__proto__: null`), the same shape as tally.js's
+ * of `undefined`. report-md.js and report-html.js had no fallback at all
+ * then, and matrix-model.js's `|| '?'` was defeated because a function is
+ * truthy. Fixed on the table (`__proto__: null`), the same shape as tally.js's
  * VERDICTS (Task 1) and street-cred.js's perJudgeRank (Task 2).
+ *
+ * Since D-09 (B-CV-11, 2026-09-28) both renderers fall back to `?` for an
+ * unrecognized verdict, as the matrix does (a falsy one is still no vote),
+ * so the null prototype now guards all three `|| '?'` fallbacks.
  *
  * These fixtures are hand-built, alias-space (no seats table) documents —
  * the defect and its fix are keyed on the vote VALUE at three fixed
@@ -1897,9 +1901,9 @@ describe('SYMBOL is prototype-safe: an inherited/unknown vote key must not resol
   });
 
   test('S6 — html: an unrecognized verdict renders ?, never the literal undefined', () => {
-    // Scoped to the F1 row: verdictFor carries no tierCounts, so this minimal
-    // fixture's tier table prints `undefined` on its own (the scoping note on
-    // report.test.js's lostVerdict cost-table test says the same).
+    // Scoped to the F1 row, the S2 idiom: D-09 changed the matrix cell, so both
+    // assertions read that row alone. A whole-report `not.toContain` would also
+    // pin every other section of the report, none of which D-09 touched.
     const row = htmlRow(buildReport({ verdict: verdictFor('bogus') }, { format: 'html' }));
     expect(row).toContain('<td class="c">?</td>');
     expect(row).not.toContain('undefined');
