@@ -256,6 +256,26 @@ describe('F3 — controlledProvision reports whether it pinned', () => {
     expect(out).toEqual({ pinned: false });
     expect(lines.join('\n')).toMatch(/no published sha256 for electron-v43\.1\.1-win32-x64\.zip/);
     expect(lines.join('\n')).toMatch(/could not be pinned/);
+    expect(lines.join('\n')).toMatch(/this electron package ships no checksums\.json amicus can read/);
+  });
+
+  test("under the hatch, an UNLISTED artifact's NOTE names the silent table, not a missing one (D-02)", async () => {
+    // repairElectron refuses an unlisted artifact unless AMICUS_ALLOW_UNVERIFIED_ELECTRON=1,
+    // so this is the route that prints the NOTE for one: the trusted table EXISTS and has
+    // no entry for this file. "This electron package ships no checksums.json" is false here.
+    const lines = [];
+    const out = await controlledProvision({
+      ...withDir(),
+      anchor: { table: { 'electron-v43.1.1-darwin-arm64.zip': 'a'.repeat(64) }, source: '<test>' },
+      policy: { allowUnverified: true },
+      downloadArtifact: jest.fn(async () => writeZip()),
+      log: (m) => lines.push(m),
+    });
+    expect(out).toEqual({ pinned: false });
+    const text = lines.join('\n');
+    expect(text).toMatch(/no published sha256 for electron-v43\.1\.1-win32-x64\.zip \(the checksums\.json amicus trusts has no entry for it\)/);
+    expect(text).not.toMatch(/ships no/);
+    expect(text).toMatch(/could not be pinned/);
   });
 });
 

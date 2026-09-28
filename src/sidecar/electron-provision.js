@@ -24,7 +24,7 @@ const { extractBytesToDist } = require('./electron-layout');
 const { withNativeRescue } = require('./electron-native-rescue');
 const { refuseUnreadableArtifact, rejectDownloadedZip } = require('./electron-refuse');
 const { withScrubbedRepoEnv } = require('./electron-env-scrub');
-const { artifactFileName, expectedDigest, verifyArtifactBytes } = require('./electron-trust');
+const { artifactFileName, expectedDigest, isUnlisted, verifyArtifactBytes } = require('./electron-trust');
 const { containsOnDisk } = require('../utils/path-fence');
 
 /** Best-effort cache root for downloadArtifact (first resolved root). */
@@ -100,10 +100,13 @@ async function controlledProvision({
     log(`[amicus]   sha256 pin for ${fileName}; its digest comes from the mirror you are using.`);
     digest = null;
   } else if (!digest) {
-    log(`[amicus] NOTE: no published sha256 for ${fileName} (this electron package ships no`);
-    log('[amicus]   checksums.json entry for it), so the download could not be pinned: its bytes');
-    log('[amicus]   are checked against the SHASUMS256.txt the mirror itself serves. The result');
-    log('[amicus]   is reported as unverified.');
+    // No digest has two causes (electron-trust.js :: isUnlisted): no checksums.json amicus can
+    // read, or one silent about this file, which repairElectron lets through only under the hatch.
+    const why = isUnlisted(anchor, fileName) ? 'the checksums.json amicus trusts has no entry for it'
+      : 'this electron package ships no checksums.json amicus can read';
+    log(`[amicus] NOTE: no published sha256 for ${fileName} (${why}),`);
+    log('[amicus]   so the download could not be pinned: its bytes are checked against the SHASUMS256.txt');
+    log('[amicus]   the mirror itself serves. The result is reported as unverified.');
   }
   // D5: @electron/get runs IN THIS PROCESS and reads the same repo-plantable
   // npm_config_electron_* / npm_package_config_electron_* names install.js does.
