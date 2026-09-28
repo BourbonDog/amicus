@@ -367,6 +367,152 @@ describe('valueless and dash-leading value flags (v4.7 PR6)', () => {
   });
 });
 
+// D-04 (SL-4): an --out-dir already holding ANOTHER run's run.json is refused
+// before the engine. runCouncil is mocked, so the handler writes nothing: "the
+// engine was never reached" and "the old record is byte-identical" are what go
+// RED at 1851a6eb, where the run proceeded (and the real engine merged).
+describe('an --out-dir already in use (D-04, SL-4)', () => {
+  const seedRun = (dir, body) => {
+    fs.mkdirSync(dir, { recursive: true });
+    const p = path.join(dir, 'run.json');
+    fs.writeFileSync(p, typeof body === 'string' ? body : JSON.stringify(body));
+    return p;
+  };
+
+  it('refuses a folder holding another run\'s run.json, naming that run, and leaves the record untouched', async () => {
+    const dir = path.join(tmp, 'old-run');
+    const p = seedRun(dir, { runId: 'oldrun01', status: 'complete', exitCode: 0, pid: 4242 });
+    const before = fs.readFileSync(p, 'utf-8');
+    const code = await handleCouncilRun(argsBase({ 'out-dir': 'old-run' }));
+    expect(code).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    const doc = JSON.parse(stdout());
+    expect(doc.error.code).toBe('BAD_ARGS');
+    expect(doc.error.message).toBe(`Error: '${dir}' already holds run oldrun01's run.json — a new run there would merge into that record`);
+    expect(doc.error.hint).toBe('pass an --out-dir with no run.json in it, or move the old run\'s folder aside first');
+    expect(fs.readFileSync(p, 'utf-8')).toBe(before);
+  });
+
+  it('refuses a reused --run-id whose default folder holds that id\'s earlier run (a pid is recorded)', async () => {
+    const dir = path.join(tmp, 'council-feedc0de');
+    seedRun(dir, { runId: 'feedc0de', status: 'error', pid: 4242 });
+    expect(await handleCouncilRun(argsBase({ 'run-id': 'feedc0de' }))).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.message).toContain(`'${dir}' already holds run feedc0de's run.json`);
+    expect(JSON.parse(stdout()).error.hint).toBe('pass a fresh --run-id, or none (one is generated), or another --out-dir');
+  });
+
+  // The owner's tightening of D-04: the same runId is this run's own only as a LIVE pre-seed
+  // (no pid, status 'running', no completedAt). A dead one (aborted, crashed, spawn-failed, or
+  // any record with completedAt) is refused, and a reused --run-id's refusal names its own fix.
+  // Named mutants STATUSIGNORED, COMPLETEDIGNORED and PIDONLYEXEMPT (measured at 6481731) are
+  // recorded in tests/council/run-state.test.js beside the predicate's dead-record rows; the
+  // three tests below are among their killers.
+  it('refuses a reused --run-id over that id\'s aborted record with no pid, naming a fresh --run-id as the fix', async () => {
+    const dir = path.join(tmp, 'council-feedc0de');
+    const p = seedRun(dir, { schemaVersion: 2, type: 'council-run', runId: 'feedc0de', status: 'aborted', exitCode: 143, stages: [] });
+    const before = fs.readFileSync(p, 'utf-8');
+    expect(await handleCouncilRun(argsBase({ 'run-id': 'feedc0de' }))).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    const doc = JSON.parse(stdout());
+    expect(doc.error.code).toBe('BAD_ARGS');
+    expect(doc.error.message).toBe(`Error: '${dir}' already holds run feedc0de's run.json — that run id is already in use there, so a new run would merge into its record`);
+    expect(doc.error.hint).toBe('pass a fresh --run-id, or none (one is generated), or another --out-dir');
+    expect(fs.readFileSync(p, 'utf-8')).toBe(before);
+  });
+
+  it('refuses a reused --run-id over that id\'s crashed record (status error, completedAt set)', async () => {
+    const dir = path.join(tmp, 'council-feedc0de');
+    seedRun(dir, { schemaVersion: 2, type: 'council-run', runId: 'feedc0de', status: 'error', stages: [],
+      completedAt: '2026-09-28T00:00:00.000Z', error: { code: 'INTERNAL', message: 'Council engine process exited unexpectedly' } });
+    expect(await handleCouncilRun(argsBase({ 'run-id': 'feedc0de' }))).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.message).toContain(`'${dir}' already holds run feedc0de's run.json — that run id is already in use there`);
+  });
+
+  it('refuses a reused --run-id over a record still marked running but with completedAt set', async () => {
+    seedRun(path.join(tmp, 'council-feedc0de'), { schemaVersion: 2, type: 'council-run', runId: 'feedc0de', status: 'running', stages: [],
+      completedAt: '2026-09-28T00:00:00.000Z' });
+    expect(await handleCouncilRun(argsBase({ 'run-id': 'feedc0de' }))).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.hint).toBe('pass a fresh --run-id, or none (one is generated), or another --out-dir');
+  });
+
+  it('refuses an unreadable run.json without naming a run', async () => {
+    seedRun(path.join(tmp, 'junk'), '{ "runId": "abc", trunc');
+    expect(await handleCouncilRun(argsBase({ 'out-dir': 'junk' }))).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.message).toContain('already holds a run.json that is not a readable run record');
+  });
+
+  it('never echoes a runId outside the task-id grammar', async () => {
+    seedRun(path.join(tmp, 'odd'), { runId: 'x\u001b[31m\nFORGED', pid: 1 });
+    expect(await handleCouncilRun(argsBase({ 'out-dir': 'odd' }))).toBe(1);
+    const msg = JSON.parse(stdout()).error.message;
+    expect(msg).toContain('not a readable run record');
+    expect(msg).not.toContain('FORGED');
+  });
+
+  it('the human-mode refusal goes to stderr, with the fix as its hint line', async () => {
+    seedRun(path.join(tmp, 'old-run'), { runId: 'oldrun01', pid: 4242 });
+    const args = argsBase({ 'out-dir': 'old-run' });
+    args.json = false;
+    expect(await handleCouncilRun(args)).toBe(1);
+    const e = err.mock.calls.map((c) => String(c[0])).join('');
+    expect(e).toContain("already holds run oldrun01's run.json");
+    expect(e).toContain('  → pass an --out-dir with no run.json in it');
+  });
+
+  // Named mutant PRESEEDREFUSED: council/run-state.js :: otherRunInDir loses the line that
+  // exempts this run's own MCP pre-seed (the same runId, no pid). MEASURED 2026-09-28 at
+  // 6335210 over tests/council/run-state.test.js, this file and tests/mcp-council-run.test.js:
+  // RED 3 of 132: "this run's own MCP pre-seed (same runId, no pid)" (run-state.test.js) ·
+  // "accepts this run's own MCP pre-seed: the same runId and no pid yet"
+  // (cli-council-run-flags.test.js) · "the MCP door's own child accepts its parent's pre-seed
+  // (the two doors agree)" (cli-council-run-flags.test.js).
+  // ⚠️ PRESEEDREFUSED RE-RUN (2026-09-28, at 6481731), because its guarded line changed: the
+  // owner's tightening made the exemption `!rec.pid && rec.status === 'running' &&
+  // !rec.completedAt`, and this mutant now drops that whole line. Same three files: RED 3 of
+  // 142, the same three tests: "this run's own MCP pre-seed (same runId, no pid)"
+  // (run-state.test.js) · this test, at `expect(runCouncil).toHaveBeenCalled()` · "the MCP
+  // door's own child accepts its parent's pre-seed (the two doors agree)", at its
+  // `toBe(0)`; tests/mcp-council-run.test.js stays 39/39 green, as before.
+  it('accepts this run\'s own MCP pre-seed: the same runId and no pid yet', async () => {
+    seedRun(path.join(tmp, 'X'), { schemaVersion: 2, type: 'council-run', runId: 'feedc0de', status: 'running', stages: [] });
+    await handleCouncilRun(argsBase({ 'run-id': 'feedc0de', 'out-dir': 'X' }));
+    expect(runCouncil).toHaveBeenCalled();
+  });
+
+  // Named mutant DIRNONEMPTY: council/run-state.js :: otherRunInDir treats any non-empty
+  // directory as taken instead of keying on run.json. MEASURED 2026-09-28 at 6335210 over the
+  // same three files: RED 3 of 132: "no directory, or a directory with no run.json, is free"
+  // (run-state.test.js) · "accepts a folder holding other files but no run.json (the CI and
+  // skill shapes)" (cli-council-run-flags.test.js) · "an outDir holding a briefing but no
+  // run.json still launches (the skill's run-folder shape)" (mcp-council-run.test.js).
+  it('accepts a folder holding other files but no run.json (the CI and skill shapes)', async () => {
+    const dir = path.join(tmp, 'council-run');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'briefing.md'), 'brief');
+    fs.writeFileSync(path.join(dir, 'opencode.json'), '{}');
+    await handleCouncilRun(argsBase({ 'out-dir': 'council-run' }));
+    expect(runCouncil).toHaveBeenCalled();
+  });
+
+  it('the MCP door\'s own child accepts its parent\'s pre-seed (the two doors agree)', async () => {
+    const { handleCouncilRunTool } = require('../src/mcp-council-run');
+    let argv = null;
+    const res = await handleCouncilRunTool({ briefingFile, models: ['gemini', 'gpt', 'qwen'] }, tmp, {
+      spawnFn: (a) => { argv = a; },
+      clientName: 'claude-code',
+      autoOpen: { decide: () => ({ open: false, reason: 'test' }), launch: () => ({}) },
+    });
+    expect(res.isError).toBeUndefined();
+    expect(argv).not.toBeNull();
+    expect(await handleCouncilRun(parseArgs(argv))).toBe(0);
+    expect(runCouncil).toHaveBeenCalled();
+  });
+});
+
 // v4.9 W5.2 (spec §5.3, ruling V5/V9 neighborhood): `--intent` on the council
 // run CLI surface — emit-when-'task': the options object handed to runCouncil
 // carries intent:'task' or NO intent key at all. 'review' is the default
@@ -476,6 +622,28 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     expect(code).toBe(1);
     expect(runCouncil).not.toHaveBeenCalled();
     fs.rmSync(outside, { recursive: true, force: true });
+  });
+  // D-04 (SL-4): the local-tool relaxation skips only the placement fence, never the
+  // in-use check. An outside --out-dir reused run after run is where a second run would
+  // otherwise merge into the first one's run.json.
+  // Named mutant LOCALSKIPSINUSE: cli-council-run-tools.js :: checkCouncilRunTools skips the
+  // in-use check whenever a local tool relaxed the placement fence (`if (other &&
+  // !wantsLocalTool)`). MEASURED 2026-09-28 at 52de867 over this file alone, applied alone
+  // and restored by byte copy: RED 1 of 62: "a local tool relaxes the placement fence, not
+  // D-04: an outside --out-dir holding another run's run.json is refused", at
+  // `expect(code).toBe(1)` (received 0).
+  // ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
+  test('a local tool relaxes the placement fence, not D-04: an outside --out-dir holding another run\'s run.json is refused', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-out-inuse-'));
+    try {
+      fs.writeFileSync(path.join(outside, 'run.json'), JSON.stringify({ runId: 'oldrun01', pid: 4242 }));
+      const code = await handleCouncilRun(argsBase({ tools: 'read', 'out-dir': outside }));
+      expect(code).toBe(1);
+      expect(runCouncil).not.toHaveBeenCalled();
+      expect(JSON.parse(stdout()).error.message).toContain("already holds run oldrun01's run.json");
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   // council #247 round 5 (P2-R51, D4): an --agent run has no local tool of

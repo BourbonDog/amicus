@@ -75,7 +75,9 @@ function renderMd(m) {
   for (const f of m.findings) {
     const cells = m.judges.map((j) => {
       const v = f.byJudge[j];
-      return (v ? SYMBOL[v] : ' ') + (j === f.raiser ? '*' : '');
+      // D-09 (B-CV-11): an unrecognized verdict renders '?', as
+      // matrix-model.js :: buildMatrixModel does; a falsy one is still no vote.
+      return (v ? (SYMBOL[v] || '?') : ' ') + (j === f.raiser ? '*' : '');
     });
     // v4.8 PR5a T6 (R5-10): the R8 marker rides the TIER cell. It qualifies the tier's
     // implicit claim of independent corroboration, which is exactly what R8 exists to stop
