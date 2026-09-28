@@ -70,9 +70,11 @@
  * `conformance` (#244 residue, 2026-09-27) is the asks-to-parse axis: `clean` (the
  * first ask parsed), `repaired` (a later ask parsed), `unstructured` (no ask parsed),
  * and its DEFAULT is `none`, meaning no ask was checked. Every production caller that
- * passes no conformance describes a leg nobody checked (a dead seat, a superseded
- * first attempt, a failed chair attempt, the chair give-up row), so a row says `clean`
- * only when a check said so. The one success on the default path,
+ * passes no conformance describes a leg nobody checked: a dead seat; a promoted seat
+ * (#257: its text is its reasoning, which run-launch.js :: materializeReviews never
+ * treats as a review); a superseded first attempt; a failed chair attempt; the chair
+ * give-up row. So a row says `clean` only when a check said so. The one success on the
+ * default path,
  * run-assemble.js :: claudeRunStatsRow (the orchestrator's validated review file),
  * passes `clean` itself. `none` ranks BELOW `clean` in both CONFORMANCE_RANK tables,
  * so it never wins a worst-wins merge.

@@ -1357,6 +1357,8 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
       expect([merge('none', 'clean'), merge('clean', 'none')]).toEqual(['clean', 'clean']);
       expect([merge('none', 'repaired'), merge('unstructured', 'none')]).toEqual(['repaired', 'unstructured']);
       expect(merge('none', 'none')).toBe('none');
+      // An unknown value ranks 0 (T13c), so it outranks none from either position too.
+      expect([merge('none', 'weird'), merge('weird', 'none')]).toEqual(['weird', 'weird']);
     }
     const row = (conformance) => rsRow({ model: 'alpha', conformance, resolvedModel: 'v/a',
       status: conformance === 'none' ? 'error' : 'complete' });
