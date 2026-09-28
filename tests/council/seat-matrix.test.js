@@ -1849,10 +1849,10 @@ describe('SYMBOL is prototype-safe: an inherited/unknown vote key must not resol
   }
 
   test('S1 — markdown: a vote of "toString" renders the SAME cell as a vote of "bogus"', () => {
-    // ⚠️ Assert the EQUIVALENCE, not the literal. The literal is "undefined"
-    // and is a separate, pre-existing defect (BASE already renders it for
-    // ANY unknown verdict, "bogus" included) — out of scope here, and a test
-    // hard-coding it would read as an endorsement of that rendering.
+    // ⚠️ Assert the EQUIVALENCE, not the literal. When this pin was written the
+    // literal was "undefined", a separate defect for ANY unknown verdict. D-09
+    // (B-CV-11, 2026-09-28) made it '?', pinned per renderer by S5 and S6
+    // below; this pin still asserts only the equivalence PROTOSYMBOL breaks.
     const mdToString = buildReport({ verdict: verdictFor('toString') }, { format: 'md' });
     const mdBogus = buildReport({ verdict: verdictFor('bogus') }, { format: 'md' });
     expect(rowFor(mdToString, 'F1')).toBe(rowFor(mdBogus, 'F1'));
@@ -1881,6 +1881,47 @@ describe('SYMBOL is prototype-safe: an inherited/unknown vote key must not resol
       expect(html).toContain(`<td class="c">${glyph}</td>`);
       const m = buildMatrixModel(tallyFor(vote), {}, null);
       expect(m.rows[0].cells[0].sym).toBe(glyph);
+    }
+  });
+
+  // D-09 (B-CV-11, 2026-09-28): an unrecognized verdict renders '?' at every
+  // consumer, as matrix-model.js :: buildMatrixModel always did; a falsy vote is
+  // still no vote. ONE pin per renderer, the rule report-html.js :: renderHtml
+  // states for its markers: a shared pin would let either regress silently.
+  /** The F1 row of an html report (the S2 idiom). */
+  const htmlRow = (html) => html.match(/<tr[^>]*><td>F1<\/td>.*?<\/tr>/)[0];
+
+  test('S5 — markdown: an unrecognized verdict renders ?, never the literal undefined', () => {
+    const md = buildReport({ verdict: verdictFor('bogus') }, { format: 'md' });
+    expect(rowFor(md, 'F1')).toBe(`| F1 | major | ${RAISER} | ? | Contested |  |`);
+  });
+
+  test('S6 — html: an unrecognized verdict renders ?, never the literal undefined', () => {
+    // Scoped to the F1 row: verdictFor carries no tierCounts, so this minimal
+    // fixture's tier table prints `undefined` on its own (the scoping note on
+    // report.test.js's lostVerdict cost-table test says the same).
+    const row = htmlRow(buildReport({ verdict: verdictFor('bogus') }, { format: 'html' }));
+    expect(row).toContain('<td class="c">?</td>');
+    expect(row).not.toContain('undefined');
+  });
+
+  test('S7 — buildMatrixModel: an unrecognized verdict yields sym ? (the reference the reports now match)', () => {
+    expect(buildMatrixModel(tallyFor('bogus'), {}, null).rows[0].cells[0].sym).toBe('?');
+  });
+
+  test('S8 — the raiser marker still rides a ? cell, in both renderers', () => {
+    const v = verdictFor('bogus');
+    v.findings[0].raiser = 'gpt';
+    expect(rowFor(buildReport({ verdict: v }, { format: 'md' }), 'F1')).toBe('| F1 | major | gpt | ?* | Contested |  |');
+    expect(htmlRow(buildReport({ verdict: v }, { format: 'html' }))).toContain('<td class="c">?<sup>*</sup></td>');
+  });
+
+  test('S9 — a falsy verdict is still NO vote: a blank cell, never ?, at all three consumers', () => {
+    for (const vote of [null, '']) {
+      expect(rowFor(buildReport({ verdict: verdictFor(vote) }, { format: 'md' }), 'F1'))
+        .toBe(`| F1 | major | ${RAISER} |   | Contested |  |`);
+      expect(htmlRow(buildReport({ verdict: verdictFor(vote) }, { format: 'html' }))).toContain('<td class="c"></td>');
+      expect(buildMatrixModel(tallyFor(vote), {}, null).rows[0].cells[0].sym).toBe(' ');
     }
   });
 });

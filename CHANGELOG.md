@@ -3,6 +3,15 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **`council report` prints `?` for a vote it does not recognize.** A verdict other than agree,
+  dispute or neutral rendered as the literal `undefined` in the markdown and HTML matrices; both now
+  print `?`, as the Council Workspace matrix already did. A missing vote is still a blank cell.
+  (B-CV-11)
+
 ## [4.14.1] - 2026-09-28
 
 ### Added

@@ -1028,8 +1028,8 @@ repair of a response with no findings block (channel `unverified-repair`) and on
 repair (channel `repair-refused`, naming the code), derived from `runStats[]` when the report is
 built, so re-rendering an older `verdict.json` shows them too — plus a **Notes** list for
 informational records (e.g. a task run's ledger-skipped announcement), the **adjudication
-matrix** (finding × judge, `✓`/`✗`/`–` with
-`*` marking the raiser's own vote), the **peers-only street-cred table**, **findings grouped by
+matrix** (finding × judge, `✓`/`✗`/`–`, `?` for a verdict outside those three and blank for no
+vote, with `*` marking the raiser's own vote), the **peers-only street-cred table**, **findings grouped by
 tier** (Disputed first), and a **cost table** (per-model status/duration/cost + wave total,
 sourced from `runStats[].usage`).
 
