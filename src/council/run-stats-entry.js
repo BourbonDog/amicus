@@ -61,10 +61,10 @@
  * `ttftMs` (v4.9 W13 Task A) is time-to-first-token for this row's leg, read off
  * the leg document and emitted only when it is a NON-NEGATIVE INTEGER — the
  * shape council-tally.schema.json declares, and (PR #207 round 3, B3) a stricter
- * test than the bare type check this used to spell. PROBE ONLY — nothing
- * derives a backstop, threshold, or routing decision from it yet (ruling R12:
- * probe first, derive later). Absent means no substantive tick was observed —
- * or that the only reading taken was not an honest measurement — which is
+ * test than the bare type check this used to spell. PROBE ONLY — a probe- and forensics-only
+ * measurement: nothing derives a backstop, threshold, or routing decision from it (ruling
+ * R12: probe first, derive later; no derivation is planned). Absent means no substantive
+ * tick was observed — or that the only reading taken was not an honest measurement — which is
  * neither `0` (a real measurement) nor `null`.
  *
  * `conformance` (#244 residue, 2026-09-27) is the asks-to-parse axis: `clean` (the

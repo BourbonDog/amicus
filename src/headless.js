@@ -652,8 +652,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
   // ⚠️ PROBE ONLY — nothing derives from this number. No backstop change, no
   // threshold, no per-model window. W13 ruling R12 is explicitly "probe first,
   // derive later", but no derivation is planned: this is a probe- and
-  // forensics-only measurement of real field observations. Do not
-  // wire it into a decision without that evidence — and read the RESIDUAL
+  // forensics-only measurement. Do not wire it into a decision without
+  // evidence from real field observations — and read the RESIDUAL
   // CENSORING note on the stamp site in the poll loop before you do.
   let ttftMs = null;
   // #251 item 1: the backstop's decision record (spec 2026-09-18 §5.2), written

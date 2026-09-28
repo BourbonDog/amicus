@@ -45,7 +45,7 @@ function listSessionIndexTmpFiles() {
       // tmp file is still swept (unlink removes only the link); the one real
       // consequence is AGE_THRESHOLD_MS reading the TARGET's mtime, so a fresh
       // link to an old file is swept with no grace window. Accepted under the
-      // owner's Option B ruling (v4.7 PR7, 2026-08-08) — by design, not filed.
+      // owner's Option B ruling (v4.7 PR7, 2026-08-08) — accepted by design (D-28, 2026-09-28), not an open item.
       try { st = fs.statSync(path.join(dir, name)); } catch { /* raced away */ }
       return { name, mtimeMs: st && st.isFile() ? st.mtimeMs : null };
     })
