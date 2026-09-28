@@ -4,7 +4,7 @@ Canonical reference for the auto-documentation system that keeps the generated d
 
 ## Overview
 
-CLAUDE.md uses **progressive disclosure**: a slim main file (~400 lines) with auto-generated sections and pointers to deeper topic docs. This replaces a monolithic 875-line file that was too large for effective agent context.
+CLAUDE.md uses **progressive disclosure**: a slim main file (~300 lines) with pointers to deeper topic docs; its generated inventory (the `AUTO` sections) lives in `docs/architecture-map.md`. This replaces a monolithic 875-line file that was too large for effective agent context.
 
 Inspired by [OpenAI's Harness Engineering](https://openai.com/index/harness-engineering/) approach: "give Codex a map, not a 1,000-page instruction manual."
 
@@ -50,8 +50,10 @@ Each marker is routed to the document that owns it by the `MARKER_TARGETS` table
 
 ## Cross-Link Validation
 
-When running `--check` mode, the script validates every markdown link in CLAUDE.md, README.md and
-each top-level `docs/*.md` file (the same set `package.json`'s `files` field ships):
+When running `--check` mode, the script validates the inline markdown links in CLAUDE.md,
+README.md and each top-level `docs/*.md` file (the set `package.json`'s `docs/*.md` glob ships).
+Only the inline form, a bracketed label directly followed by a parenthesized target, is checked;
+reference-style links and HTML `<img src>` attributes are not:
 
 - A link's target is resolved relative to the directory of the file that contains it (so a
   `docs/*.md` file's own-directory-relative links resolve against `docs/`, not the project root)
@@ -81,19 +83,20 @@ npm run generate-docs:check            # Alias for check mode
 
 ## Pre-Commit Integration
 
-The pre-commit hook runs `generate-docs.js` in write mode automatically. If CLAUDE.md changes, it stages the update. Developers never need to run the script manually.
+The pre-commit hook runs `generate-docs.js` in write mode automatically. If a generated document changes (today, `docs/architecture-map.md`), it stages the update. Developers never need to run the script manually.
 
 Hook order:
 1. lint-staged
 2. check-secrets
 3. check-file-sizes
-4. **generate-docs.js** (auto-stages CLAUDE.md if changed)
-5. validate-docs.js (warns about manual drift)
+4. check-citations
+5. **generate-docs.js** (auto-stages any generated document it changed)
+6. validate-docs.js (warns about manual drift)
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|---------|
-| "Marker not found" error | Ensure `<!-- AUTO:name -->` and `<!-- /AUTO:name -->` exist in CLAUDE.md |
+| `--check` reports a marker stale, and regenerating does not fix it | The marker pair is missing (write mode silently skips a missing pair): ensure `<!-- AUTO:name -->` and `<!-- /AUTO:name -->` exist in the document `MARKER_TARGETS` routes that marker to (today, `docs/architecture-map.md`) |
 | Stale markers after code change | Run `node scripts/generate-docs.js` manually |
 | Cross-link validation failure | Fix the broken link in the file named at the start of the error line (CLAUDE.md, README.md or a top-level `docs/*.md` file), or create the missing file |
