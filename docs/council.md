@@ -1369,8 +1369,9 @@ Council 'my-bench'
 Every run writes to a run folder — `output/<stem>-council/` (or `./second-opinion/<stem>-council/`
 if no `output/` directory exists), or the next free numbered sibling (`<stem>-council-2/`, `-3/`,
 …) when that folder already holds an earlier run's `run.json` or `verdict.json` (`council run`
-refuses a folder holding another run's `run.json`, and a manual-orchestration run leaves a
-`verdict.json` but no `run.json`) — per the skill's Stage 0. This section cross-checks against
+refuses a folder holding another run's `run.json`, or a finished record under the same run id,
+and a manual-orchestration run leaves a `verdict.json` but no `run.json`) — per the skill's
+Stage 0. This section cross-checks against
 [SKILL.md's "Output & naming"](../skills/second-opinion/SKILL.md#output--naming) — treat that
 section as authoritative if the two ever drift; file an issue if they do.
 
