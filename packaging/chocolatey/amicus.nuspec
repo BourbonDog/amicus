@@ -38,8 +38,9 @@
   <metadata>
     <id>amicus</id>
     <!-- Keep in lockstep with package.json/server.json/.claude-plugin/plugin.json at
-         release time (docs/publishing.md's release checklist) — no script syncs
-         this today, same as the other three files it already lists as manual. -->
+         release time (docs/publishing.md's release checklist, steps 6 and 9) — no script
+         syncs this today, same as the other three files it already lists as manual, but
+         tests/scripts/package-manifest.test.js pins it to package.json. -->
     <version>4.14.1</version>
     <title>Amicus</title>
     <authors>Christian Wagner</authors>
