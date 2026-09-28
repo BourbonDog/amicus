@@ -192,7 +192,7 @@ amicus council run --prompt-file briefing.md --models gemini,glm --chair deepsee
 | `--chair <model>` | Verdict synthesizer. Default `deepseek`; must **not** be a bench seat (pre-flight error). |
 | `--critic <model>` | Optional adversarial seat; must **be** a bench seat. Mutually exclusive with `--lenses`. |
 | `--lenses <s1,s2,...>` | Expert lenses, one per seat (count must equal seat count); forces `--no-ledger` semantics. |
-| `--out-dir <dir>` | Run directory. Default `./council-<runId>/`. Must resolve inside the project directory — a path that escapes it is rejected with `BAD_ARGS`. |
+| `--out-dir <dir>` | Run directory. Default `./council-<runId>/`. Must resolve inside the project directory — a path that escapes it is rejected with `BAD_ARGS`. A directory that already holds another run's `run.json`, or a finished record under the same run id, is refused with `BAD_ARGS` too, naming that run; a folder holding other files but no `run.json` (a briefing, say) is fine. Pick a fresh folder, or move the old run's folder aside; for a reused `--run-id`, pass a fresh one, or none. |
 | `--json` | Emit the council-run document on stdout (error envelope + documented exit codes on failure). |
 | `--max-cost <$>` | **Whole-run** ceiling on **known** spend, checked before each paid stage launch. A leg whose cost cannot be determined does not count against it and never halts the run; when the total is inexact and a ceiling is set, the run exits `2`. |
 | `--timeout <min>` | **Per-leg** timeout (fanout semantics); bound the aggregate with your CI job timeout. |
@@ -520,10 +520,10 @@ If the merge itself cannot run — an unreadable or corrupt council pointer, say
 still prints the sessions it already had and adds `council runs: unavailable (<reason>)`,
 rather than dropping every council row in silence. It appears with or without `--all` (under
 `--all` it sits just above the scope note), and the reason is the underlying error message,
-sanitised and capped to one line. This one is human-surface only for a *different* reason than
-the scope note: not that nothing could widen it, but that `--json`'s shape is a contract and
-this is prose. The residual that leaves — a `--json` caller reads a well-formed document that
-is silently short — is recorded at the pins in `tests/list-council-merge.test.js`.
+sanitised and capped to one line. Under `--json` it goes to **stderr**, after the `--limit`
+notice when one is printed, so stdout stays exactly the document (or the `No amicus sessions
+found.` line) it was, and a `--json` caller can still tell "no council runs" from "enumeration
+failed".
 The MCP tool
 also re-sanitizes every other row's `briefing` to that same 80-char cap and, for any row still
 `status: 'running'`, adds live-progress fields (`phase`, `messageCount`, `lastActivityAt`,
@@ -998,7 +998,7 @@ Every tool below also takes an optional `project` — an absolute path naming th
 - `chair` — the synthesizing model (default `deepseek`). Must NOT be a bench seat.
 - `critic` — swap one bench seat to an adversarial brief. Must BE a bench seat; mutually exclusive with `lenses`.
 - `lenses` — one expert lens per seat (count must equal seat count). Forces no-ledger; mutually exclusive with `critic`.
-- `outDir` — the run directory. Default `<project>/council-<runId>/`.
+- `outDir` — the run directory. Default `<project>/council-<runId>/`. Refused, before anything is written, when it already holds another run's `run.json`; the error names that run.
 - `maxCost` — whole-run USD ceiling, checked before each paid stage launch.
 - `noCostGate` — disable the per-leg price gate for the WHOLE run, repairs and chair included. Independent of `maxCost`, which still caps the total. See [Cost gate](configuration.md#cost-gate).
 - `timeoutMinutes` — per-leg timeout in minutes (fanout semantics). Default 15.

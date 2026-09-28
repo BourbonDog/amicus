@@ -1,6 +1,6 @@
 /**
  * @module cli-council-run-tools
- * `--tools`/`--agent` validation and the v4.7 out-dir fence for `council run`.
+ * `--tools`/`--agent` validation and the two out-dir fences (placement, in use) for `council run`.
  *
  * Spec 2026-09-11 §4. Split out of cli-handlers-council-run.js (P2-R15, PR 2
  * Task 5): that file sits at the 300-line pre-commit size gate and the
@@ -8,11 +8,13 @@
  *
  * Shape only — refusals and the engine's declared-tool check are NOT here,
  * they live in `runCouncil` (Task 4) so MCP, the workflow and any direct
- * `require('./council/run')` caller share them. The out-dir fence IS a
- * CLI-only concern: MCP has fenced the out-dir since v4.5
- * (mcp-council-run.js:137-141's own `isPathInside(runDir, project)`) — this
- * module is what gives the CLI door the same fence, which is why it lives
- * beside the flags it depends on rather than in the engine.
+ * `require('./council/run')` caller share them. The out-dir fences ARE a
+ * per-door concern: MCP has fenced the out-dir since v4.5 (now in
+ * `mcp-council-run-dir.js :: resolveMcpRunDir`) — this module is what gives
+ * the CLI door the same fence, which is why it lives beside the flags it
+ * depends on rather than in the engine. D-04 (SL-4) added the second fence, an
+ * out-dir already holding another run's run.json; both doors refuse it before
+ * they write, off one predicate (`council/run-state.js :: otherRunInDir`).
  *
  * The fence is the v4.7 PR6 rule (`--out-dir` must stay inside the project)
  * RELAXED for a run whose seats carry a LOCAL tool (read, grep, glob, bash):
@@ -28,14 +30,15 @@
 
 const { ERROR_CODES } = require('./utils/error-doc');
 const { isPathInside } = require('./project-root-allowlist');
+const { otherRunInDir } = require('./council/run-state');
 const { parseToolsFlag, isLocal, agentToolsConflict } = require('./council/seat-tools');
 
 /**
- * @param {{args: object, explicitKeys: Set<string>, runDir: string, project: string}} ctx
+ * @param {{args: object, explicitKeys: Set<string>, runDir: string, project: string, runId: string}} ctx
  * @returns {{error: ({code: string, message: string, hint?: string}|null),
  *   toolIds?: string[], agentOverride?: ('Plan'|'Build'), notices?: string[]}}
  */
-function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
+function checkCouncilRunTools({ args, explicitKeys, runDir, project, runId }) {
   // Spec 2026-09-11 §4: shape only (refusals + the engine check live in
   // runCouncil so every door — CLI, MCP, workflow — shares them).
   let toolIds;
@@ -109,6 +112,33 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
       error: {
         code: ERROR_CODES.BAD_ARGS,
         message: `Error: --out-dir must stay inside the project: '${args['out-dir']}' resolves outside ${project}`,
+      },
+    };
+  }
+
+  // D-04 (SL-4): a run dir already holding ANOTHER run's run.json, or an earlier
+  // or dead record under this run's own id, is refused before anything is
+  // written, or initRun would merge this run into it. The rule is
+  // `council/run-state.js :: otherRunInDir`'s, shared with the MCP door
+  // (`mcp-council-run-dir.js :: resolveMcpRunDir`). Only a reused --run-id meets
+  // its own id (the MCP door mints a fresh one per call), so that refusal names
+  // its own fix.
+  const other = otherRunInDir(runDir, runId);
+  if (other) {
+    const sameId = other.runId === runId;
+    let message = `Error: '${runDir}' already holds a run.json that is not a readable run record — a new run there would write over it`;
+    if (sameId) {
+      message = `Error: '${runDir}' already holds run ${runId}'s run.json — that run id is already in use there, so a new run would merge into its record`;
+    } else if (other.runId) {
+      message = `Error: '${runDir}' already holds run ${other.runId}'s run.json — a new run there would merge into that record`;
+    }
+    return {
+      error: {
+        code: ERROR_CODES.BAD_ARGS,
+        message,
+        hint: sameId
+          ? 'pass a fresh --run-id, or none (one is generated), or another --out-dir'
+          : 'pass an --out-dir with no run.json in it, or move the old run\'s folder aside first',
       },
     };
   }

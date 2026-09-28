@@ -1028,8 +1028,8 @@ repair of a response with no findings block (channel `unverified-repair`) and on
 repair (channel `repair-refused`, naming the code), derived from `runStats[]` when the report is
 built, so re-rendering an older `verdict.json` shows them too — plus a **Notes** list for
 informational records (e.g. a task run's ledger-skipped announcement), the **adjudication
-matrix** (finding × judge, `✓`/`✗`/`–` with
-`*` marking the raiser's own vote), the **peers-only street-cred table**, **findings grouped by
+matrix** (finding × judge, `✓`/`✗`/`–`, `?` for a verdict outside those three and blank for no
+vote, with `*` marking the raiser's own vote), the **peers-only street-cred table**, **findings grouped by
 tier** (Disputed first), and a **cost table** (per-model status/duration/cost + wave total,
 sourced from `runStats[].usage`).
 
@@ -1367,7 +1367,11 @@ Council 'my-bench'
 ## Where artifacts live
 
 Every run writes to a run folder — `output/<stem>-council/` (or `./second-opinion/<stem>-council/`
-if no `output/` directory exists), per the skill's Stage 0. This section cross-checks against
+if no `output/` directory exists), or the next free numbered sibling (`<stem>-council-2/`, `-3/`,
+…) when that folder already holds an earlier run's `run.json` or `verdict.json` (`council run`
+refuses a folder holding another run's `run.json`, or a finished record under the same run id,
+and a manual-orchestration run leaves a `verdict.json` but no `run.json`) — per the skill's
+Stage 0. This section cross-checks against
 [SKILL.md's "Output & naming"](../skills/second-opinion/SKILL.md#output--naming) — treat that
 section as authoritative if the two ever drift; file an issue if they do.
 

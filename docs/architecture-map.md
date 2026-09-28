@@ -342,7 +342,7 @@ src/
 │   └── seat-space.js  # Council Workspace — the seat-space PREDICATES (v4.8 PR5b).
 ├── cli-council-run-bench.js  # Bench and input resolution for the council run command.
 ├── cli-council-run-render.js
-├── cli-council-run-tools.js  # `--tools`/`--agent` validation and the v4.7 out-dir fence for `council run`.
+├── cli-council-run-tools.js  # `--tools`/`--agent` validation and the two out-dir fences (placement, in use) for `council run`.
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
 ├── cli-handlers-council-run.js
 ├── cli-handlers-council.js
@@ -372,6 +372,7 @@ src/
 ├── mcp-council-awareness.js
 ├── mcp-council-bench.js
 ├── mcp-council-pack-map.js  # COUNCIL_PACK_PARAM_MAP, split out of mcp-council-run.js for the 300-line size gate (P2-R16).
+├── mcp-council-run-dir.js  # amicus_council_run's run dir: `outDir` resolved and refused before any write (containment, then D-04's in-use check), split out of mcp-council-run.js for the 300-line size gate.
 ├── mcp-council-run.js
 ├── mcp-notify.js  # Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'`
 ├── mcp-server.js  # @module mcp-server — Amicus MCP Server (stdio transport)
@@ -502,7 +503,7 @@ evals/
 |--------|---------|-------------|
 | `cli-council-run-bench.js` | Bench and input resolution for the council run command. | `resolveBench()`, `resolveChair()`, `resolveCritic()`, `CHAIR_DEFAULT()`, `parseList()` |
 | `cli-council-run-render.js` |  | `renderRunHuman()` |
-| `cli-council-run-tools.js` | `--tools`/`--agent` validation and the v4.7 out-dir fence for `council run`. | `checkCouncilRunTools()` |
+| `cli-council-run-tools.js` | `--tools`/`--agent` validation and the two out-dir fences (placement, in use) for `council run`. | `checkCouncilRunTools()` |
 | `cli-handlers-abort.js` | CLI Abort Handler (B21-rest extraction) | `handleAbort()` |
 | `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `renderRunHuman()`, `CHAIR_DEFAULT()` |
 | `cli-handlers-council.js` |  | `handleCouncil()` |
@@ -532,6 +533,7 @@ evals/
 | `mcp-council-awareness.js` |  | `subWaveIds()`, `countWaveLegs()`, `elapsedOf()`, `enginePid()`, `buildCouncilStatusPayload()` |
 | `mcp-council-bench.js` |  | `resolveBenchInput()`, `auditBenchAliases()` |
 | `mcp-council-pack-map.js` | COUNCIL_PACK_PARAM_MAP, split out of mcp-council-run.js for the 300-line size gate (P2-R16). | `COUNCIL_PACK_PARAM_MAP()` |
+| `mcp-council-run-dir.js` | amicus_council_run's run dir: `outDir` resolved and refused before any write (containment, then D-04's in-use check), split out of mcp-council-run.js for the 300-line size gate. | `resolveMcpRunDir()` |
 | `mcp-council-run.js` |  | `handleCouncilRunTool()`, `COUNCIL_PACK_PARAM_MAP()`, `buildCouncilStatusPayload()`, `listCouncilRuns()`, `abortCouncilRun()` |
 | `mcp-notify.js` | Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'` | `validateOnComplete()`, `buildNotifyPayload()`, `requestMcpNotify()`, `consumeMcpNotify()` |
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |

@@ -209,6 +209,68 @@ describe('amicus_council_run handler', () => {
     expect(fs.existsSync(path.resolve(tmp, '..', 'escaped-council'))).toBe(false);
   });
 
+  // D-04 (SL-4): an outDir already holding ANOTHER run's run.json is refused
+  // before the handler writes anything. The child could not refuse it: the
+  // pre-seed would already have merged into that record and overwritten its
+  // briefing.md, and the child's stdout is discarded.
+  test('an outDir already holding another run\'s run.json → isError naming it, no spawn, nothing overwritten (D-04)', async () => {
+    const dir = path.join(tmp, 'old-run');
+    fs.mkdirSync(dir);
+    const runJson = path.join(dir, 'run.json');
+    fs.writeFileSync(runJson, JSON.stringify({ runId: 'oldrun01', status: 'aborted', exitCode: 143, pid: 4242 }));
+    fs.writeFileSync(path.join(dir, 'briefing.md'), 'OLD BRIEFING');
+    const before = fs.readFileSync(runJson, 'utf-8');
+    const calls = [];
+    const res = await handleCouncilRunTool(input({ outDir: 'old-run' }), tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe(`outDir '${dir}' already holds run oldrun01's run.json — `
+      + 'pick an outDir with no run.json in it, or move the old run\'s folder aside.');
+    expect(calls).toHaveLength(0);
+    expect(fs.readFileSync(runJson, 'utf-8')).toBe(before);
+    expect(fs.readFileSync(path.join(dir, 'briefing.md'), 'utf-8')).toBe('OLD BRIEFING');
+    expect(fs.existsSync(path.join(tmp, '.claude', 'amicus_sessions'))).toBe(false);
+  });
+
+  // D-04 (SL-4): a run.json naming no valid run (it does not parse, or its runId is outside
+  // the task-id grammar) is refused too, and its id is never echoed. The predicate is shared
+  // with the CLI door, but this message is built here, in mcp-council-run-dir.js ::
+  // resolveMcpRunDir, so this door needs its own pin.
+  // Named mutants MCPNAMEDONLY and MCPALWAYSNAMES: mcp-council-run-dir.js :: resolveMcpRunDir
+  // refuses only a NAMED record (`if (other && other.runId)`), or always renders the named
+  // message (`run ${other.runId}'s run.json` unconditionally, so "run null's"). MEASURED
+  // 2026-09-28 at 52de867 over this file alone, each applied alone and restored by byte copy:
+  //   MCPNAMEDONLY RED 1 of 39: "an outDir holding a run.json that names no valid run (a
+  //     forged runId) → isError naming no run, no spawn, run.json untouched (D-04)", at
+  //     `expect(res.isError).toBe(true)` (received undefined).
+  //   MCPALWAYSNAMES RED 1 of 39: the same test, at its exact-text `toBe` (received
+  //     "… already holds run null's run.json …").
+  // ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
+  test('an outDir holding a run.json that names no valid run (a forged runId) → isError naming no run, no spawn, run.json untouched (D-04)', async () => {
+    const dir = path.join(tmp, 'forged-run');
+    fs.mkdirSync(dir);
+    const runJson = path.join(dir, 'run.json');
+    fs.writeFileSync(runJson, JSON.stringify({ runId: 'x\u001b[31m\nFORGED', pid: 1 }));
+    const before = fs.readFileSync(runJson, 'utf-8');
+    const calls = [];
+    const res = await handleCouncilRunTool(input({ outDir: 'forged-run' }), tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe(`outDir '${dir}' already holds a run.json that is not a readable run record — `
+      + 'pick an outDir with no run.json in it, or move the old run\'s folder aside.');
+    expect(res.content[0].text).not.toContain('FORGED');
+    expect(calls).toHaveLength(0);
+    expect(fs.readFileSync(runJson, 'utf-8')).toBe(before);
+  });
+
+  test('an outDir holding a briefing but no run.json still launches (the skill\'s run-folder shape)', async () => {
+    const dir = path.join(tmp, 'run-folder');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'briefing.md'), 'Review this.');
+    const calls = [];
+    const res = await handleCouncilRunTool(input({ outDir: 'run-folder' }), tmp, helpers(calls));
+    expect(res.isError).toBeUndefined();
+    expect(calls).toHaveLength(1);
+  });
+
   // Task 15 (spec §5.3) delivery seam: on successful launch with
   // onComplete: 'mcp-notify', the run is marked in the shared in-process
   // registry so runWait's terminal branch (mcp-wait.js) can later consume it
