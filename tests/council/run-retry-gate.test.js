@@ -41,7 +41,13 @@ describe('D-06: run-retry-gate :: isOutputLengthLoss', () => {
     for (const leg of [null, undefined, {}, { error: null }, { error: 'boom' },
       { status: 'complete', error: '' }, { status: 'error', error: backstop },
       // Named mutant "PREFIXANYWHERE": `includes` would hold this provider error that merely quotes the prefix.
-      { status: 'error', error: 'upstream said: OUTPUT_LENGTH: stopped' }]) {
+      { status: 'error', error: 'upstream said: OUTPUT_LENGTH: stopped' },
+      // Ruling R3 (this module's docblock): the class is keyed on the reason's PREFIX, never on
+      // `finish`. A length stop whose ENGINE error won the reason (headless.js :: runHeadless; the
+      // shape tests/headless-output-length.test.js pins) is a different death, and it is retried.
+      // Named mutant "FINISHKEYED": `|| leg.finish === 'length'` in isOutputLengthLoss holds this
+      // leg, and the `expect` below reds.
+      { status: 'error', finish: 'length', error: 'MessageOutputLengthError' }]) {
       expect(isOutputLengthLoss(leg)).toBe(false);
     }
   });

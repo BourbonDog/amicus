@@ -1488,6 +1488,8 @@ describe('D-06: an OUTPUT_LENGTH death is held out of the once-only retry', () =
     const held = { modelInput: 'a', status: 'error', error: MINTED };
     const other = { modelInput: 'b', status: 'error', error: 'boom' };
     const units = groupStage1Losses(O, [], [held, other]);
+    // Named mutant "HELDDROPPED" (delete the held unit's emission in
+    // run-retry-group.js :: groupStage1Losses): the held loss vanishes, and this line reds.
     expect(units.map(u => u.unit)).toEqual(['bench', 'held']);
     expect(units[0]).toMatchObject({ models: ['b'], srcLegs: [other] });
     expect(units[1]).toEqual({ ...HELD_EMPTY, srcLegs: [held] });

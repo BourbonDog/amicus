@@ -844,7 +844,7 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
   // amicus-minted reason still rides the note whole (#257 R-X38's ruling: the prose cap bounds
   // PROVIDER noise, never a reason amicus minted), and the note now says why no retry ran.
   // The second mock is a retry that WOULD heal the seat: the gate must not ask.
-  test('an OUTPUT_LENGTH death is a dead leg announced at once, never retried (D-06): its note carries the amicus-minted reason verbatim and says why, and gets NO truncation note', async () => {
+  test('an OUTPUT_LENGTH death is a dead leg announced without a relaunch (D-06): its note carries the amicus-minted reason verbatim and says why, and gets NO truncation note', async () => {
     const { formatOutputLengthReason } = require('../../src/utils/output-length');
     const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
       budget: null, reasoningOnly: false, ambientFlag: null });
@@ -915,6 +915,8 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     const r = await runStage1(ctx);
     expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1); // no retry launch
     const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    // Named mutant "CLAUSEDROPPED" (run-stages.js stops appending
+    // run-retry-gate.js :: outputLengthSkipClause): the note loses its clause, and this line reds.
     expect(n.why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
       + 'its once-only retry was skipped: a relaunch reserves the same output budget');
     expect(n.why).toContain('outputBudget is 64000'); // the budget in force, named by the minted reason
@@ -2238,7 +2240,7 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
   test.each([
     ['bound', (slot) => `abc123-s1-${slot}`, (slot) => ({ seat: `deepseek#${slot}` })],
     ['unbound', (slot) => `orphan-${slot}`, () => ({})],
-  ])('D-06: BOTH twins die OUTPUT_LENGTH (%s): both held, no retry, both announced with the clause, no T-A5 notice', async (shape, taskIdFor, seatOf) => {
+  ])('D-06: BOTH twins die OUTPUT_LENGTH (%s): both held and never relaunched; both are announced with the clause, and each keeps its own row', async (shape, taskIdFor, seatOf) => {
     // Two DIFFERENT minted reasons, so each note is seen to carry its own leg's reason.
     const MINTED = [
       formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 }, budget: null,
@@ -2250,10 +2252,14 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
       taskId: taskIdFor(slot), finish: 'length', usage: cost(slot === 1 ? 0.02 : 0.03) }));
     const { ctx, r, notes, degrades, said } = await heldTwinRun(legs, null);
     expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1);                 // no retry launched
+    // Named mutant "HELDDEDUPALIAS" (the held arm in run-retry-group.js :: groupStage1Losses dedupes
+    // its srcLegs by modelInput): the second held twin vanishes, and this line reds.
     expect(notes.filter((n) => n.channel === 'dead-leg').map((n) => n.why))
       .toEqual(MINTED.map((m) => `the leg ended 'error': ${m} with no usable output${CLAUSE}`));
     expect(notes.map((n) => n.channel)).toEqual(shape === 'unbound'
       ? ['seat-unbound', 'seat-unbound', 'dead-leg', 'dead-leg'] : ['dead-leg', 'dead-leg']);
+    // Nothing was relaunched, so nothing is superseded and the T-A5 guard is never reached here:
+    // these two lines are a tripwire, not the pin (test (a) above pins the guard's silence).
     expect(degrades.filter((d) => d.channel === 'internal')).toEqual([]);
     expect(said).not.toContain('a superseded row for seat');
     // Two rows, each twin's OWN first leg, and nothing superseded: no twin was relaunched.
