@@ -426,12 +426,25 @@ describe('an --out-dir already in use (D-04, SL-4)', () => {
     expect(e).toContain('  → pass an --out-dir with no run.json in it');
   });
 
+  // Named mutant PRESEEDREFUSED: council/run-state.js :: otherRunInDir loses the line that
+  // exempts this run's own MCP pre-seed (the same runId, no pid). MEASURED 2026-09-28 at
+  // 6335210 over tests/council/run-state.test.js, this file and tests/mcp-council-run.test.js:
+  // RED 3 of 132: "this run's own MCP pre-seed (same runId, no pid)" (run-state.test.js) ·
+  // "accepts this run's own MCP pre-seed: the same runId and no pid yet"
+  // (cli-council-run-flags.test.js) · "the MCP door's own child accepts its parent's pre-seed
+  // (the two doors agree)" (cli-council-run-flags.test.js).
   it('accepts this run\'s own MCP pre-seed: the same runId and no pid yet', async () => {
     seedRun(path.join(tmp, 'X'), { schemaVersion: 2, type: 'council-run', runId: 'feedc0de', status: 'running', stages: [] });
     await handleCouncilRun(argsBase({ 'run-id': 'feedc0de', 'out-dir': 'X' }));
     expect(runCouncil).toHaveBeenCalled();
   });
 
+  // Named mutant DIRNONEMPTY: council/run-state.js :: otherRunInDir treats any non-empty
+  // directory as taken instead of keying on run.json. MEASURED 2026-09-28 at 6335210 over the
+  // same three files: RED 3 of 132: "no directory, or a directory with no run.json, is free"
+  // (run-state.test.js) · "accepts a folder holding other files but no run.json (the CI and
+  // skill shapes)" (cli-council-run-flags.test.js) · "an outDir holding a briefing but no
+  // run.json still launches (the skill's run-folder shape)" (mcp-council-run.test.js).
   it('accepts a folder holding other files but no run.json (the CI and skill shapes)', async () => {
     const dir = path.join(tmp, 'council-run');
     fs.mkdirSync(dir);

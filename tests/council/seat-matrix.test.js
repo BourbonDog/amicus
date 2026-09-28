@@ -1909,6 +1909,12 @@ describe('SYMBOL is prototype-safe: an inherited/unknown vote key must not resol
     expect(row).not.toContain('undefined');
   });
 
+  // Named mutant MATRIXNOQMARK: matrix-model.js :: buildMatrixModel writes `SYMBOL[vote]`
+  // without its `|| '?'`. MEASURED 2026-09-28 at 6335210 over this file and
+  // tests/workspace/matrix-model.test.js: RED 2 of 99: "S3 — buildMatrixModel: a vote of
+  // "toString" yields sym: "?" — the || fallback is no longer defeated" · "S7 —
+  // buildMatrixModel: an unrecognized verdict yields sym ? (the reference the reports now
+  // match)".
   test('S7 — buildMatrixModel: an unrecognized verdict yields sym ? (the reference the reports now match)', () => {
     expect(buildMatrixModel(tallyFor('bogus'), {}, null).rows[0].cells[0].sym).toBe('?');
   });
@@ -1920,6 +1926,15 @@ describe('SYMBOL is prototype-safe: an inherited/unknown vote key must not resol
     expect(htmlRow(buildReport({ verdict: v }, { format: 'html' }))).toContain('<td class="c">?<sup>*</sup></td>');
   });
 
+  // Named mutants FALSYQMARKMD and FALSYQMARKHTML: report-md.js :: renderMd and
+  // report-html.js :: renderHtml drop the `v ?` guard, so a falsy vote renders `?`. MEASURED
+  // 2026-09-28 at 6335210 over this file:
+  //   FALSYQMARKMD RED 4 of 92: "shape 1 (judge seat orphaned): the report folds the vote into
+  //     UNATTRIBUTED and the row agrees with basis" · "the folded vote reaches BOTH rendered
+  //     formats" · "the roster decision is GLOBAL, not per finding (v4.8 T-C1 fix round 1)" ·
+  //     "S9 — a falsy verdict is still NO vote: a blank cell, never ?, at all three consumers".
+  //   FALSYQMARKHTML RED 2 of 92: "the folded vote reaches BOTH rendered formats" · "S9 — a
+  //     falsy verdict is still NO vote: a blank cell, never ?, at all three consumers".
   test('S9 — a falsy verdict is still NO vote: a blank cell, never ?, at all three consumers', () => {
     for (const vote of [null, '']) {
       expect(rowFor(buildReport({ verdict: verdictFor(vote) }, { format: 'md' }), 'F1'))
@@ -1965,3 +1980,13 @@ describe('SYMBOL is prototype-safe: an inherited/unknown vote key must not resol
 // sha256 match) touched a snapshot.
 //
 // NO PIN THAT PRE-DATES THIS TASK REDS.
+//
+// D-09 RE-RUN (2026-09-28, at 6335210), over this file alone: it is the only test file that
+// feeds SYMBOL an inherited key (`git grep` for a verdict of toString, constructor, valueOf,
+// __proto__ or hasOwnProperty in tests/: 3 hits, all here). RED 3 of 92: "S1 — markdown: a vote
+// of "toString" renders the SAME cell as a vote of "bogus"" · "S2 — html: the same equivalence
+// at the report-html.js consumer" · "S3 — buildMatrixModel: a vote of "toString" yields sym:
+// "?" — the || fallback is no longer defeated". D-09 changed both renderers to `SYMBOL[v] ||
+// '?'`: under this mutant an inherited key renders the inherited FUNCTION (it is truthy) where
+// an unknown key renders `?`, so S1 and S2 still see the difference; S5 to S9 (plain unknown
+// and falsy votes) stay GREEN under it.
