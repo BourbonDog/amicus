@@ -23,7 +23,8 @@ $packageVersion = $env:chocolateyPackageVersion
 # src/utils/claude-register.js for "SYSTEM"/"elevated"/"admin"/"getuid" is empty (0 hits) --
 # there is no existing guard against this.
 #
-# Fix: set AMICUS_SKIP_POSTINSTALL=1 before installing. This is the SAME guard the Claude
+# Fix: set AMICUS_SKIP_POSTINSTALL=1 for the npm install alone -- the try below sets it
+# directly before the npm call, and its finally removes it. This is the SAME guard the Claude
 # Code plugin channel already relies on (.claude-plugin/plugin.json's mcpServers.amicus.env),
 # and it is scoped precisely to amicus's own postinstall -- scripts/postinstall.js :: main's
 # first statement, `if (process.env.AMICUS_SKIP_POSTINSTALL === '1')`, returns before the
@@ -32,8 +33,6 @@ $packageVersion = $env:chocolateyPackageVersion
 # dependency's OWN postinstall (which lays down its ~11 per-platform engine binaries, per
 # README's Requirements & Dependencies section) -- AMICUS_SKIP_POSTINSTALL=1 leaves that one
 # alone.
-$env:AMICUS_SKIP_POSTINSTALL = '1'
-
 try {
   # nodejs-lts is a nuspec <dependency>, so Chocolatey installs it first -- but PATH may not
   # be refreshed in THIS elevated session yet. Update-SessionEnvironment (aliased `refreshenv`)
@@ -49,6 +48,7 @@ try {
   # $ErrorActionPreference is 'Stop'. Relax it for this one call; $LASTEXITCODE is the real
   # failure signal.
   $ErrorActionPreference = 'Continue'
+  $env:AMICUS_SKIP_POSTINSTALL = '1'
   & npm @npmArgs 2>&1 | Write-Host
   $ErrorActionPreference = 'Stop'
   if ($LASTEXITCODE -ne 0) {

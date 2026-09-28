@@ -290,10 +290,11 @@ then `choco install -s .`) has not been run — this package is untested
 against a real Chocolatey install. Test that first, ideally on a second
 Windows account. After the install, open an ordinary (non-elevated) prompt,
 run `amicus doctor`, and confirm it finds the OpenCode engine binary, because
-the package installs through `npm install -g`, npm 11 can skip a
-dependency's install script unless that package is allowlisted, and
-opencode-ai's install script is what places the engine binary. Then create
-a community.chocolatey.org account + API key and `choco push`.
+the package installs through `npm install -g`, npm 11 warns about install
+scripts that are not on its allow-scripts list (a later phase of that policy
+is to block them), and opencode-ai's install script is what places the
+engine binary. Then create a community.chocolatey.org account + API key and
+`choco push`.
 
 **Version:** `amicus.nuspec`'s `<version>` is a manual pin site, kept in
 lockstep with `package.json`/`server.json`/`.claude-plugin/plugin.json` by
