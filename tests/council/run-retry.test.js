@@ -1469,3 +1469,72 @@ describe('#257 R-X42 the heal note bounds its reason on every arm', () => {
     expect(ctx._notes[0].data.firstFailure.reason).toBe(RAW);
   });
 });
+
+// ---- D-06: an OUTPUT_LENGTH death is held, never relaunched ----------------------------------
+//
+// A leg whose provider stopped at the max_tokens reservation before any answer text dies with a
+// reason starting `OUTPUT_LENGTH:`. Its once-only retry would run on the same engine with the same
+// output budget, so run-retry-group.js :: groupStage1Losses holds it in a zero-model `held` unit,
+// which retryStage1Losses's first guard routes to `skippedDeadLegs`. Minted with the real
+// formatter, never pasted: a copied reason is how a classifier and what it classifies drift apart.
+describe('D-06: an OUTPUT_LENGTH death is held out of the once-only retry', () => {
+  const { formatOutputLengthReason } = require('../../src/utils/output-length');
+  const MINTED = formatOutputLengthReason({ tokens: { reasoning: 64000, output: 0 },
+    budget: 64000, reasoningOnly: true, ambientFlag: null });
+  const HELD_EMPTY = { unit: 'held', heldFor: 'OUTPUT_LENGTH', waveId: null, retryOfWaveId: null,
+    models: [], seats: [], firstFailures: [], srcWaves: [] };
+
+  test('groupStage1Losses: a bench OUTPUT_LENGTH leg takes no bench slot and rides the held unit, LAST', () => {
+    const held = { modelInput: 'a', status: 'error', error: MINTED };
+    const other = { modelInput: 'b', status: 'error', error: 'boom' };
+    const units = groupStage1Losses(O, [], [held, other]);
+    expect(units.map(u => u.unit)).toEqual(['bench', 'held']);
+    expect(units[0]).toMatchObject({ models: ['b'], srcLegs: [other] });
+    expect(units[1]).toEqual({ ...HELD_EMPTY, srcLegs: [held] });
+  });
+
+  test('groupStage1Losses: the critic and a lens are held the same way — no unit of their own', () => {
+    const crit = { modelInput: 'crit', status: 'error', error: MINTED };
+    expect(groupStage1Losses(O, [], [crit])).toEqual([{ ...HELD_EMPTY, srcLegs: [crit] }]);
+    const OL = { runId: 'r1', models: ['m1', 'm2'], critic: null, lenses: ['security', 'perf'] };
+    const lensLeg = { modelInput: 'm1', status: 'error', error: MINTED };
+    expect(groupStage1Losses(OL, [], [lensLeg])).toEqual([{ ...HELD_EMPTY, srcLegs: [lensLeg] }]);
+  });
+
+  test('groupStage1Losses: no OUTPUT_LENGTH loss, no held unit — every other grouping is unchanged', () => {
+    const units = groupStage1Losses(O, [], [{ modelInput: 'a', status: 'error', error: 'boom' }]);
+    expect(units.map(u => u.unit)).toEqual(['bench']);
+  });
+
+  test('retryStage1Losses: a lone OUTPUT_LENGTH loss launches NOTHING and comes back on the skipped path', async () => {
+    // A retry here WOULD heal the seat: the gate must not ask.
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 });
+    const launchSolo = jest.fn();
+    const ctx = fakeCtx({}, { launchWave, launchSolo });
+    const leg = deadLeg('a', 'error', MINTED, 'r1-s1', 1);
+    const r = await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [leg], counts: COUNTS });
+    expect(launchWave).not.toHaveBeenCalled();
+    expect(launchSolo).not.toHaveBeenCalled();
+    expect(runState.appendStageWave).not.toHaveBeenCalled(); // no retry wave on run.json
+    expect(r.skippedDeadLegs).toEqual([leg]);
+    expect(r.recoveredLegs).toEqual([]);
+    expect(r.stillDeadLegs).toEqual([]);
+    expect(r.stillDeadNotes).toEqual([]);
+    expect(r.attemptedSeats.size).toBe(0); // never ATTEMPTED: its own first leg is its row
+    expect(ctx._notes).toEqual([]); // this module emits heals only
+  });
+
+  test('retryStage1Losses: beside an OUTPUT_LENGTH loss, every other loss is still retried', async () => {
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('b', 'r1-s1r1', 1)] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    const lengthLeg = deadLeg('a', 'error', MINTED, 'r1-s1', 1);
+    const boomLeg = deadLeg('b', 'error', 'boom', 'r1-s1', 2);
+    const r = await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [lengthLeg, boomLeg], counts: COUNTS });
+    expect(launchWave).toHaveBeenCalledTimes(1);
+    expect(launchWave.mock.calls[0][0].models).toEqual(['b']);
+    expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['b']);
+    expect(r.skippedDeadLegs).toEqual([lengthLeg]);
+  });
+});

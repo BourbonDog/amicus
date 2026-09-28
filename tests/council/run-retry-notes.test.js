@@ -679,12 +679,15 @@ describe('#257 R-X38 the cap never truncates a reason amicus itself minted', () 
     const reason = formatOutputLengthReason({ tokens: TOKENS, budget: null,
       reasoningOnly: true, ambientFlag: '64000abc' });
     expect(reason).toContain(REMEDY);                        // the formatter really ends in it
-    // Not just the constant — the note a user actually reads.
-    const n = srcLegStillDeadNote({ modelInput: 'glm', status: 'error', error: reason },
-      UNIT, COUNTS);
+    // Not just the constant — a note a user actually reads. Since D-06 a FIRST attempt that died
+    // OUTPUT_LENGTH is never retried, so it reaches the user on run-stages.js's skipped-leg note
+    // (pinned in tests/council/run-stages.test.js). The still-dead builders here meet this reason
+    // on a RETRY leg instead: a NO_OUTPUT_BACKSTOP first death whose relaunch then stopped at the
+    // reservation, the shape measured six times across the CI runs of 2026-09-07..09.
+    const n = note({ class: 'leg', status: 'error', reason: BACKSTOP }, { status: 'error', error: reason });
     expect(n.why).toContain(REMEDY);
-    expect(n.why).toBe(`the leg ended 'error': ${reason} with no usable output; `
-      + 'its once-only retry wave produced no legs');
+    expect(n.why).toBe(`the leg ended 'error': ${BACKSTOP} with no usable output; `
+      + `its once-only retry also ended 'error': ${reason}`);
   });
 
   test('the real-world 2026-09-16 backstop reason rides whole through every builder', () => {

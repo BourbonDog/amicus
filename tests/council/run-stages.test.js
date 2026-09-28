@@ -839,37 +839,66 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     expect(res.degraded).toBe(false);
   });
 
-  // #257 R-X38 fix round 1: retitled. The `why` bounds PROVIDER noise, but an AMICUS-MINTED
-  // reason must arrive whole (owner ruling, round 3) — so this is now an EXACT pin on the
-  // real formatter's output, not a `.*` regex that would tolerate the remedy being cut.
-  // Minted here rather than pasted: a copied literal is how a cap and a format drift apart.
-  test('an OUTPUT_LENGTH death is a dead leg whose note carries an amicus-minted reason verbatim (provider noise is bounded), and gets NO truncation note', async () => {
+  // D-06 replaced the pre-D-06 pin here, which relaunched this seat and read
+  // `retryLegStillDeadNote`'s leg arm: an OUTPUT_LENGTH death is NEVER relaunched now. The
+  // amicus-minted reason still rides the note whole (#257 R-X38's ruling: the prose cap bounds
+  // PROVIDER noise, never a reason amicus minted), and the note now says why no retry ran.
+  // The second mock is a retry that WOULD heal the seat: the gate must not ask.
+  test('an OUTPUT_LENGTH death is a dead leg announced at once, never retried (D-06): its note carries the amicus-minted reason verbatim and says why, and gets NO truncation note', async () => {
     const { formatOutputLengthReason } = require('../../src/utils/output-length');
     const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
       budget: null, reasoningOnly: false, ambientFlag: null });
     const dead = { ...deadLeg('b', 'error', MINTED, 'abc123-s1', 2), finish: 'length' };
-    // Same harness as 'retry also dies': roster (-s1) ['a', 'b'], retry roster (-s1r1) ['b'] alone.
     const ctx = makeCtx({ models: ['a', 'b'] });
     ctx.launchers.launchWave
       .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
         legs: [usableLeg('a', 'abc123-s1', 1), dead] }, exitCode: 0 })
       .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
-        legs: [deadLeg('b', 'timeout', null, 'abc123-s1r1', 1)] }, exitCode: 0 });
-    await runStage1(ctx);
+        legs: [usableLeg('b', 'abc123-s1r1', 1)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    // Named mutant "LENGTHRETRIED" (delete the held arm in run-retry-group.js :: groupStage1Losses): two launches.
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1);
+    expect(ctx._notes.filter((n) => n.channel === 'stage1-retry')).toHaveLength(0);
     // Named mutant "DEADNOTED": iterate `legs` instead of `materialized` in run-stages — a note appears here.
     expect(ctx._notes.filter((n) => n.channel === 'output-truncated')).toHaveLength(0);
     const n = ctx._notes.find((x) => x.channel === 'dead-leg');
     expect(MINTED.length).toBeGreaterThan(200);          // it was truncated under the old cap
-    // The retry dies too, so this is `retryLegStillDeadNote`'s leg arm: first reason in full,
-    // then the retry tail. Exact, so a cap that ate the remedy could not hide behind a `.*`.
     expect(n.why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
-      + "its once-only retry also ended 'timeout'");
-    // The clause the ruling exists for, named so a future cap change reds HERE and not only
+      + 'its once-only retry was skipped: a relaunch reserves the same output budget');
+    // The clause the #257 ruling exists for, named so a future cap change reds HERE and not only
     // in tests/council/run-retry-notes.test.js's minted-reason corpus.
     expect(n.why).toContain('raise outputBudget in config.json (docs/configuration.md, Output budget)');
-    // `data.reason` describes the RETRY leg (null here); the FIRST leg's raw bytes ride
-    // `data.firstFailure` — the machine surface, verbatim, as ever.
-    expect(n.data.firstFailure.reason).toBe(MINTED);
+    expect(n.why).toContain("outputBudget is unset — the engine's 32000 default reservation governs");
+    // Nothing was relaunched, so no retryWaveId and no firstFailure: the machine surface is the
+    // first leg's own reason, verbatim.
+    expect(n.data).toEqual({ seat: 'b', status: 'error', reason: MINTED });
+    expect(r.degraded).toBe(true);
+    expect(r.reviews.map((x) => x.modelInput)).toEqual(['a']);
+    // Its own first leg is its one row: a primary 'seat' error row, never a 'superseded' one.
+    expect(r.extraRows.filter((x) => x.model === 'b').map((x) => [x.role, x.status])).toEqual([['seat', 'error']]);
+  });
+
+  test('D-06: a critic that died OUTPUT_LENGTH is held too — its solo is never relaunched', async () => {
+    const { formatOutputLengthReason } = require('../../src/utils/output-length');
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 64000, output: 0 },
+      budget: 64000, reasoningOnly: true, ambientFlag: null });
+    const deadCrit = deadLeg('crit', 'error', MINTED, 'abc123-c1', 1);
+    const healed = usableLeg('crit', 'abc123-c1r1', 1);
+    const ctx = makeCtx({ models: ['a', 'b'], critic: 'crit' });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1), usableLeg('b', 'abc123-s1', 2)] }, exitCode: 0 });
+    // critic roster (-c1 / -c1r1): a one-seat roster, slot is always 1. The second value is a
+    // retry that WOULD heal: the gate must not ask.
+    ctx.launchers.launchSolo
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-c1', legs: [deadCrit] }, exitCode: 0, leg: deadCrit })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-c1r1', legs: [healed] }, exitCode: 0, leg: healed });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchSolo).toHaveBeenCalledTimes(1); // the -c1 launch only, no -c1r1
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    expect(n.what).toBe('seat crit did not review');
+    expect(n.why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
+      + 'its once-only retry was skipped: a relaunch reserves the same output budget');
+    expect(r.degraded).toBe(true);
   });
 
   // D-06: whatever skips an OUTPUT_LENGTH leg, its announcement says why no retry ran. The clause is
