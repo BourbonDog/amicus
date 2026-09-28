@@ -38,6 +38,25 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Fixed
 
+- **`council run` no longer merges a second run into a folder that already holds one.** Started
+  with an `--out-dir` (or the MCP tool's `outDir`) that held another run's `run.json`, or a
+  finished record under the same run id, a run merged its record into the old one key by key: the
+  old `createdAt` and `completedAt` stayed, and an old `aborted` status never lifted. Both doors
+  now refuse before writing anything, naming the run already there, or saying that its `run.json`
+  is not a readable run record: pick a folder with no `run.json` in it, or move the old run's
+  folder aside (for a reused `--run-id`, pass a fresh one, or none). A folder with other files but
+  no `run.json` (a briefing, CI's routing file) is accepted as before, and so is the MCP tool's
+  own live pre-seeded record. The `second-opinion` skill now takes the next free numbered run
+  folder (`output/<stem>-council-2/`, …) for a second council on the same document. (SL-4)
+- **`amicus list --json` now reports a failed council-run enumeration on stderr.** The human
+  listing already said `council runs: unavailable (<reason>)`, but under `--json` a failed
+  enumeration looked exactly like a project with no council runs. The line now goes to stderr,
+  after any `--limit` notice; stdout is unchanged, the empty listing included. (#206-r4-C2)
+- **Council reports (`report.md`, `report.html`) print `?` for a vote they do not recognize.** A
+  verdict other than agree, dispute or neutral rendered as the literal `undefined` in the markdown
+  and HTML matrices; both now print `?`, as the Council Workspace matrix already did. A missing
+  vote is still a blank cell. (B-CV-11)
+
 - **`amicus doctor --fix`'s interactive Electron check now says when its self-heal is
   unverified.** It reported `installed (self-healed)` whatever the repair returned, while the
   MCP-launch check already added an `UNVERIFIED` mark. Both now print the same mark, so an artifact
