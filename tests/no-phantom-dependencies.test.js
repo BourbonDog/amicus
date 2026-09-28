@@ -24,12 +24,19 @@
  *   never descend into a subdirectory, so only top-level src/, bin/ and
  *   electron/ files are scanned.
  *   RED: "no file under src/, bin/ or electron/ requires extract-zip", on its
- *   yauzl positive control (:119).
+ *   yauzl positive control (:126).
  * POSTINSTALLREQUIRE  scripts/postinstall.js — add `require('extract-zip')`
  *   to the shipped, production-executed postinstall. It survived every test
  *   here until the scripts/ pin existed.
  *   RED: "no file under scripts/ requires extract-zip either (the shipped
- *   postinstall runs in production)" (:129).
+ *   postinstall runs in production)" (:136).
+ * TIKTOKENPOSTINSTALL scripts/postinstall.js — add `require('tiktoken')`.
+ *   It survived every test here until the tiktoken scan covered scripts/.
+ *   RED: "no file under src/, bin/, electron/ or scripts/ requires tiktoken"
+ *   (:147).
+ * TIKTOKENREQUIRE src/sidecar/unzip.js — add `require('tiktoken')`.
+ *   RED: the same test (:146), and the phantom sweep "declares every external
+ *   package that src/, bin/ and electron/ require" (:100).
  * ──────────────────────────────────────────────────────────────────────────
  */
 

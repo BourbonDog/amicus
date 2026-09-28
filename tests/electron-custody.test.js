@@ -142,10 +142,14 @@
  *   `strictFileNames: true`, so it stops rewriting `\` to `/` before it
  *   validates a name.
  *   RED: "a backslash TRAVERSAL name is rewritten, then refused terminally, and
- *   writes nothing outside" (:417, now refused as `invalid characters`); "a
+ *   writes nothing outside" (:421, now refused as `invalid characters`); "a
  *   backslash in an entry name lands as a "/" separator, yauzl's default
- *   rewrite" (:403, refused outright); and "a real, DEFLATED archive
- *   round-trips byte-for-byte" (:365; Compress-Archive writes `sub\b.txt`).
+ *   rewrite" (:407, refused outright); and "a real, DEFLATED archive
+ *   round-trips byte-for-byte" (:369; Compress-Archive writes `sub\b.txt`).
+ *   Also RED on "an EMBEDDED backslash dot-segment is refused the same way, by
+ *   yauzl, before any write" (:433). NAMEREFUSALDRIFT (recorded in
+ *   tests/sidecar/unzip-refusal-strings.test.js) is RED on both backslash
+ *   traversal tests too, at their code assertions (:420, :432).
  * ──────────────────────────────────────────────────────────────────────────
  */
 

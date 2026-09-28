@@ -20,11 +20,16 @@
  * them something is wrong. The repo already owns the remedy and states the rule:
  * `src/utils/text-sanitize.js :: collapseExcerpt` is the ONLY sanitizer.
  *
- * ── NAMED MUTANT ──────────────────────────────────────────────────────────
+ * ── NAMED MUTANTS ─────────────────────────────────────────────────────────
  * RAWENTRYNAME  electron-refuse.js :: refuseUnsafeArchive — drop the
  *   collapseExcerpt() around `err.message`.
  *   RED: "an unsafe-archive refusal cannot forge an [amicus] line, colour the
- *   terminal, or reverse the sentence" (:118, re-measured 2026-09-28).
+ *   terminal, or reverse the sentence" (:128, re-measured 2026-09-28).
+ * RAWCOMPOSE    zip-entry-write.js :: failure — drop its collapseExcerpt(), so
+ *   the LIVE composer throws the entry name raw. It survived every test that
+ *   loads the composer until this one.
+ *   RED: "one layer down, the in-memory extractor throws an already-safe
+ *   refusal (RAWCOMPOSE)" (:147).
  * ──────────────────────────────────────────────────────────────────────────
  */
 
