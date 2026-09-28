@@ -10,21 +10,29 @@ $packageName = 'amicus'
 # `npm install -g amicus`. Tolerate a non-zero exit rather than throw -- npm may already be
 # gone (e.g. nodejs-lts was uninstalled first in a bulk `choco uninstall`), and a failed
 # uninstall script leaves the package stuck in a bad state for the user.
+$removed = $false
 try {
   # As in chocolateyInstall.ps1: under Windows PowerShell 5.1, npm's stderr warnings would
   # otherwise become terminating errors, so relax the preference for this one call.
   $ErrorActionPreference = 'Continue'
   & npm uninstall --global $packageName 2>&1 | Write-Host
-  $ErrorActionPreference = 'Stop'
-  if ($LASTEXITCODE -ne 0) {
+  if ($LASTEXITCODE -eq 0) {
+    $removed = $true
+  } else {
     Write-Warning "npm uninstall -g $packageName exited with code $LASTEXITCODE (continuing)."
   }
 } catch {
   Write-Warning "npm uninstall -g $packageName failed: $_"
+} finally {
+  $ErrorActionPreference = 'Stop'
 }
 
 Write-Host ''
-Write-Host "$packageName removed from npm's global packages."
+if ($removed) {
+  Write-Host "$packageName removed from this account's npm global packages."
+} else {
+  Write-Host "npm uninstall did not succeed (see the warning above), so $packageName may still be installed."
+}
 Write-Host 'This package never registered the MCP server or copied skills at install time'
 Write-Host '(chocolateyInstall.ps1 sets AMICUS_SKIP_POSTINSTALL=1), so there is nothing under'
 Write-Host '~/.claude, ~/.claude.json or %APPDATA%\Claude for it to clean up here. If you ran'
