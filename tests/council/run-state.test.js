@@ -246,3 +246,43 @@ describe('pointer files', () => {
     expect(ids).toEqual(['abc123', 'def456']);
   });
 });
+
+// D-04 (SL-4): which run.json in a run dir belongs to ANOTHER run. Both doors
+// refuse a directory whose answer is non-null (the CLI and the MCP tool).
+describe('otherRunInDir (D-04, SL-4)', () => {
+  const dirWith = (body) => {
+    const dir = path.join(tmp, 'rd');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'run.json'), typeof body === 'string' ? body : JSON.stringify(body));
+    return dir;
+  };
+
+  test('no directory, or a directory with no run.json, is free', () => {
+    expect(rs.otherRunInDir(path.join(tmp, 'absent'), 'r1')).toBeNull();
+    const briefingOnly = path.join(tmp, 'briefing-only');
+    fs.mkdirSync(briefingOnly);
+    fs.writeFileSync(path.join(briefingOnly, 'briefing.md'), 'x');
+    expect(rs.otherRunInDir(briefingOnly, 'r1')).toBeNull();
+  });
+
+  test.each([
+    ['another run, with its engine pid', { runId: 'other1', pid: 1 }, { runId: 'other1' }],
+    ['another run with no pid (a dead MCP pre-seed of a different run)', { runId: 'other1' }, { runId: 'other1' }],
+    ['this run\'s own MCP pre-seed (same runId, no pid)', { runId: 'r1', status: 'running' }, null],
+    ['an earlier engine under the same runId (a pid is recorded)', { runId: 'r1', pid: 42 }, { runId: 'r1' }],
+    ['a runId outside the task-id grammar is never echoed', { runId: 'bad id!', pid: 1 }, { runId: null }],
+    ['no runId at all', { pid: 3 }, { runId: null }],
+    ['a truncated file', '{ "runId": "r1", trunc', { runId: null }],
+    ['an empty file', '', { runId: null }],
+    ['JSON null', 'null', { runId: null }],
+    ['a JSON array', '[]', { runId: null }],
+  ])('%s', (_name, body, expected) => {
+    expect(rs.otherRunInDir(dirWith(body), 'r1')).toEqual(expected);
+  });
+
+  test('a run.json that is a directory is not a readable run record', () => {
+    const dir = path.join(tmp, 'rd-dir');
+    fs.mkdirSync(path.join(dir, 'run.json'), { recursive: true });
+    expect(rs.otherRunInDir(dir, 'r1')).toEqual({ runId: null });
+  });
+});

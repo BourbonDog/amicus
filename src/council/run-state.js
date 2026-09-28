@@ -201,8 +201,33 @@ function listPointers(project) {
   return out;
 }
 
+/**
+ * D-04 (SL-4): the record already in `runDir`'s run.json, when it is not this run's own.
+ * `initRun` merges a new seed into whatever record it finds (`mergeRun` spreads the old
+ * record, then the patch), so a second run started there folds two runs into one run.json:
+ * the old `createdAt`, `completedAt`, `exitCode` and `error` survive, and an old `aborted`
+ * status never lifts. Every run.json counts EXCEPT this run's own pre-seed, the same runId
+ * with no `pid` yet: `mcp-council-run.js :: handleCouncilRunTool` seeds without one (its
+ * child's pid goes to spawn.pid), `initCouncilRun` always writes one, and `!rec.pid` is
+ * the test `mcp-council-awareness.js :: enginePid` reads it with. An id outside the
+ * task-id grammar is never echoed: this run did not write the file.
+ * @param {string} runDir
+ * @param {string} runId the run about to start
+ * @returns {{runId: (string|null)}|null} null when the dir holds no other run's record;
+ *   `runId` is null when the file does not parse or names no valid id
+ */
+function otherRunInDir(runDir, runId) {
+  if (!fs.existsSync(runPath(runDir))) { return null; }
+  const { TASK_ID_PATTERN } = require('../utils/validators');
+  const rec = readRun(runDir);
+  const id = rec && typeof rec.runId === 'string' && TASK_ID_PATTERN.test(rec.runId) ? rec.runId : null;
+  if (id !== null && id === runId && !rec.pid) { return null; }
+  return { runId: id };
+}
+
 module.exports = {
   RUN_FILE, readRun, initRun, initCouncilRun, checkpoint, updateStage, appendStageWave,
   writeSpawnPid, readSpawnPid,
   pointerPath, writePointer, readPointer, listPointers,
+  otherRunInDir,
 };
