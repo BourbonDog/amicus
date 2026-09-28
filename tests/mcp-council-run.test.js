@@ -231,6 +231,26 @@ describe('amicus_council_run handler', () => {
     expect(fs.existsSync(path.join(tmp, '.claude', 'amicus_sessions'))).toBe(false);
   });
 
+  // D-04 (SL-4): a run.json naming no valid run (it does not parse, or its runId is outside
+  // the task-id grammar) is refused too, and its id is never echoed. The predicate is shared
+  // with the CLI door, but this message is built here, in mcp-council-run-dir.js ::
+  // resolveMcpRunDir, so this door needs its own pin.
+  test('an outDir holding a run.json that names no valid run (a forged runId) → isError naming no run, no spawn, run.json untouched (D-04)', async () => {
+    const dir = path.join(tmp, 'forged-run');
+    fs.mkdirSync(dir);
+    const runJson = path.join(dir, 'run.json');
+    fs.writeFileSync(runJson, JSON.stringify({ runId: 'x\u001b[31m\nFORGED', pid: 1 }));
+    const before = fs.readFileSync(runJson, 'utf-8');
+    const calls = [];
+    const res = await handleCouncilRunTool(input({ outDir: 'forged-run' }), tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe(`outDir '${dir}' already holds a run.json that is not a readable run record — `
+      + 'pick an outDir with no run.json in it, or move the old run\'s folder aside.');
+    expect(res.content[0].text).not.toContain('FORGED');
+    expect(calls).toHaveLength(0);
+    expect(fs.readFileSync(runJson, 'utf-8')).toBe(before);
+  });
+
   test('an outDir holding a briefing but no run.json still launches (the skill\'s run-folder shape)', async () => {
     const dir = path.join(tmp, 'run-folder');
     fs.mkdirSync(dir);
