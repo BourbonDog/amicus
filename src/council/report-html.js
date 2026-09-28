@@ -39,7 +39,9 @@ function renderHtml(m) {
   const matrixRows = m.findings.map((f) => {
     const cells = m.judges.map((j) => {
       const v = f.byJudge[j];
-      return `<td class="c">${v ? SYMBOL[v] : ''}${j === f.raiser ? '<sup>*</sup>' : ''}</td>`;
+      // D-09 (B-CV-11): '?' for an unrecognized verdict, as report-md.js :: renderMd and
+      // matrix-model.js :: buildMatrixModel render it; a constant '?' needs no esc().
+      return `<td class="c">${v ? (SYMBOL[v] || '?') : ''}${j === f.raiser ? '<sup>*</sup>' : ''}</td>`;
     }).join('');
     return `<tr style="background:${TIER_VAR[f.tier] || '#fff'}">` +
       `<td>${esc(f.id)}</td><td>${esc(f.severity)}</td><td>${esc(f.raiser)}</td>${cells}` +
