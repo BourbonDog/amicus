@@ -160,6 +160,18 @@ function expectedDigest(anchor, fileName) {
   return typeof digest === 'string' && HEX64.test(digest) ? digest : null;
 }
 
+/**
+ * D-02 (B-SEC-7): WHICH of the two null digests this is. `expectedDigest` returns
+ * null both for NO TABLE AT ALL (a package that predates checksums.json: still
+ * extracted, and marked) and for a table SILENT about this file (a copy installed
+ * with a different Electron, or a planted version: refused). `readChecksumTable`
+ * never yields an empty table, so a truthy `anchor.table` holds at least one row.
+ * @returns {boolean} true when a usable table exists and names no sha256 for `fileName`
+ */
+function isUnlisted(anchor, fileName) {
+  return !!(anchor && anchor.table) && expectedDigest(anchor, fileName) === null;
+}
+
 /** sha256 of an artifact amicus already holds in its own heap. */
 function sha256Bytes(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
@@ -220,6 +232,7 @@ module.exports = {
   sha256Bytes,
   artifactFileName,
   normalizeV,
+  isUnlisted,
   // RE-EXPORTED from ./electron-env-scrub — the same function objects, not copies.
   isRepoPlantedName,
   REPO_ENV_PREFIXES,

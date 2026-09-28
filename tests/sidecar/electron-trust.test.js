@@ -128,6 +128,34 @@ describe('resolveAnchor + expectedDigest', () => {
   });
 });
 
+describe('isUnlisted — WHICH of the two null digests (D-02)', () => {
+  // `expectedDigest` returns null both for NO TABLE AT ALL (the legacy package:
+  // still extracted, and marked) and for a table SILENT about this file (refused,
+  // D-02). This predicate is the one place the two are told apart.
+  //
+  // NAMED MUTANT
+  //   UNLISTEDASLEGACY electron-trust.js :: isUnlisted -- `return false;`.
+  //     RED: the third test below.
+  const withRow = { table: { [ZIP_NAME]: ZIP_SHA256 }, source: '<test>' };
+  const without = { table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 }, source: '<test>' };
+
+  test('no table at all is NOT unlisted: the legacy case keeps its allow', () => {
+    expect(trust.isUnlisted(null, ZIP_NAME)).toBe(false);
+    expect(trust.isUnlisted(undefined, ZIP_NAME)).toBe(false);
+    expect(trust.isUnlisted({ source: '<test>' }, ZIP_NAME)).toBe(false);
+  });
+
+  test('a table WITH the row is not unlisted', () => {
+    expect(trust.isUnlisted(withRow, ZIP_NAME)).toBe(false);
+  });
+
+  test('a table that EXISTS but has no row for this file IS unlisted (UNLISTEDASLEGACY)', () => {
+    expect(trust.isUnlisted(without, ZIP_NAME)).toBe(true);
+    // ...including the version a planted package.json names (ANCHORVERSIONFROMTARGET's lever)
+    expect(trust.isUnlisted(withRow, 'electron-v99.0.0-win32-x64.zip')).toBe(true);
+  });
+});
+
 describe('sha256Bytes', () => {
   test('matches crypto over a multi-MiB Buffer', () => {
     const chunk = Buffer.alloc(256 * 1024, 0xab);
