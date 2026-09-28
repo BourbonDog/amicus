@@ -88,3 +88,37 @@ describe('generated-doc marker freshness (F-3)', () => {
     }
   });
 });
+
+describe('collectCrossLinkTargets fails loudly instead of emptying the roster (R-E20 A2/D4)', () => {
+  const os = require('node:os');
+  let tmp;
+  beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'xlink-roster-')); });
+  afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+
+  it('a missing docs/ directory gives the CLAUDE.md + README.md roster', () => {
+    expect(collectCrossLinkTargets(tmp)).toEqual(['CLAUDE.md', 'README.md']);
+  });
+
+  it('a docs/ that cannot be listed (not ENOENT) throws, rather than validating nothing', () => {
+    fs.writeFileSync(path.join(tmp, 'docs'), 'a file where the docs directory should be');
+    expect(() => collectCrossLinkTargets(tmp)).toThrow(/Cannot list docs\//);
+  });
+
+  it('an entry that cannot be stat-ed throws, naming it, rather than dropping every doc', () => {
+    fs.mkdirSync(path.join(tmp, 'docs'));
+    fs.writeFileSync(path.join(tmp, 'docs', 'ok.md'), '# ok\n');
+    fs.writeFileSync(path.join(tmp, 'docs', 'bad.md'), '# bad\n');
+    const realStatSync = fs.statSync;
+    const spy = jest.spyOn(fs, 'statSync').mockImplementation((p, ...rest) => {
+      if (path.basename(String(p)) === 'bad.md') {
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      }
+      return realStatSync(p, ...rest);
+    });
+    try {
+      expect(() => collectCrossLinkTargets(tmp)).toThrow(/Cannot stat docs\/bad\.md/);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

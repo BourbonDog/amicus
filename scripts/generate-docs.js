@@ -200,20 +200,36 @@ function main() {
  * Files whose markdown cross-links are validated in --check mode: CLAUDE.md, README.md, and every
  * top-level docs/*.md (mirrors package.json's shipped `docs/*.md` glob — not recursive, so
  * docs/superpowers/, docs/plans/, docs/cards/ and docs/probes/ are not included).
+ *
+ * Only a missing docs/ (ENOENT) yields the two-file roster. Any other failure to list docs/, or to
+ * stat one of its *.md entries, throws: swallowing it would empty the docs roster, and --check
+ * would then validate nothing and pass.
  * @param {string} rootDir - Project root
  * @returns {string[]} Repo-relative paths to validate
+ * @throws {Error} `Cannot list docs/: ...` or `Cannot stat docs/<name>: ...`
  */
 function collectCrossLinkTargets(rootDir) {
   const docsDir = path.join(rootDir, 'docs');
-  let docFiles = [];
+  let names;
   try {
-    docFiles = fs.readdirSync(docsDir)
-      .filter((name) => name.endsWith('.md') && fs.statSync(path.join(docsDir, name)).isFile())
-      .sort()
-      .map((name) => `docs/${name}`);
-  } catch {
-    docFiles = [];
+    names = fs.readdirSync(docsDir);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      return ['CLAUDE.md', 'README.md'];
+    }
+    throw new Error(`Cannot list docs/: ${err && err.message}`);
   }
+  const isFileEntry = (name) => {
+    try {
+      return fs.statSync(path.join(docsDir, name)).isFile();
+    } catch (err) {
+      throw new Error(`Cannot stat docs/${name}: ${err && err.message}`);
+    }
+  };
+  const docFiles = names
+    .filter((name) => name.endsWith('.md') && isFileEntry(name))
+    .sort()
+    .map((name) => `docs/${name}`);
   return ['CLAUDE.md', 'README.md', ...docFiles];
 }
 
