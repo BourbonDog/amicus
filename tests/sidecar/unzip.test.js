@@ -5,7 +5,7 @@
  * Per-platform native-unzip COMMAND SELECTION (src/sidecar/unzip.js ::
  * nativeUnzipPlan). This is planning only — nothing here spawns a process;
  * `./electron-native-plan :: runNativePlan` is what walks this plan and spawns
- * each command in order, and its own tests cover that walk.
+ * each command in order; tests/electron-native-rescue.test.js covers that walk.
  *
  * HISTORY: through v4.14.1 this file also covered `robustExtract()` (bounding
  * the now-removed `extract-zip` dependency and falling back to this same

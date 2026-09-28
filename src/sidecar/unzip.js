@@ -9,8 +9,9 @@
  *
  * `UNSAFE_PATTERNS` is not applied by any code in this file: the in-memory
  * extractor classifies its own refusals (`zip-entry-write.js :: outOfBound`,
- * `zip-from-buffer.js`'s own `NAME_REFUSAL`). It stays exported as the single
- * source of truth those two wordings are tested against
+ * `zip-from-buffer.js`'s own `NAME_REFUSAL`), and the rescue's name scan builds
+ * its own (`zip-name-scan.js :: nameRefusal`). It stays exported as the single
+ * source of truth those wordings are tested against
  * (tests/sidecar/unzip-refusal-strings.test.js, tests/electron-custody.test.js,
  * tests/sidecar/zip-name-scan.test.js), so an upstream yauzl reword still goes
  * red instead of silently letting a path-traversal refusal (C4) be retried.
@@ -37,8 +38,12 @@ const path = require('path');
  * tests/sidecar/unzip-refusal-strings.test.js, which fails both on a reworded
  * refusal and on a pattern no real message produces.
  *
- * DELIBERATELY NARROW: a stall or an ordinary corrupt-archive throw must not
- * match, or the native-extractor rescue this repo also carries is destroyed.
+ * DELIBERATELY NARROW, though no shipped code applies this list any more. The
+ * runtime classifier that has to stay as narrow is
+ * `zip-from-buffer.js :: NAME_REFUSAL`: an ordinary corrupt-archive error it
+ * matched would be reported as the terminal UNZIP_UNSAFE_ARCHIVE instead of
+ * UNZIP_BUFFER_FAILED, the one code the native-extractor rescue fires on
+ * (`electron-native-rescue.js :: isRescuableFailure`).
  */
 const UNSAFE_PATTERNS = [
   /^Out of bound path /,

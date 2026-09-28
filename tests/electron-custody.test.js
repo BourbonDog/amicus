@@ -98,7 +98,7 @@
  *   hard-cap timers, restoring the unbounded promise the electron path had.
  *   RED: "an extract that makes no progress rejects on the IDLE bound", "an
  *   extract that never ends rejects on the HARD cap", and "the default bounds
- *   are unzip.js's own numbers".
+ *   are the numbers unzip.js used".
  * IDLEONENTRIES   zip-from-buffer.js :: extractZipBuffer — arm the idle watchdog
  *   against ENTRY COMPLETION instead of bytes written (drop the
  *   `written !== atBytes` term), which is what the first cut of the bound did.
@@ -385,6 +385,19 @@ describe('extractZipBuffer — extraction with no filesystem source', () => {
     }
   });
 
+  test('a backslash in an entry name lands as a "/" separator, yauzl\'s default rewrite', async () => {
+    // zip-from-buffer.js leaves yauzl's `strictFileNames` at its default (off),
+    // and in that mode yauzl@2.10.0 rewrites `\` to `/` BEFORE validating the
+    // name (index.js, lines 420-426); `zip-name-scan.js :: nameRefusal` is built
+    // on that rewrite. This pins the default through the real in-memory path: if
+    // it ever flipped, this clean name would be refused instead of extracted.
+    const dir = mkTmp();
+    const res = await extractZipBuffer(buildZip([{ name: 'sub\\file.txt', body: 'x' }]), { dir });
+
+    expect(res.entries).toBe(1);
+    expect(treeOf(dir)).toEqual(['sub/file.txt:1']);
+  });
+
   test('an entry that escapes through a pre-planted directory symlink is REFUSED', async () => {
     // extract-zip's own out-of-bound check, kept VERBATIM and re-run per entry:
     // `realpath(destDir)` resolving outside the root is the shape a symlink an
@@ -600,7 +613,7 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
     expect(timers.pending.size).toBe(0);
   });
 
-  test('the default bounds are unzip.js\'s own numbers, so the electron path is bounded again', async () => {
+  test('the default bounds are the numbers unzip.js used, so the electron path is bounded again', async () => {
     // The production call site (electron-install.js) passes no idleMs/maxMs, so
     // what matters is that the DEFAULTS arm real timers. Measured through the
     // injected clock: two timers, 30 s and 240 s.

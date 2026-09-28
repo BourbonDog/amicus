@@ -16,7 +16,7 @@
  * says exactly that on stderr before the first spawn, and the caller marks the
  * result unverified. It is the trade the hatch buys, not a safe operation.
  *
- * NEAR-LEAF: `./unzip` (the plan and the cap),
+ * NEAR-LEAF: `./unzip` (the plan),
  * `./electron-rescue-notice`, `./electron-refuse` and `../utils/text-sanitize`.
  * Nothing requires it back.
  *

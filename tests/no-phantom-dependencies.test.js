@@ -92,14 +92,16 @@ describe('no phantom dependencies in shipped code', () => {
   // pins a removed hint: a reintroduction of either must re-justify itself
   // here, not slip back in silently. Neither assertion touches node_modules or
   // resolves the package — both read package.json / scanned source text only
-  // — so this holds regardless of what the shared node_modules junction still
-  // physically contains (extract-zip stays on disk, dev-only, reachable via
-  // puppeteer -> @puppeteer/browsers; see the lane's research note §2).
+  // — so this holds regardless of what node_modules contains (a dev install
+  // still has extract-zip via puppeteer -> @puppeteer/browsers; see
+  // package-lock.json).
   it('extract-zip is not declared in package.json', () => {
     expect(declared.has('extract-zip')).toBe(false);
   });
 
   it('no file under src/, bin/ or electron/ requires extract-zip', () => {
+    // Positive control: yauzl is required only inside guarded try blocks in src/sidecar/zip-from-buffer.js and zip-name-scan.js, the same shape extract-zip had.
+    expect(required.has('yauzl')).toBe(true);
     expect(required.has('extract-zip')).toBe(false);
   });
 

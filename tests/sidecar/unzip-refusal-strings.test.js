@@ -21,9 +21,11 @@
  *
  * WHAT A FAILURE HERE MEANS: not "the test is stale". It means either yauzl
  * reworded a refusal, or `outOfBound` did, and UNSAFE_PATTERNS has stopped
- * classifying it — the in-memory extractor's `UNZIP_UNSAFE_ARCHIVE` (C4) would
- * stop being recognised as terminal wherever a caller still checks it against
- * this list. Re-derive the strings before touching the regexes.
+ * classifying it. A yauzl reword is the one with a runtime effect:
+ * `zip-from-buffer.js :: NAME_REFUSAL` carries the same three prefixes, so it
+ * misses the new wording too, and the archive is reported UNZIP_BUFFER_FAILED
+ * — evictable and rescuable — instead of the terminal UNZIP_UNSAFE_ARCHIVE
+ * (C4). Re-derive the strings before touching the regexes.
  *
  * ── NAMED MUTANTS ─────────────────────────────────────────────────────────
  * Applied and reverted by byte copy, MEASURED 2026-09-28 against this file.
@@ -43,7 +45,8 @@
 const yauzl = require('yauzl');
 
 const { UNSAFE_PATTERNS } = require('../../src/sidecar/unzip');
-const { outOfBound } = require('../../src/sidecar/zip-entry-write');
+const { outOfBound, extractorUnavailable } = require('../../src/sidecar/zip-entry-write');
+const { stalled } = require('../../src/sidecar/zip-stall-bound');
 
 // Collected once: the message each real source ACTUALLY produces.
 const real = {
@@ -86,8 +89,13 @@ describe('F4 — every pattern is answered by a real message, and only by one', 
     // The narrowness IS the control: a stall or a corrupt archive must still
     // reach the caller as a non-terminal failure, never as UNZIP_UNSAFE_ARCHIVE.
     for (const benign of [
+      // robustExtract's old stall wording: STALLTERMINAL's kill depends on it.
       'stalled: no extract progress for 30000ms',
       'stalled: exceeded 240000ms',
+      // ...and what the in-memory path says now, from its real constructors.
+      stalled('no extract progress for 30000ms').message,
+      stalled('extraction exceeded 240000ms').message,
+      extractorUnavailable('Cannot find module').message,
       'end of central directory record signature not found',
       'compressed/uncompressed size mismatch for stored file: 5 != 4',
     ]) {

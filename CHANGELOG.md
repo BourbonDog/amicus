@@ -8,7 +8,8 @@ All notable changes to Amicus are documented here. Format follows
 ### Removed
 
 - **`robustExtract` and the `extract-zip` dependency it was the only caller of.** The Electron
-  self-heal extracts only through the in-memory buffer path (`src/sidecar/zip-from-buffer.js`) now;
+  self-heal has extracted through the in-memory buffer path (`src/sidecar/zip-from-buffer.js`)
+  since v4.9.6, with the opt-in native-extractor rescue as its only other path;
   `robustExtract` (`src/sidecar/unzip.js`), which bounded and ran `extract-zip` with a native-unzip
   fallback for a Node-24 stall, had no production caller left. `extract-zip` was amicus's one
   production dependency with an unfixable advisory (GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3, both
@@ -19,7 +20,7 @@ All notable changes to Amicus are documented here. Format follows
   outOfBound`'s wording against.
 - **The unused `tiktoken` dependency.** Declared for future exact tokenization but never required
   anywhere in `src/` — token sizing has always used a length/4 heuristic (`src/context.js`,
-  `src/context-compression.js`), as `docs/configuration.md` already noted.
+  `src/context-compression.js`).
 
 ## [4.14.1] - 2026-09-28
 
