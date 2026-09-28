@@ -11,19 +11,19 @@ All notable changes to Amicus are documented here. Format follows
   with an `--out-dir` (or the MCP tool's `outDir`) that held another run's `run.json`, a run merged
   its record into the old one key by key: the old `createdAt` and `completedAt` stayed, and an old
   `aborted` status never lifted. Both doors now refuse before writing anything, naming the run
-  already there: pick a folder with no `run.json` in it, or move the old run's folder aside. A
-  folder with other files but no `run.json` (a briefing, CI's routing file) is accepted as before,
-  and so is the MCP tool's own pre-seeded record. The `second-opinion` skill now takes the next
-  free numbered run folder (`output/<stem>-council-2/`, …) for a second council on the same
-  document. (SL-4)
+  already there, or saying that its `run.json` is not a readable run record: pick a folder with no
+  `run.json` in it, or move the old run's folder aside. A folder with other files but no
+  `run.json` (a briefing, CI's routing file) is accepted as before, and so is the MCP tool's own
+  pre-seeded record. The `second-opinion` skill now takes the next free numbered run folder
+  (`output/<stem>-council-2/`, …) for a second council on the same document. (SL-4)
 - **`amicus list --json` now reports a failed council-run enumeration on stderr.** The human
   listing already said `council runs: unavailable (<reason>)`, but under `--json` a failed
   enumeration looked exactly like a project with no council runs. The line now goes to stderr,
   after any `--limit` notice; stdout is unchanged, the empty listing included. (#206-r4-C2)
-- **`council report` prints `?` for a vote it does not recognize.** A verdict other than agree,
-  dispute or neutral rendered as the literal `undefined` in the markdown and HTML matrices; both now
-  print `?`, as the Council Workspace matrix already did. A missing vote is still a blank cell.
-  (B-CV-11)
+- **Council reports (`report.md`, `report.html`) print `?` for a vote they do not recognize.** A
+  verdict other than agree, dispute or neutral rendered as the literal `undefined` in the markdown
+  and HTML matrices; both now print `?`, as the Council Workspace matrix already did. A missing
+  vote is still a blank cell. (B-CV-11)
 
 ## [4.14.1] - 2026-09-28
 
