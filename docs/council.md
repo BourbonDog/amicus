@@ -1367,7 +1367,9 @@ Council 'my-bench'
 ## Where artifacts live
 
 Every run writes to a run folder — `output/<stem>-council/` (or `./second-opinion/<stem>-council/`
-if no `output/` directory exists), per the skill's Stage 0. This section cross-checks against
+if no `output/` directory exists), or the next free numbered sibling (`<stem>-council-2/`, `-3/`,
+…) when that folder already holds an earlier run's `run.json`, since `council run` refuses such a
+folder — per the skill's Stage 0. This section cross-checks against
 [SKILL.md's "Output & naming"](../skills/second-opinion/SKILL.md#output--naming) — treat that
 section as authoritative if the two ever drift; file an issue if they do.
 

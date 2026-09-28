@@ -97,9 +97,13 @@ disclosure below so the user can correct you before any spend.
 Then confirm the three inputs before doing anything else — **review:** **source material**, **the analysis** (the thing to be reviewed), and **the criteria** (what quality/correctness means for this material); **task:** **the brief** (the work to be done, stated precisely enough that two models can do it without asking), any **material** it should draw on, and **the criteria** (what a good answer must do — scope, depth, form, what counts as evidence). Ask only for what is missing; don't re-ask for what is already provided.
 
 **Establish the run folder first:** `output/<stem>-council/` (or `./second-opinion/<stem>-council/`
-if no `output/` directory exists). Create it now — it is both your working directory and the
-engine's `--out-dir`, so every briefing, leg, and artifact for this run lands in one place. Use
-its absolute path in all path arguments.
+if no `output/` directory exists). If that folder already holds a `run.json` — an earlier council
+on the same stem — take the next free numbered sibling instead (`output/<stem>-council-2/`, then
+`-3/`, …; free means it does not exist or holds no `run.json`): `council run` refuses a folder that
+holds another run's `run.json`, and the earlier run's folder stays exactly as it is — never move or
+delete it. Create the folder now — it is both your working directory and the engine's `--out-dir`,
+so every briefing, leg, and artifact for this run lands in one place. Use its absolute path in all
+path arguments.
 
 **Prepare material for council models:**
 - Large, linked, or heavily marked-up sources → extract clean text to a small, clearly-named file
@@ -291,9 +295,10 @@ clean.** The engine owns degradation; you own disclosure and the user's choice:
   in `run.json`'s `debate` block. Then proceed to Stage 4 with what exists.
 - **1 — nothing usable.** Quorum, cost ceiling, or validation failed and the error doc says which.
   Present it and offer: re-run (possibly with a smaller bench), a raised `--max-cost`, or the
-  manual/single-pass fallback.
-- **130 / 143 — aborted** (Ctrl-C or terminated). Offer a resume-as-a-new-run; the partial run
-  folder stays on disk for inspection.
+  manual/single-pass fallback. A re-run takes the next free run folder (Stage 0's rule) whenever
+  this one already holds a `run.json`.
+- **130 / 143 — aborted** (Ctrl-C or terminated). Offer a resume-as-a-new-run in the next free run
+  folder (Stage 0's rule); the partial run folder stays on disk for inspection.
 
 **If the engine itself is the thing misbehaving** — or you need a fully custom per-seat brief
 beyond `--critic`/`--lenses`, or deliberate mid-stage inspection — switch to
@@ -648,7 +653,7 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
 
 ## Output & naming
 
-- Run folder: `output/<stem>-council/` (or `./second-opinion/<stem>-council/` if no `output/` exists), passed to the engine as `--out-dir`. After a fast-path run it holds:
+- Run folder: `output/<stem>-council/` (or `./second-opinion/<stem>-council/` if no `output/` exists), or the next free numbered sibling (`<stem>-council-2/`, `-3/`, …) when that folder already holds an earlier run's `run.json` (Stage 0), passed to the engine as `--out-dir`. After a fast-path run it holds:
   - `briefing.md` — the Stage-0 request Claude authored — the review request, or in task mode the work brief (run provenance, not a temp file)
   - `review-claude.md` — Claude's own fresh review, only when "Claude in the council" is on
   - `run.json` — the engine's run manifest: stage log, wave ids, degradation, `runStats`, cost

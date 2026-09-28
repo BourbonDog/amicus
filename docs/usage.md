@@ -192,7 +192,7 @@ amicus council run --prompt-file briefing.md --models gemini,glm --chair deepsee
 | `--chair <model>` | Verdict synthesizer. Default `deepseek`; must **not** be a bench seat (pre-flight error). |
 | `--critic <model>` | Optional adversarial seat; must **be** a bench seat. Mutually exclusive with `--lenses`. |
 | `--lenses <s1,s2,...>` | Expert lenses, one per seat (count must equal seat count); forces `--no-ledger` semantics. |
-| `--out-dir <dir>` | Run directory. Default `./council-<runId>/`. Must resolve inside the project directory — a path that escapes it is rejected with `BAD_ARGS`. |
+| `--out-dir <dir>` | Run directory. Default `./council-<runId>/`. Must resolve inside the project directory — a path that escapes it is rejected with `BAD_ARGS`. A directory that already holds another run's `run.json` is refused with `BAD_ARGS` too, naming that run; a folder holding other files but no `run.json` (a briefing, say) is fine. Pick a fresh folder, or move the old run's folder aside. |
 | `--json` | Emit the council-run document on stdout (error envelope + documented exit codes on failure). |
 | `--max-cost <$>` | **Whole-run** ceiling on **known** spend, checked before each paid stage launch. A leg whose cost cannot be determined does not count against it and never halts the run; when the total is inexact and a ceiling is set, the run exits `2`. |
 | `--timeout <min>` | **Per-leg** timeout (fanout semantics); bound the aggregate with your CI job timeout. |

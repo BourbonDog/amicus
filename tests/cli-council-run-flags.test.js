@@ -367,6 +367,95 @@ describe('valueless and dash-leading value flags (v4.7 PR6)', () => {
   });
 });
 
+// D-04 (SL-4): an --out-dir already holding ANOTHER run's run.json is refused
+// before the engine. runCouncil is mocked, so the handler writes nothing: "the
+// engine was never reached" and "the old record is byte-identical" are what go
+// RED at 1851a6eb, where the run proceeded (and the real engine merged).
+describe('an --out-dir already in use (D-04, SL-4)', () => {
+  const seedRun = (dir, body) => {
+    fs.mkdirSync(dir, { recursive: true });
+    const p = path.join(dir, 'run.json');
+    fs.writeFileSync(p, typeof body === 'string' ? body : JSON.stringify(body));
+    return p;
+  };
+
+  it('refuses a folder holding another run\'s run.json, naming that run, and leaves the record untouched', async () => {
+    const dir = path.join(tmp, 'old-run');
+    const p = seedRun(dir, { runId: 'oldrun01', status: 'complete', exitCode: 0, pid: 4242 });
+    const before = fs.readFileSync(p, 'utf-8');
+    const code = await handleCouncilRun(argsBase({ 'out-dir': 'old-run' }));
+    expect(code).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    const doc = JSON.parse(stdout());
+    expect(doc.error.code).toBe('BAD_ARGS');
+    expect(doc.error.message).toBe(`Error: '${dir}' already holds run oldrun01's run.json — a new run there would merge into that record`);
+    expect(doc.error.hint).toBe('pass an --out-dir with no run.json in it, or move the old run\'s folder aside first');
+    expect(fs.readFileSync(p, 'utf-8')).toBe(before);
+  });
+
+  it('refuses a reused --run-id whose default folder holds that id\'s earlier run (a pid is recorded)', async () => {
+    const dir = path.join(tmp, 'council-feedc0de');
+    seedRun(dir, { runId: 'feedc0de', status: 'error', pid: 4242 });
+    expect(await handleCouncilRun(argsBase({ 'run-id': 'feedc0de' }))).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.message).toContain(`'${dir}' already holds run feedc0de's run.json`);
+  });
+
+  it('refuses an unreadable run.json without naming a run', async () => {
+    seedRun(path.join(tmp, 'junk'), '{ "runId": "abc", trunc');
+    expect(await handleCouncilRun(argsBase({ 'out-dir': 'junk' }))).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.message).toContain('already holds a run.json that is not a readable run record');
+  });
+
+  it('never echoes a runId outside the task-id grammar', async () => {
+    seedRun(path.join(tmp, 'odd'), { runId: 'x\u001b[31m\nFORGED', pid: 1 });
+    expect(await handleCouncilRun(argsBase({ 'out-dir': 'odd' }))).toBe(1);
+    const msg = JSON.parse(stdout()).error.message;
+    expect(msg).toContain('not a readable run record');
+    expect(msg).not.toContain('FORGED');
+  });
+
+  it('the human-mode refusal goes to stderr, with the fix as its hint line', async () => {
+    seedRun(path.join(tmp, 'old-run'), { runId: 'oldrun01', pid: 4242 });
+    const args = argsBase({ 'out-dir': 'old-run' });
+    args.json = false;
+    expect(await handleCouncilRun(args)).toBe(1);
+    const e = err.mock.calls.map((c) => String(c[0])).join('');
+    expect(e).toContain("already holds run oldrun01's run.json");
+    expect(e).toContain('  → pass an --out-dir with no run.json in it');
+  });
+
+  it('accepts this run\'s own MCP pre-seed: the same runId and no pid yet', async () => {
+    seedRun(path.join(tmp, 'X'), { schemaVersion: 2, type: 'council-run', runId: 'feedc0de', status: 'running', stages: [] });
+    await handleCouncilRun(argsBase({ 'run-id': 'feedc0de', 'out-dir': 'X' }));
+    expect(runCouncil).toHaveBeenCalled();
+  });
+
+  it('accepts a folder holding other files but no run.json (the CI and skill shapes)', async () => {
+    const dir = path.join(tmp, 'council-run');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'briefing.md'), 'brief');
+    fs.writeFileSync(path.join(dir, 'opencode.json'), '{}');
+    await handleCouncilRun(argsBase({ 'out-dir': 'council-run' }));
+    expect(runCouncil).toHaveBeenCalled();
+  });
+
+  it('the MCP door\'s own child accepts its parent\'s pre-seed (the two doors agree)', async () => {
+    const { handleCouncilRunTool } = require('../src/mcp-council-run');
+    let argv = null;
+    const res = await handleCouncilRunTool({ briefingFile, models: ['gemini', 'gpt', 'qwen'] }, tmp, {
+      spawnFn: (a) => { argv = a; },
+      clientName: 'claude-code',
+      autoOpen: { decide: () => ({ open: false, reason: 'test' }), launch: () => ({}) },
+    });
+    expect(res.isError).toBeUndefined();
+    expect(argv).not.toBeNull();
+    expect(await handleCouncilRun(parseArgs(argv))).toBe(0);
+    expect(runCouncil).toHaveBeenCalled();
+  });
+});
+
 // v4.9 W5.2 (spec §5.3, ruling V5/V9 neighborhood): `--intent` on the council
 // run CLI surface — emit-when-'task': the options object handed to runCouncil
 // carries intent:'task' or NO intent key at all. 'review' is the default
