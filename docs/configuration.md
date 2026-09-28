@@ -370,9 +370,11 @@ These variables control the polling loop that drives headless sessions. The defa
 > `ELECTRON_MIRROR` environment variable is honoured exactly as before, set or
 > unset. What it *does* relax, deliberately and on both routes, is the digest:
 > with it set, a cached artifact that contradicts Electron's published sha256 is
-> accepted with a warning, and a download is no longer pinned to that sha256
-> (`@electron/get` then trusts the `SHASUMS256.txt` served alongside the artifact).
-> Leave it unset and the published digest is enforced on both routes.
+> accepted with a warning, an artifact the trusted `checksums.json` lists no
+> sha256 for is accepted (marked `unverified`) instead of refused, and a download
+> is no longer pinned to that sha256 (`@electron/get` then trusts the
+> `SHASUMS256.txt` served alongside the artifact). Leave it unset and the
+> published digest is enforced on both routes.
 
 > **The second thing it arms: the native-extractor rescue, and the window that
 > opens.** Amicus extracts the Electron archive **in memory**, from the buffer it

@@ -7,22 +7,23 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Security
 
-- **A `checksums.json` that lists no sha256 for the requested Electron artifact now refuses it,
-  instead of extracting it unverified.** `expectedDigest` returned the same `null` for "this Electron
-  package ships no `checksums.json`" (the legacy case) and for "the table amicus trusts has no entry
-  for this file", and `verifyArtifactBytes` allowed both, marked `unverified`. The second is what a
-  planted `package.json` version produces, and, with no planting at all, what `amicus doctor --fix`
-  meets whenever an npx-cache copy was installed with a different Electron release than the amicus
-  running the repair (npm resolves the newest `^43` release at each install). In that situation a file
-  planted in the Electron download cache for that version was extracted into the copy the MCP
-  launches. It is now refused (`integrity: 'unlisted'`) before the lock, the cache or the network, so
-  a retry costs nothing and cannot become the re-download loop the legacy allow exists to prevent. The
-  message names the version the table covers and the fix: repair that copy with its own amicus
-  (`npx -y amicus@latest doctor --fix` for the copy the MCP launches), which checks it against its own
-  table and so gives a verified repair, and `doctor --fix`'s `→` hint now names that same command.
-  `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` accepts such an artifact, marked `unverified`, with a warning on stderr. An Electron
-  package with no `checksums.json` at all is still extracted and marked `unverified`, as disclosed in
-  4.9.6.
+- **A `checksums.json` amicus can read that lists no sha256 for the requested Electron artifact now
+  refuses it, instead of extracting it unverified.** `expectedDigest` returned the same `null` for
+  "this Electron package ships no `checksums.json` amicus can read" (the legacy case) and for "the
+  table amicus trusts has no entry for this file", and `verifyArtifactBytes` allowed both, marked
+  `unverified`. The second is what a planted `package.json` version produces, and, with no planting
+  at all, what `amicus doctor --fix` meets whenever an npx-cache copy was installed with a different
+  Electron release than the amicus running the repair (npm resolves the newest `^43` release at each
+  install). In that situation a file planted in the Electron download cache for that version was
+  extracted into the copy the MCP launches. It is now refused (`integrity: 'unlisted'`) before the
+  lock, the cache or the network, so a retry costs nothing and cannot become the re-download loop
+  the legacy allow exists to prevent. The message names the version the table covers and the fix:
+  repair that copy with its own amicus (`npx -y amicus@latest doctor --fix` for the copy the MCP
+  launches), which checks it against its own table and so gives a verified repair, and
+  `doctor --fix`'s `→` hint now names that same command. `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1`
+  accepts such an artifact, marked `unverified`, with a warning on stderr. An Electron package with
+  no `checksums.json` amicus can read (none at all, or one that is unparseable, empty, or holds no
+  well-formed sha256 row) is still extracted and marked `unverified`, as disclosed in 4.9.6.
 
 - **A `path.txt` that names a file outside `dist/` is no longer launched.** `resolveElectronBinary`
   joined the name onto `dist/` unchecked, and `isElectronUsable` only asked whether the result

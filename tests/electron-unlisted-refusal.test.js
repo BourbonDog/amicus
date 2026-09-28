@@ -16,7 +16,8 @@
  * was extracted into the copy the MCP launches.
  *
  * Every describe below carries its own NAMED MUTANTS. No test touches the
- * network: every repairElectron call injects downloadArtifact or refuses first.
+ * network: every repairElectron call injects downloadArtifact, runs cacheOnly, or
+ * refuses first.
  */
 
 const os = require('os');

@@ -116,7 +116,7 @@ function containedExe(base, rel) {
  *   something that EXISTS outside `dist/` (all MEASURED true), which would
  *   refuse every promote forever while claiming `dist/` held an exe it never
  *   held. The predicate is `containedExe` (shared with `resolveElectronBinary`
- *   since D-03), which is `zip-entry-write.js :: writeSymlink`'s, verbatim —
+ *   since D-03): `zip-entry-write.js :: writeSymlink`'s test plus the `''` arm,
  *   including the `path.sep`, whose absence MEASURABLY fails OPEN: a legal
  *   `dist/..electron.exe` reads as escaping and the tree is deleted.
  *   A FILE, NOT A DIRECTORY — every natural truncation of the darwin name
