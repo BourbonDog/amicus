@@ -521,7 +521,7 @@ describe('nobody ends up with neither a cached artifact nor a dist', () => {
 
   test('an extractor that will not LOAD is a refusal, not an eviction (YAUZLUNDECLARED)', async () => {
     // `yauzl` is a declared dependency, so this should be unreachable — and
-    // unzip.js:215-222 records the v4.5.2 outage that happened the last time a
+    // unzip.js@1851a6eb:215-222 records the v4.5.2 outage that happened the last time a
     // zip library "should have been" resolvable. What must never happen is that
     // a hoisting surprise DELETES the user's only artifact on its way out.
     const { dir } = unanchoredElectronDir();

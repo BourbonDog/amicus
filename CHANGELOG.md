@@ -3,6 +3,24 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Removed
+
+- **`robustExtract` and the `extract-zip` dependency it was the only caller of.** The Electron
+  self-heal extracts only through the in-memory buffer path (`src/sidecar/zip-from-buffer.js`) now;
+  `robustExtract` (`src/sidecar/unzip.js`), which bounded and ran `extract-zip` with a native-unzip
+  fallback for a Node-24 stall, had no production caller left. `extract-zip` was amicus's one
+  production dependency with an unfixable advisory (GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3, both
+  high severity, no fixed version at 2.0.1) — `npm audit --omit=dev` no longer reports it.
+  `nativeUnzipPlan`, `UNSAFE_PATTERNS` and the `yauzl` dependency are unchanged: the native-extractor
+  rescue (`electron-native-plan.js`) still uses the first, and `UNSAFE_PATTERNS` is still what
+  `tests/sidecar/unzip-refusal-strings.test.js` checks `yauzl`'s and `zip-entry-write.js ::
+  outOfBound`'s wording against.
+- **The unused `tiktoken` dependency.** Declared for future exact tokenization but never required
+  anywhere in `src/` — token sizing has always used a length/4 heuristic (`src/context.js`,
+  `src/context-compression.js`), as `docs/configuration.md` already noted.
+
 ## [4.14.1] - 2026-09-28
 
 ### Added

@@ -84,10 +84,27 @@ describe('no phantom dependencies in shipped code', () => {
     expect(devOnly).toEqual([]);
   });
 
-  // The specific regression: unzip.js's Strategy 1.
-  it('declares extract-zip, the package that caused this test to exist', () => {
-    expect(required.has('extract-zip')).toBe(true);
-    expect(declared.has('extract-zip')).toBe(true);
+  // N-06 / BL-10 (owner decision D-01, 2026-09-28): `extract-zip` and
+  // `tiktoken` stay removed. `extract-zip` was declared solely for
+  // the deleted `robustExtract` (formerly in src/sidecar/unzip.js; no production caller);
+  // `tiktoken` was declared but never required anywhere (token sizing uses a
+  // length/4 heuristic). ABSENCE-PINNED, the way tests/remediation-hints.test.js
+  // pins a removed hint: a reintroduction of either must re-justify itself
+  // here, not slip back in silently. Neither assertion touches node_modules or
+  // resolves the package — both read package.json / scanned source text only
+  // — so this holds regardless of what the shared node_modules junction still
+  // physically contains (extract-zip stays on disk, dev-only, reachable via
+  // puppeteer -> @puppeteer/browsers; see the lane's research note §2).
+  it('extract-zip is not declared in package.json', () => {
+    expect(declared.has('extract-zip')).toBe(false);
+  });
+
+  it('no file under src/, bin/ or electron/ requires extract-zip', () => {
+    expect(required.has('extract-zip')).toBe(false);
+  });
+
+  it('tiktoken is not declared in package.json', () => {
+    expect(declared.has('tiktoken')).toBe(false);
   });
 });
 

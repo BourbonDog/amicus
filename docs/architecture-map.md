@@ -179,7 +179,7 @@ src/
 │   ├── start-metadata.js
 │   ├── start.js  # Sidecar Start Operations - Handles starting new sidecar sessions
 │   ├── tool-part.js
-│   ├── unzip.js  # Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24).
+│   ├── unzip.js  # Native OS unzip command-planning for the Electron self-heal, and the shared refusal-wording constant the in-memory extractor is tested against.
 │   ├── wave-progress.js
 │   ├── workspace-auto-open.js  # Workspace Auto-Open Decision Helper
 │   ├── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
@@ -688,7 +688,7 @@ evals/
 | `sidecar/start-metadata.js` |  | `createSessionMetadata()` |
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
 | `sidecar/tool-part.js` |  | `TERMINAL_TOOL_STATUSES()`, `LIVE_TOOL_STATUSES()`, `isToolPart()`, `toolPartName()`, `toolPartInput()` |
-| `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()`, `UNSAFE_PATTERNS()` |
+| `sidecar/unzip.js` | Native OS unzip command-planning for the Electron self-heal, and the shared refusal-wording constant the in-memory extractor is tested against. | `nativeUnzipPlan()`, `MAX_MS()`, `UNSAFE_PATTERNS()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
 | `sidecar/workspace-auto-open.js` | Workspace Auto-Open Decision Helper | `shouldAutoOpenWorkspace()` |
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()`, `launchWorkspaceWindowDetached()` |
