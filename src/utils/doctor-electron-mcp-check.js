@@ -152,8 +152,13 @@ async function evaluateElectronMcp(d) {
       fixDetail: `self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')}${mark}`,
     };
   }
-  const failed = results.filter((r) => !r.repaired)
-    .map((r) => `${r.electronDir}${r.reason ? ` — ${r.reason}` : ''}`).join('; ');
+  const failures = results.filter((r) => !r.repaired);
+  const failed = failures.map((r) => `${r.electronDir}${r.reason ? ` — ${r.reason}` : ''}`).join('; ');
+  // D-02 (I2): when EVERY failed repair was refused as `unlisted`, each reason already names
+  // its fix, and HINTS.doctorFix would point back at the command that just refused. Mixed
+  // failures keep the generic hint and let each reason speak for its own copy.
+  const hint = failures.length > 0 && failures.every((r) => r.integrity === 'unlisted')
+    ? HINTS.mcpCopyDoctorFix : after.hint;
   // Partial credit: some copies healed even though the check overall is still
   // not 'ok' — flag it ONLY when >=1 repair actually succeeded (#84-style rule).
   const healed = results.filter((r) => r.repaired).length;
@@ -161,7 +166,7 @@ async function evaluateElectronMcp(d) {
     ? { fixed: true, fixDetail: `self-healed ${healed} npx-cache ${plural(healed, 'copy', 'copies')}` }
     : {};
   return failed
-    ? { ...after, message: `${after.message}; self-heal incomplete: ${failed}`, ...fixFields }
+    ? { ...after, hint, message: `${after.message}; self-heal incomplete: ${failed}`, ...fixFields }
     : { ...after, ...fixFields };
 }
 
