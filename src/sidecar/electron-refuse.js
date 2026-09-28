@@ -59,7 +59,7 @@ function isUnsafeArchive(err) {
 }
 
 /**
- * C4 AT THE CALL SITE. unzip.js classifies extract-zip's path-traversal refusals
+ * C4 AT THE CALL SITE. unzip.js classified extract-zip's path-traversal refusals
  * as terminal so the same archive is never handed to an OS extractor that has no
  * such check. That invariant held only INSIDE unzip.js: both of repairElectron's
  * catch blocks used to swallow the refusal without reading `err.code` and launder
@@ -72,7 +72,7 @@ function isUnsafeArchive(err) {
  *
  * So the refusal ends here: no retry, no fallback extractor, and no delete. The
  * archive is left where it is, because a refused archive is evidence, and
- * `err.message` already carries the path and extract-zip's own reason.
+ * `err.message` already carries the path and the extractor's own reason.
  * @returns {{repaired:false, integrity:'unsafe-archive', reason:string}}
  */
 function refuseUnsafeArchive({ err, fileName, log = () => {} }) {
