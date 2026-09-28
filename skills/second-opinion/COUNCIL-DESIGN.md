@@ -187,7 +187,7 @@ Lets you see how the bench judges Claude's *own* take.
 ## 6. Outputs & naming
 One tidy run folder: `output/<stem>-council/` (or `./second-opinion/<stem>-council/` if no
 `output/` exists), or the next free numbered sibling (`<stem>-council-2/`, …) when an earlier run's
-`run.json` is already there:
+`run.json` or `verdict.json` is already there:
 - `review-<model>.md` ×N — raw Stage 1 reviews (plus `review-claude.md` when "Claude in the
   council" is on)
 - `crossreview-matrix.md` — adjudication grid + street-cred table (de-anonymized)
