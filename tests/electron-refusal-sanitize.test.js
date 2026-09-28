@@ -24,7 +24,7 @@
  * RAWENTRYNAME  electron-refuse.js :: refuseUnsafeArchive — drop the
  *   collapseExcerpt() around `err.message`.
  *   RED: "an unsafe-archive refusal cannot forge an [amicus] line, colour the
- *   terminal, or reverse the sentence".
+ *   terminal, or reverse the sentence" (:118, re-measured 2026-09-28).
  * ──────────────────────────────────────────────────────────────────────────
  */
 

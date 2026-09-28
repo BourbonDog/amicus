@@ -138,6 +138,14 @@
  *   endpoint `destroy` emits nothing, so `pipeline` never settles).
  *   RED: "the bound SETTLES even when the aborted write can NEVER come apart",
  *   and both fake-timer bound tests, which now fire with an entry in flight.
+ * STRICTNAMES     zip-from-buffer.js :: extractZipBuffer — pass yauzl
+ *   `strictFileNames: true`, so it stops rewriting `\` to `/` before it
+ *   validates a name.
+ *   RED: "a backslash TRAVERSAL name is rewritten, then refused terminally, and
+ *   writes nothing outside" (:417, now refused as `invalid characters`); "a
+ *   backslash in an entry name lands as a "/" separator, yauzl's default
+ *   rewrite" (:403, refused outright); and "a real, DEFLATED archive
+ *   round-trips byte-for-byte" (:365; Compress-Archive writes `sub\b.txt`).
  * ──────────────────────────────────────────────────────────────────────────
  */
 

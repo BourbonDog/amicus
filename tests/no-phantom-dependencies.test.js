@@ -17,12 +17,19 @@
  * A dev tree cannot detect this by resolving the module — it always succeeds.
  * The only sound check is DECLARATION, which is what this asserts.
  *
- * ── NAMED MUTANT ──────────────────────────────────────────────────────────
+ * ── NAMED MUTANTS ─────────────────────────────────────────────────────────
+ * Applied and reverted by byte copy, MEASURED 2026-09-28.
+ *
  * NORECURSE  no-phantom-dependencies.test.js :: collectExternalRequires —
  *   never descend into a subdirectory, so only top-level src/, bin/ and
- *   electron/ files are scanned. Applied and reverted by byte copy, MEASURED
- *   2026-09-28. RED: "no file under src/, bin/ or electron/ requires
- *   extract-zip", on its yauzl positive control (:112).
+ *   electron/ files are scanned.
+ *   RED: "no file under src/, bin/ or electron/ requires extract-zip", on its
+ *   yauzl positive control (:119).
+ * POSTINSTALLREQUIRE  scripts/postinstall.js — add `require('extract-zip')`
+ *   to the shipped, production-executed postinstall. It survived every test
+ *   here until the scripts/ pin existed.
+ *   RED: "no file under scripts/ requires extract-zip either (the shipped
+ *   postinstall runs in production)" (:129).
  * ──────────────────────────────────────────────────────────────────────────
  */
 

@@ -9,7 +9,7 @@
  * reworded refusal silently degrades C4 back to the pre-fix cleanDir+native-retry
  * laundering with no test red."
  *
- * REWORKED FOR N-06 (removal of `robustExtract`/`extract-zip`): the Electron
+ * REWORKED FOR D-01/N-06 (removal of `robustExtract`/`extract-zip`): the Electron
  * self-heal now extracts only through the in-memory path
  * (`zip-from-buffer.js`), so the library whose wording UNSAFE_PATTERNS must
  * keep matching is `yauzl` — for three of the four patterns, raised by
@@ -25,7 +25,9 @@
  * `zip-from-buffer.js :: NAME_REFUSAL` carries the same three prefixes, so it
  * misses the new wording too, and the archive is reported UNZIP_BUFFER_FAILED
  * — evictable and rescuable — instead of the terminal UNZIP_UNSAFE_ARCHIVE
- * (C4). Re-derive the strings before touching the regexes.
+ * (C4). The rescue boundary's pre-scan (`zip-name-scan.js :: nameRefusal`)
+ * still refuses the traversal names it knows, but only as a second line.
+ * Re-derive the strings before touching the regexes.
  *
  * ── NAMED MUTANTS ─────────────────────────────────────────────────────────
  * Applied and reverted by byte copy, MEASURED 2026-09-28 against this file.
@@ -33,12 +35,24 @@
  * REFUSALSTRINGDRIFT  src/sidecar/unzip.js — stand in for an upstream reword:
  *   `/^invalid relative path: /` -> `/^invalid relative pathname: /`.
  *   RED: "each UNSAFE_PATTERN matches at least one message a real source
- *   produced" (:81).
+ *   produced" (:95).
  * STALLTERMINAL       src/sidecar/unzip.js — add `/^stalled: /`, widening the
  *   patterns the way F4 must NOT.
  *   RED: "each UNSAFE_PATTERN matches at least one message a real source
- *   produced" (:81) and "nothing else yauzl or an ordinary extract failure
- *   says is classified as a refusal" (:102, on the two 'stalled: …' literals).
+ *   produced" (:95) and "nothing else yauzl or an ordinary extract failure
+ *   says is classified as a refusal" (:116, on the two 'stalled: …' literals).
+ * NAMEREFUSALDRIFT    zip-from-buffer.js :: NAME_REFUSAL — the LIVE copy drifts
+ *   off real yauzl: `invalid relative path` -> `invalid relative pathname`.
+ *   RED: "NAME_REFUSAL recognises every refusal real yauzl raises" (:143).
+ *   Outside this file it is also RED in tests/electron-custody.test.js and
+ *   tests/electron-native-rescue.test.js.
+ * NAMEREFUSALWIDE     zip-from-buffer.js :: NAME_REFUSAL — the LIVE copy also
+ *   matches yauzl's benign `compressed/uncompressed size mismatch for stored
+ *   file` walk error, so a clean but broken archive turns terminal and the
+ *   native rescue never runs.
+ *   RED: "NAME_REFUSAL recognises nothing benign, so a clean but broken
+ *   archive stays rescuable" (:158); also three tests in
+ *   tests/electron-native-rescue.test.js.
  * ──────────────────────────────────────────────────────────────────────────
  */
 
