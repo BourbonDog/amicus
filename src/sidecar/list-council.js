@@ -151,7 +151,7 @@ function councilScopeNotice() {
 }
 
 /**
- * The merge-failed disclosure, for the human-readable listing (round 3, B1).
+ * The merge-failed disclosure (round 3, B1): the human listing prints it on stdout, `--json` on stderr (D-08).
  *
  * Names the CAUSE, not just the fact: "unavailable" alone would tell the reader
  * their council rows are missing without telling them why, which is half a

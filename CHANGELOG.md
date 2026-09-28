@@ -7,6 +7,10 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Fixed
 
+- **`amicus list --json` now reports a failed council-run enumeration on stderr.** The human
+  listing already said `council runs: unavailable (<reason>)`, but under `--json` a failed
+  enumeration looked exactly like a project with no council runs. The line now goes to stderr,
+  after any `--limit` notice; stdout is unchanged, the empty listing included. (#206-r4-C2)
 - **`council report` prints `?` for a vote it does not recognize.** A verdict other than agree,
   dispute or neutral rendered as the literal `undefined` in the markdown and HTML matrices; both now
   print `?`, as the Council Workspace matrix already did. A missing vote is still a blank cell.

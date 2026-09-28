@@ -520,10 +520,10 @@ If the merge itself cannot run — an unreadable or corrupt council pointer, say
 still prints the sessions it already had and adds `council runs: unavailable (<reason>)`,
 rather than dropping every council row in silence. It appears with or without `--all` (under
 `--all` it sits just above the scope note), and the reason is the underlying error message,
-sanitised and capped to one line. This one is human-surface only for a *different* reason than
-the scope note: not that nothing could widen it, but that `--json`'s shape is a contract and
-this is prose. The residual that leaves — a `--json` caller reads a well-formed document that
-is silently short — is recorded at the pins in `tests/list-council-merge.test.js`.
+sanitised and capped to one line. Under `--json` it goes to **stderr**, after the `--limit`
+notice when one is printed, so stdout stays exactly the document (or the `No amicus sessions
+found.` line) it was, and a `--json` caller can still tell "no council runs" from "enumeration
+failed".
 The MCP tool
 also re-sanitizes every other row's `briefing` to that same 80-char cap and, for any row still
 `status: 'running'`, adds live-progress fields (`phase`, `messageCount`, `lastActivityAt`,

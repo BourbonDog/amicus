@@ -392,20 +392,17 @@ describe('amicus list --all — the scope limit speaks (round 2, A1)', () => {
  * OPTIONAL `opts.onUnavailable` sink leaves the array return byte-identical,
  * pushes at the moment of failure, and keeps no state a later call inherits.
  *
- * HUMAN BRANCH ONLY, mirroring `NOTEINJSON`: `--json` is a shape contract, and
- * this note is prose. The `--json` controls below are what hold that line.
+ * BOTH MODES since D-08 (the owner's decision, 2026-09-28). The human listing
+ * prints the note; `--json` prints it on STDERR, where the truncation notice
+ * already goes, so stdout stays exactly the document (or the empty listing's
+ * one line). `--json` is a shape contract and stdout is its channel: the
+ * `--json` pins below hold stdout unchanged AND the note on stderr.
  *
- * ⚠️ THE RESIDUAL THAT LEAVES, stated rather than absorbed: a `--json` consumer
- * still gets no signal that the council rows were dropped — it reads a
- * well-formed document that is silently short. That is a NARROWER silence than
- * the one B1 closes (the terminal, where the omission was total and unremarked)
- * but it is the same KIND, and it is not fixed here. It is also not the scope
- * note's situation: that note reports a limit no flag can lift, while this one
- * reports a FAILURE a caller could act on, which is the argument for eventually
- * putting it on stderr the way the truncation notice goes. Deliberately out of
- * scope for round 3 — moving it would change what a `--json` run writes to a
- * stream some caller may already be reading — and recorded here so the next
- * round decides it on purpose rather than inheriting it by omission.
+ * The residual round 3 recorded here, a `--json` consumer reading a well-formed
+ * document that was silently short, is what D-08 decided: this note reports a
+ * FAILURE a caller can act on, unlike the scope note's limit that no flag lifts,
+ * so it is said, on the stream a script does not parse. The scope note stays off
+ * both streams under `--json`; A1's rule is unchanged.
  *
  * ── NAMED MUTANT `SILENTCATCH` ────────────────────────────────────────────
  * MUTATION: in src/sidecar/list-council.js :: mergeCouncilRows, restore the
@@ -482,19 +479,33 @@ describe('amicus list — an unavailable merge is DISCLOSED (round 3, B1)', () =
     expect(lines()[lines().length - 1]).toBe(SCOPE);
   });
 
-  it('--json stdout is untouched — the note is prose, and prose is not the contract', async () => {
+  it('--json stdout is untouched — the note goes to stderr, where the truncation notice goes (D-08)', async () => {
     breakCouncil('boom');
     seedSession('sesb1004', { createdAt: '2026-07-19T01:00:00.000Z' });
     await listSidecars({ project, json: true });
     expect(JSON.parse(stdout()).map(r => r.id)).toEqual(['sesb1004']);
     expect(stdout()).not.toContain('council runs:');
-    expect(errSpy.mock.calls.map(c => String(c[0])).join('\n')).not.toContain('council runs:');
+    expect(errSpy.mock.calls.map(c => String(c[0])).join('\n')).toContain('council runs: unavailable (boom)');
   });
 
   it('…including the EMPTY --json listing, the one line both modes share', async () => {
     breakCouncil('boom');
     await listSidecars({ project, json: true });
     expect(stdout()).toBe('No amicus sessions found.');
+    // D-08: stdout is the one shared line, so the note takes stderr, alone.
+    expect(errSpy.mock.calls.map(c => String(c[0])).join('\n')).toBe('council runs: unavailable (boom)');
+  });
+
+  it('--json --limit: stderr keeps the human order — the cap first, then the failure (D-08)', async () => {
+    breakCouncil('boom');
+    seedSession('sesb1005', { createdAt: '2026-07-19T01:00:00.000Z' });
+    seedSession('sesb1006', { createdAt: '2026-07-19T02:00:00.000Z' });
+    await listSidecars({ project, limit: 1, json: true });
+    expect(JSON.parse(stdout()).map(r => r.id)).toEqual(['sesb1006']);
+    expect(errSpy.mock.calls.map(c => String(c[0]))).toEqual([
+      'Showing 1 of 2 sessions (--limit 1). Use --limit 0 for all.',
+      'council runs: unavailable (boom)',
+    ]);
   });
 });
 

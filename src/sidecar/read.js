@@ -147,8 +147,8 @@ async function listSidecars(options) {
     ? enumerateAllProjects({ status, project })
     : enumerateSessions(project, { status });
   // Round 3 (B1): the merge's catch degrades to the session rows and used to do
-  // it in SILENCE. It now hands the failure out through this sink and the human
-  // branch says it — seam rationale at list-council.js :: mergeCouncilRows.
+  // it in SILENCE. It now hands the failure out through this sink and both modes
+  // say it, --json on stderr (D-08) — seam rationale at list-council.js :: mergeCouncilRows.
   let unavailable = null;
   sessions = mergeCouncilRows(sessions, project,
     { status, all, onUnavailable: (note) => { unavailable = note; } });
@@ -156,9 +156,10 @@ async function listSidecars(options) {
   if (sessions.length === 0) {
     console.log('No amicus sessions found.');
     // A1's disclosure as under the table below — an empty `--all` is where the
-    // omission is loudest — and B1's note on the same gate for the same reason:
-    // this early return is the one line both modes share, and --json cannot move.
+    // omission is loudest. This early return is the one line both modes share and
+    // --json cannot move it, so under --json B1's note takes stderr (D-08).
     if (!json && unavailable) { console.log(unavailable); }
+    if (json && unavailable) { console.error(unavailable); }
     if (all && !json) { console.log(councilScopeNotice()); }
     return;
   }
@@ -173,8 +174,9 @@ async function listSidecars(options) {
 
   if (json) {
     console.log(JSON.stringify(sessions, null, 2));
-    // No silent caps — but on stderr, so stdout stays one parseable document.
+    // No silent caps or failures — both on stderr, so stdout stays one parseable document.
     if (truncated) { console.error(truncationNotice(cap, total)); }
+    if (unavailable) { console.error(unavailable); } // D-08: after the cap, the human branch's order
   } else {
     console.log(
       'ID'.padEnd(10) + padModel('MODEL') + 'STATUS'.padEnd(11) +
