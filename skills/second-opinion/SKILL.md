@@ -465,7 +465,7 @@ The `MODEL-NOTES.md` **next to this file** is your machine-local run ledger: npm
 
 **Reflect on this run.** Review the run for:
 - Failures, near-misses, and mitigations that worked (dead legs, empty responses, timeouts, briefing problems — all visible in `run.json`)
-- Briefing wording that produced **richer or poorer** structured output than expected; per-model `conformance` (`clean` | `repaired` | `unstructured`) is in `run.json` / `tally.json` `runStats`
+- Briefing wording that produced **richer or poorer** structured output than expected; per-model `conformance` (`clean` | `repaired` | `unstructured`, or `none` for a leg that produced nothing to check) is in `run.json` / `tally.json` `runStats`
 - Chair or council model behavior worth noting
 
 Draft new or updated entries for the per-model sections of `MODEL-NOTES.md` that capture what was learned.
