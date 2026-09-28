@@ -284,17 +284,18 @@ a proposed disposition — v4.5 ride-along / v4.6 / backlog — tabled for rulin
 
 | ID | What | Why not 4.4.1 |
 |---|---|---|
-| **CA-4** | `tally.json`'s `runStats` omits Stage-2 judges, repair solos and failed chair attempts (5 rows for 11 real legs in `wsgate04`) | `M` — a schema question, not a fix |
+| ~~**CA-4**~~ | ~~`tally.json`'s `runStats` omits Stage-2 judges, repair solos and failed chair attempts (5 rows for 11 real legs in `wsgate04`)~~ — ✅ **CLOSED**: shipped in full — the failed-chair third by v4.6.2, the remaining half (Stage-2 judges + repair solos) by v4.7 PR1; see this file's "CA-4 (remaining half)" note above. **Do not re-file.** | — |
 | **CA-5** | `isSubagentToolCall` is still a `name === 'task'` string proxy | `M`, and **reduced** by v4.4.0: it is now only the fallback when the real subtree walk finds nothing |
 | **LC-1** | B53's stall kill is skipped while a tool-settle deferral is active | `S–M` — shipped deliberately; the author wants a second opinion, which needs data from real runs |
 | ~~**LC-5**~~ | ~~A chair fallback leaves no trace in `run.json`~~ — ✅ **CLOSED by v4.6.2**: `chairAttempts[]` records every attempt (`{waveId, model, outcome, reason}`), checkpointed after each; `run-chair.js@v4.6.2:113` cites LC-5 by name. **Do not re-file.** | — |
-| **RN-1** | `sanitizeName` collisions surface as a banner rather than a refusal | `S` + a product decision that was already argued once |
+| ~~**RN-1**~~ | ~~`sanitizeName` collisions surface as a banner rather than a refusal~~ — ✅ **CLOSED**: revote artifacts now ride the disambiguation map end to end (`588b00a9`). **Do not re-file.** | — |
 | **RN-2** | `renderRunList` blind masking is best-effort — only the open run resolves labels | `M` |
-| **RN-5** | A blind-mode flip closes every open prose panel and repaints twice | `S–M` |
-| **RN-11** | `renderSeats` never reorders existing rows | `S`, cosmetic, no consequence yet |
+| ~~**RN-5**~~ | ~~A blind-mode flip closes every open prose panel and repaints twice~~ — ✅ **CLOSED**: a blind flip now keeps open panels and paints once (`73850c73`; refined by `079e761d`). **Do not re-file.** | — |
+| ~~**RN-11**~~ | ~~`renderSeats` never reorders existing rows~~ — ✅ **CLOSED**: `renderSeats` now reorders rows to match the composed doc (`b68ad6e8`). **Do not re-file.** | — |
 | **REL-2** | `mcp-repomix-e2e` skips, so plugin-chain MCP discovery is exercised nowhere | `M` — needs `AMICUS_REPOMIX_E2E_PROJECT` pointed at a real project *and* `repomix` on PATH |
-| **TST-1 / TST-2** | No real `--debate` fixture; the `lens:<slug>` role branch has zero coverage | `M` each, and they want doing together |
-| **TST-3** | Abort confirm→status-flip is proven only against the fake DOM | `M` — needs a real CDP pass |
+| **TST-1** | No real `--debate` fixture | `M` |
+| ~~**TST-2**~~ | ~~The `lens:<slug>` role branch has zero coverage~~ — ✅ **CLOSED**: `tests/observe/council-legs.test.js:253-256` (BACKLOG-ARCHIVE.md L9324: done at `ca1003d2`). **Do not re-file.** | — |
+| ~~**TST-3**~~ | ~~Abort confirm→status-flip is proven only against the fake DOM~~ — ✅ **CLOSED**: abort confirm now drives through the real DOM via CDP (`a724b597`). **Do not re-file.** | — |
 | **TST-7** | Six render functions have no unit coverage | `M` |
 | *(new)* | **Residual integration-suite handle leaks** — a NAMED leak with evidence, filed 2026-07-27 after 4.4.1 fixed ENV-6 and the live rail still warned from *different* suites | `S–M`. Full evidence, including why `--detectOpenHandles` cannot diagnose this class, is in the repo's root `BACKLOG.md` (not in the npm package — read it on GitHub) — start there rather than re-deriving it |
 

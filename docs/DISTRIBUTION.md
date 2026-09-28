@@ -158,12 +158,13 @@ end-to-end against the real submission.)*
 
 ## 3. MCP Registry
 
-**Status: wired, not yet published (Phase 9c).** `server.json` (repo root)
-and the `mcpName` field in `package.json` now exist, and
-`.github/workflows/publish.yml` publishes to the MCP Registry
-(`registry.modelcontextprotocol.io`) as the last three steps before the GitHub
-Release, on every `v*` tag push. This has not fired yet — the first tag
-push after this merge is the first real publish attempt.
+**Status: published.** `server.json` (repo root) and the `mcpName` field in
+`package.json` exist, and `.github/workflows/publish.yml` publishes to the
+MCP Registry (`registry.modelcontextprotocol.io`) as the last three steps
+before the GitHub Release, on every `v*` tag push. Published since v1.9.1
+(2026-07-03; v1.9.0's attempt was rejected — see the 422 caveat below); the
+v4.14.1 entry was confirmed active on 2026-09-28 at its per-version registry
+endpoint.
 
 **Namespace:** `io.github.BourbonDog/amicus` (case-sensitive — the registry
 grants `io.github.<Login>/*` using the exact-case GitHub login/repository
