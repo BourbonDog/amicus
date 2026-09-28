@@ -129,9 +129,9 @@ function readChecksumTable(file, fs) {
  * selector off the surface it exists to distrust is not a rule. No version check
  * is needed to keep a genuine version disagreement honest, because the table is
  * keyed by the FULL artifact filename: a self table for 43.1.1 simply holds no
- * `electron-v99.0.0-…zip` row, `expectedDigest` returns null, and the gate's
- * `no-digest` verdict extracts-and-MARKS exactly as the brief requires — never a
- * refusal, never a re-download loop.
+ * `electron-v99.0.0-…zip` row, `isUnlisted` is true, and `repairElectron` REFUSES
+ * it (D-02, B-SEC-7) before the lock, the cache and the network, so the refusal
+ * can never become a re-download loop. (Until D-02 this was extracted and MARKED.)
  *
  * Rung 2 therefore survives for exactly one case: amicus's own electron package
  * ships no readable checksums.json (an old electron, or the optionalDependency

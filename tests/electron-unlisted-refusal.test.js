@@ -24,7 +24,50 @@ const path = require('path');
 
 const { refuseUnlistedArtifact } = require('../src/sidecar/electron-refuse');
 
+const fs = require('fs');
+
+const ei = require('../src/sidecar/electron-install');
+const { fakeElectronDir, seedElectronAnchor, ZIP_BODY } = require('./helpers/fake-electron-dir');
+
 const HEX = 'a'.repeat(64);
+const POISON = 'POISONED-BYTES';
+const SKEW = '43.6.0';
+const SKEW_ZIP = `electron-v${SKEW}-win32-x64.zip`;
+
+function mkTmp(prefix) {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+/** A zip at <root>/<sha>/<name>, the @electron/get cache layout. */
+function writeZip({ body = ZIP_BODY, name = 'electron-v43.1.1-win32-x64.zip' } = {}) {
+  const shaDir = path.join(mkTmp('amicus-zip-'), 'a'.repeat(16));
+  fs.mkdirSync(shaDir, { recursive: true });
+  const zip = path.join(shaDir, name);
+  fs.writeFileSync(zip, body);
+  return zip;
+}
+
+/** The doctor --fix shape: a SCANNED copy installed with Electron 43.6.0, whose own
+ *  (untrusted) table vouches for its own bytes, and a running amicus on 43.1.1. */
+function skewedCopy(body = ZIP_BODY) {
+  const made = fakeElectronDir({ withExe: false, platform: 'win32', version: SKEW, body });
+  const self = seedElectronAnchor(mkTmp('amicus-self-'), { version: '43.1.1' });
+  return { ...made, self };
+}
+
+let stderr;
+let stderrSpy;
+let savedHatch;
+beforeEach(() => {
+  stderr = [];
+  stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk) => { stderr.push(String(chunk)); return true; });
+  savedHatch = process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON;
+  delete process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON;
+});
+afterEach(() => {
+  stderrSpy.mockRestore();
+  if (savedHatch === undefined) { delete process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON; } else { process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON = savedHatch; }
+});
 
 describe('D-02: the unlisted refusal names the version, the table and the fix', () => {
   // NAMED MUTANT
@@ -96,5 +139,57 @@ describe('D-02: the unlisted refusal names the version, the table and the fix', 
     expect(lines.some((l) => l.startsWith(FORGED_LINE))).toBe(false);
     expect(lines[1]).toContain('EVIL');           // ...and it still says where the table is
     expect(out.reason).not.toContain('\n');
+  });
+});
+
+describe('D-02: the refusal is WIRED before the lock, the cache and the network', () => {
+  // The placement IS the property. A refusal inside the gate alone would come
+  // AFTER the download, and ensureElectron clears its once-guard on every
+  // failure, so every GUI launch would fetch ~100 MB and refuse it again: the
+  // re-download loop the legacy allow exists to prevent.
+  //
+  // NAMED MUTANTS
+  //   PRECHECKDROPPED electron-install.js :: repairElectron -- delete the
+  //     `isUnlisted(...)` pre-check. RED: the first test below.
+  //   HATCHIGNOREDPRECHECK electron-install.js :: repairElectron -- drop
+  //     `&& !policy.allowUnverified` from the pre-check. RED: the second test below.
+  test("a copy installed with a DIFFERENT Electron is refused against this amicus's table: nothing read, nothing downloaded (PRECHECKDROPPED)", async () => {
+    const { dir, self } = skewedCopy(POISON);
+    const acquireLock = jest.fn(() => ({ release: () => {} }));
+    const cachedZip = jest.fn(() => null);
+    const downloadArtifact = jest.fn(async () => writeZip({ body: POISON, name: SKEW_ZIP }));
+    const extract = jest.fn();
+
+    const res = await ei.repairElectron({
+      electronDir: dir, platform: 'win32', arch: 'x64',   // NO version and NOT cacheOnly: the doctor --fix call
+      deps: { selfElectronDir: self, acquireLock, cachedZip, downloadArtifact, extract, spawn: jest.fn() },
+    });
+
+    expect(acquireLock).not.toHaveBeenCalled();
+    expect(cachedZip).not.toHaveBeenCalled();
+    expect(downloadArtifact).not.toHaveBeenCalled();
+    expect(extract).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ repaired: false, integrity: 'unlisted' });
+    expect(res.reason).toMatch(/covers Electron v43\.1\.1, not v43\.6\.0/);
+    expect(res.reason).toContain('npx -y amicus@latest doctor --fix');
+    expect(stderr.join('')).toContain(`Electron artifact REFUSED (no published sha256): ${SKEW_ZIP}`);
+  });
+
+  test('with AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 the skewed copy is repaired and MARKED unverified (HATCHIGNOREDPRECHECK)', async () => {
+    process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON = '1';
+    const { dir, exeName, self } = skewedCopy();
+    const extract = jest.fn(async (_bytes, opts) => { fs.writeFileSync(path.join(opts.dir, exeName), 'MZextracted'); });
+
+    const res = await ei.repairElectron({
+      cacheOnly: true, electronDir: dir, platform: 'win32', arch: 'x64',
+      deps: {
+        selfElectronDir: self, acquireLock: () => ({ release: () => {} }), extract, spawn: jest.fn(),
+        cachedZip: () => writeZip({ name: SKEW_ZIP }),
+      },
+    });
+
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(res.repaired).toBe(true);
+    expect(res.unverified).toBe(true);
   });
 });

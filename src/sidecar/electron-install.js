@@ -37,8 +37,8 @@ const { acquireRepairLock } = require('./electron-lock');
 const { platformExe, heldExeRel, containedExe } = require('./electron-exe-rel');
 const { controlledProvision } = require('./electron-provision');
 const { repairFromCache } = require('./electron-repair-cache');
-const { isUnsafeArchive, refuseUnsafeArchive } = require('./electron-refuse');
-const { artifactFileName, electronTrustPolicy, resolveAnchor } = require('./electron-trust');
+const { isUnsafeArchive, refuseUnlistedArtifact, refuseUnsafeArchive } = require('./electron-refuse');
+const { artifactFileName, electronTrustPolicy, isUnlisted, normalizeV, resolveAnchor } = require('./electron-trust');
 const { extractZipBuffer } = require('./zip-from-buffer');
 const { collapseExcerpt } = require('../utils/text-sanitize');
 
@@ -167,6 +167,11 @@ async function repairElectron({
   }
   const policy = electronTrustPolicy(process.env);
   const anchor = resolveAnchor({ electronDir, fs, selfElectronDir: deps.selfElectronDir });
+  // D-02 (B-SEC-7): a table that EXISTS but is silent about this file is refused HERE, before
+  // the lock, the cache and the network: no download can add the row, so a retry is free.
+  if (isUnlisted(anchor, fileName) && !policy.allowUnverified) {
+    return refuseUnlistedArtifact({ anchor, fileName, version: normalizeV(version), platform, arch, log: stderrLog });
+  }
 
   // Single-flight: bail out gracefully if another caller is already repairing.
   let lock;

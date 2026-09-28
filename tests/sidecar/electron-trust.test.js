@@ -103,8 +103,8 @@ describe('resolveAnchor + expectedDigest', () => {
     // that fallback was reachable by DATA: a planted {"version":"99.0.0"} made the
     // scanned tree the anchor for its own bytes. The self table is keyed by the
     // FULL artifact filename, so a genuine version disagreement needs no version
-    // check: it simply yields no entry, and the gate's no-digest verdict extracts
-    // and MARKS instead of trusting the target.
+    // check: it simply yields no entry, and since D-02 that is REFUSED as
+    // `unlisted` (electron-trust.js :: isUnlisted) instead of trusting the target.
     const scanned = fakePkg({ table: { 'electron-v99.0.0-win32-x64.zip': 'b'.repeat(64) } });
     const self = fakePkg({ version: '43.1.1', table: { [ZIP_NAME]: ZIP_SHA256 } });
     const selfSource = path.join(self, 'checksums.json');
