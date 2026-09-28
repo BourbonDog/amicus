@@ -662,6 +662,11 @@ them.** Revisit as a funded track; it earns a version number when that track is 
 > query-aware seat selection, filed 2026-08-05 in `BACKLOG.md`) blends the street-cred ledger into
 > seat choice — that is B4's core idea arriving as a single-user feature rather than an enterprise
 > learning loop. Reconcile before either is scoped; do not build both.
+>
+> **Resolved 2026-09-28 (D-07):** the GoA family (GOA-1 through GOA-8) is parked: not built; its
+> design is preserved in the GoA paper-review adoption notes, which each of the nine closed GOA
+> rows in `BACKLOG.md` (GOA-3a/3b, GOA-4a/4b/4c, GOA-5, GOA-6, GOA-7, GOA-8) cites. B4 itself is
+> untouched — the reconciliation above still applies if B4 is ever scoped.
 
 ### Composition / chained waves (F6) *(unscheduled — dropped from v4.7, 2026-08-05)*
 `--input-from <id>` / `--prompt-file -` pipe + per-source digests *(M)*, bringing the `{{input}}`
