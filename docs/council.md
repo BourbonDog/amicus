@@ -1149,7 +1149,7 @@ fallback promotion launches `aliases[0]`.
 | `avgStreetCredPeersOnly` | Mean of `streetCredPeersOnly` across all runs (`null` if the model was never judged). |
 | `lifetimeConfirmRate` | Mean, across runs, of `(findings this model raised that landed Confirmed) / (findings this model raised)`. `null` when `judged` was false for every run or the model raised nothing. |
 | `lifetimeFactErrorRate` | Same shape, but for the `Disputed` tier — a proxy for how often the bench caught this model asserting something wrong. |
-| `conformance` | Tally of `{clean, repaired, unstructured, none}` counts — how often this model's Stage-1 findings JSON needed a repair re-prompt. `none` counts the runs in which none of its bench legs produced anything to check (each died, timed out, was superseded or answered only in its reasoning channel); ledger rows written by earlier releases recorded those runs as `clean`. |
+| `conformance` | Tally of `{clean, repaired, unstructured, none}` counts — how often this model's Stage-1 findings JSON needed a repair re-prompt. `none` counts the runs in which none of its bench legs produced anything to check (each died, timed out or answered only in its reasoning channel); ledger rows written by earlier releases recorded those runs as `clean`. |
 | `aliases` | Every alias (row-level `model` value) observed for this group, most recently observed first (v4.7). `aliases[0]` is the launch-preferred name. |
 | `legacy` | `true` when every row in the group lacks `resolvedModel` — alias-keyed history from before resolved-id segmentation, or leg-less rows whose resolution is unknowable (v4.7). Omitted (not `false`) when the group has any resolved rows. |
 

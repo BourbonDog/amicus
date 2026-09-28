@@ -21,9 +21,10 @@ All notable changes to Amicus are documented here. Format follows
   one, `unstructured` none. A leg that never returned, or whose output was never used, had no ask
   checked at all, and 4.14.0 documented such a row as carrying `clean` by default. It now carries
   `none`. That covers a dead or promoted Stage-1 seat, a first attempt its retry superseded, a
-  failed chair attempt, the chair give-up row, and a Stage-2 judge that never returned. The same
-  rows reach the reliability ledger, so `amicus council stats` counts them under `none` instead of
-  adding a model's dead legs to its `clean` count. `none` ranks below `clean` wherever rows merge,
+  failed chair attempt, the chair give-up row, and a Stage-2 judge that never returned. The
+  reliability ledger reads only a model's bench legs: when none of them produced anything to check,
+  the model's row now records `none`, so `amicus council stats` stops counting that run as `clean`.
+  `none` ranks below `clean` wherever rows merge,
   so a model whose twin reviewed still records `clean`. Ledger rows written by earlier releases
   are unchanged, so a model's history mixes their `clean`-for-dead rows with new `none` rows. (#244)
 
