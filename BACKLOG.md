@@ -214,6 +214,7 @@ mint ids as `B-<theme>-<n>`; cite symbols, not line numbers; no size tables (the
   - .eslintrc.js:112 says ":159 is toCanonicalDefault itself", but the primitive is `stripGatewayPrefix` (src/utils/curated-models.js:129).
   - src/cli-council-run-bench.js:165, src/utils/untrusted-fence.js:142 and src/utils/engine-skew.js:287 still say "CLAUDE.md's Key Exports"; the table has lived in docs/architecture-map.md since 46d2694a.
   - CONTRIBUTING.md:28-30's wording is in B-CI-20.
+  - src/council/parse-stage2.js's header says the repair loop lives in run-stages.js, which holds only the Stage-1 loop: the Stage-2 judge loop is `run-stage2-judge.js :: adjudicateJudgeLeg` and the chair's ch4 repair is in run-chair.js (found 2026-09-27 by the #244 residue final review).
 - [ ] **N-15** (new 2026-09-27) — Optionally annotate the v4.8 spec's §10.6 rule with one line pointing at the archive entry that refutes it. (was: no BACKLOG row; —) — docs/superpowers/specs/2026-08-10-v4.8-ask-anything-count-everyone-design.md:657 still requires `COUNCIL_INTENT_MISMATCH`; BACKLOG-ARCHIVE.md L8384 is the only record of the refutation.
 - [ ] **B-DOC-3** (new 2026-09-27) — Reword the stats table's `runs` cell in docs/council.md, "Number of ledger rows for this model (one per council run it participated in)": `ledger-stats.js :: countRuns` has counted distinct non-empty run ids since v4.8, and a model can have more than one ledger row in a run (per-executable rows since 4.8.0; B-CV-10). (was: no BACKLOG row; —) — found 2026-09-27 during the #244 residue docs work.
 
