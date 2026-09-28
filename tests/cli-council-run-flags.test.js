@@ -405,6 +405,9 @@ describe('an --out-dir already in use (D-04, SL-4)', () => {
   // The owner's tightening of D-04: the same runId is this run's own only as a LIVE pre-seed
   // (no pid, status 'running', no completedAt). A dead one (aborted, crashed, spawn-failed, or
   // any record with completedAt) is refused, and a reused --run-id's refusal names its own fix.
+  // Named mutants STATUSIGNORED, COMPLETEDIGNORED and PIDONLYEXEMPT (measured at 6481731) are
+  // recorded in tests/council/run-state.test.js beside the predicate's dead-record rows; the
+  // three tests below are among their killers.
   it('refuses a reused --run-id over that id\'s aborted record with no pid, naming a fresh --run-id as the fix', async () => {
     const dir = path.join(tmp, 'council-feedc0de');
     const p = seedRun(dir, { schemaVersion: 2, type: 'council-run', runId: 'feedc0de', status: 'aborted', exitCode: 143, stages: [] });
@@ -467,6 +470,13 @@ describe('an --out-dir already in use (D-04, SL-4)', () => {
   // "accepts this run's own MCP pre-seed: the same runId and no pid yet"
   // (cli-council-run-flags.test.js) · "the MCP door's own child accepts its parent's pre-seed
   // (the two doors agree)" (cli-council-run-flags.test.js).
+  // ⚠️ PRESEEDREFUSED RE-RUN (2026-09-28, at 6481731), because its guarded line changed: the
+  // owner's tightening made the exemption `!rec.pid && rec.status === 'running' &&
+  // !rec.completedAt`, and this mutant now drops that whole line. Same three files: RED 3 of
+  // 142, the same three tests: "this run's own MCP pre-seed (same runId, no pid)"
+  // (run-state.test.js) · this test, at `expect(runCouncil).toHaveBeenCalled()` · "the MCP
+  // door's own child accepts its parent's pre-seed (the two doors agree)", at its
+  // `toBe(0)`; tests/mcp-council-run.test.js stays 39/39 green, as before.
   it('accepts this run\'s own MCP pre-seed: the same runId and no pid yet', async () => {
     seedRun(path.join(tmp, 'X'), { schemaVersion: 2, type: 'council-run', runId: 'feedc0de', status: 'running', stages: [] });
     await handleCouncilRun(argsBase({ 'run-id': 'feedc0de', 'out-dir': 'X' }));

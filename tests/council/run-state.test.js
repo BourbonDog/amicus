@@ -272,6 +272,30 @@ describe('otherRunInDir (D-04, SL-4)', () => {
     ['an earlier engine under the same runId (a pid is recorded)', { runId: 'r1', pid: 42 }, { runId: 'r1' }],
     // The owner's tightening of D-04: the same runId is this run's own only as a LIVE pre-seed
     // (no pid, status 'running', no completedAt). Every row below is dead, so it is refused.
+    // Named mutants of that exemption line, MEASURED 2026-09-28 at 6481731 over this file and
+    // tests/cli-council-run-flags.test.js (38 + 65 = 103 tests), each applied alone and
+    // restored by byte copy. Every killer in this file fails at the table's
+    // `toEqual(expected)` (received null); every killer in that file fails at its
+    // `expect(await handleCouncilRun(argsBase({ 'run-id': 'feedc0de' }))).toBe(1)` (received 0).
+    //   STATUSIGNORED (drop `rec.status === 'running'`) RED 3 of 103: "the same runId, aborted
+    //     with no pid (the status alone marks it dead)" · "the same runId with no status at all
+    //     (not a live pre-seed)" · "refuses a reused --run-id over that id's aborted record
+    //     with no pid, naming a fresh --run-id as the fix" (cli-council-run-flags.test.js).
+    //   COMPLETEDIGNORED (drop `!rec.completedAt`) RED 2 of 103: "the same runId, still marked
+    //     running but completedAt set (completedAt alone marks it dead)" · "refuses a reused
+    //     --run-id over a record still marked running but with completedAt set"
+    //     (cli-council-run-flags.test.js).
+    //   PIDONLYEXEMPT (the old rule entirely: the same runId and no pid) RED 8 of 103: "the same
+    //     runId, aborted with no pid (the status alone marks it dead)" · "the same runId with no
+    //     status at all (not a live pre-seed)" · "the same runId, still marked running but
+    //     completedAt set (completedAt alone marks it dead)" · "the same runId, crashed (crash
+    //     detection's status error with completedAt)" · "the same runId, aborted
+    //     (abortCouncilRun's status aborted with completedAt)" · and in
+    //     cli-council-run-flags.test.js "refuses a reused --run-id over that id's aborted
+    //     record with no pid, naming a fresh --run-id as the fix" · "refuses a reused --run-id
+    //     over that id's crashed record (status error, completedAt set)" · "refuses a reused
+    //     --run-id over a record still marked running but with completedAt set".
+    // ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
     ['the same runId, aborted with no pid (the status alone marks it dead)', { runId: 'r1', status: 'aborted' }, { runId: 'r1' }],
     ['the same runId with no status at all (not a live pre-seed)', { runId: 'r1' }, { runId: 'r1' }],
     ['the same runId, still marked running but completedAt set (completedAt alone marks it dead)', { runId: 'r1', status: 'running', completedAt: 'T1' }, { runId: 'r1' }],
