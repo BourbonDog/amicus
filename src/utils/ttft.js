@@ -43,7 +43,7 @@
  *
  * ⚠️ DROP, DO NOT CLAMP. A skewed −5 s reading clamped to `0` would publish
  * "first token inside the first poll" — the most consequential value in the
- * distribution the C2 derivation will read — for a leg that measured nothing of
+ * TTFT distribution — for a leg that measured nothing of
  * the kind. Emit-when-VALID is the same discipline as emit-when-set: absence
  * already means "no honest measurement was made", and a dishonest number is
  * exactly that. `0` itself stays a real, emittable measurement.

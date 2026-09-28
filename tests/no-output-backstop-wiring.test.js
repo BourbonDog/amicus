@@ -888,7 +888,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
  * threshold, no per-model window. That is R12, and it is stated in the module
  * comment beside the measure.
  *
- * ⚠️ RESIDUAL CENSORING, recorded so the eventual C2 derivation does not read
+ * ⚠️ RESIDUAL CENSORING, recorded so any derivation, if ever built, does not read
  * the data wrong. The four completion gates (`fold-marker`,
  * boundary-provider-error, error-with-no-output, `sdk-idle`) used to `break`
  * EARLIER in the poll body than the activity block, so a leg whose first output
@@ -1106,7 +1106,7 @@ describe('v4.9 W13 Task A: the TTFT probe', () => {
  * landed in the SAME poll therefore carried no measurement at all — and those
  * are exactly the fast legs a time-to-first-token distribution is most sensitive
  * to, so the censoring was not random: it truncated the LEFT tail, biasing any
- * future C2 derivation upward.
+ * estimate drawn from that distribution upward.
  *
  * The fix is structural rather than a second probe site: the whole per-poll
  * activity block (the five deltas, `progressed`, `substantiveActivity` and the
@@ -1168,7 +1168,7 @@ describe('v4.9 W13 Task A: the TTFT probe survives a terminal first poll (PR #20
    * RULING (recorded at the probe in src/headless.js): DROP, do not clamp. The
    * schema says `minimum 0`, and clamping a −5 s artifact to `0` would publish
    * "first token inside the first poll" — the single most consequential value in
-   * the distribution the C2 derivation will read — for a leg that measured
+   * the TTFT distribution — for a leg that measured
    * nothing of the kind. Emit-when-VALID is the same discipline as
    * emit-when-set: absence already means "no honest measurement", and a skewed
    * delta is exactly that.

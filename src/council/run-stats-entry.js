@@ -112,8 +112,8 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
     // Emit-when-set, NOT `durationMs`'s null-coercion one line above: this row
-    // is the C2 derivation's future input, and a null there would be read as a
-    // measurement. Absent means "never observed" and must stay absent.
+    // carries ttftMs, a probe- and forensics-only measurement, and a null there
+    // would be read as one. Absent means "never observed" and must stay absent.
     //
     // PR #207 round 3 (B3): emit-when-VALID too. The shared predicate is
     // `src/utils/ttft.js :: isMeasuredTtft`, and it is spelled out by HAND here
