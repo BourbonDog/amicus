@@ -393,7 +393,7 @@ describe('#257 R-X45 — the rescued judge row (run-assemble)', () => {
 describe('W11 byte-order goldens — buildRunStatsEntry (absence pins)', () => {
   test('G4a — a leg-absent entry emits SEVEN keys and nothing else', () => {
     expect(JSON.stringify(buildRunStatsEntry({ leg: null, model: 'gemini', role: 'seat' }))).toBe(
-      '{"model":"gemini","role":"seat","wasChair":false,"conformance":"clean",'
+      '{"model":"gemini","role":"seat","wasChair":false,"conformance":"none",'
       + '"status":"error","durationMs":null,"usage":null}');
   });
 

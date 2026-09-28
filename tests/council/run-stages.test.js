@@ -1344,7 +1344,7 @@ describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)
     expect(repairRows).toHaveLength(2);                          // cap = 2 re-prompts; BOTH get a row
     expect(repairRows.map(r => r.waveId)).toEqual(['abc123-p1', 'abc123-p2']);
     expect(repairRows.every(r => r.status === 'error')).toBe(true);
-    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the '|| clean' default
+    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the builder's default ('none' since #244)
   });
 
   test('a dead seat with no retry attempted gets a primary error row from its own (only) dead leg', async () => {
@@ -1629,7 +1629,7 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     const r = await runStage1(ctx);
     const usage = { cost: { amount: 0.01, source: 'reported' } };
     const row = (model, role, waveId, status) => ({ model, role, wasChair: false,
-      conformance: 'clean', waveId, resolvedModel: model, status, durationMs: 1000, usage });
+      conformance: 'none', waveId, resolvedModel: model, status, durationMs: 1000, usage });
     expect(r.extraRows).toEqual([
       row('gemini', 'superseded', 'abc123-s1', 'error'),
       row('gpt', 'superseded', 'abc123-s1', 'error'),
@@ -1838,7 +1838,7 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
     // neither mints nor borrows; this is the boundary the fix must not cross.
     const uniq = run({ stillDeadWaves: [{ ...wave, models: ['gpt'] }],
       retry: withSpare([{ ...spare, model: 'gpt-x', modelInput: 'gpt' }], 'gpt') })[0];
-    expect(uniq).toEqual({ model: 'gpt', role: 'seat', wasChair: false, conformance: 'clean',
+    expect(uniq).toEqual({ model: 'gpt', role: 'seat', wasChair: false, conformance: 'none',
       waveId: 'r1-s1r1', resolvedModel: 'gpt-x', status: 'timed-out', durationMs: 4242,
       usage: spare.usage });
   });
@@ -3483,7 +3483,7 @@ ${
     expect(repairRows.map(r => r.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
     expect(repairRows.every(r => r.status === 'error')).toBe(true);
     expect(repairRows.every(r => r.model === 'gemini')).toBe(true);
-    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the '|| clean' default
+    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the builder's default ('none' since #244)
   });
 
   test('date-stamps the judge bundle it writes to bundle-stage2.md (spec §4.3)', async () => {

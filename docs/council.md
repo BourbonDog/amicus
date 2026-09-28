@@ -1149,7 +1149,7 @@ fallback promotion launches `aliases[0]`.
 | `avgStreetCredPeersOnly` | Mean of `streetCredPeersOnly` across all runs (`null` if the model was never judged). |
 | `lifetimeConfirmRate` | Mean, across runs, of `(findings this model raised that landed Confirmed) / (findings this model raised)`. `null` when `judged` was false for every run or the model raised nothing. |
 | `lifetimeFactErrorRate` | Same shape, but for the `Disputed` tier — a proxy for how often the bench caught this model asserting something wrong. |
-| `conformance` | Tally of `{clean, repaired, unstructured}` counts — how often this model's Stage-1 findings JSON needed a repair re-prompt. |
+| `conformance` | Tally of `{clean, repaired, unstructured, none}` counts — how often this model's Stage-1 findings JSON needed a repair re-prompt. `none` counts the ledger rows whose deciding legs all produced nothing to check (a row's bench legs decide it, or its chair legs when it has no bench leg; a leg produces nothing when, for example, it dies or times out, or it is a Stage-1 seat that answers only in its reasoning channel); ledger rows written by earlier releases recorded those as `clean`. |
 | `aliases` | Every alias (row-level `model` value) observed for this group, most recently observed first (v4.7). `aliases[0]` is the launch-preferred name. |
 | `legacy` | `true` when every row in the group lacks `resolvedModel` — alias-keyed history from before resolved-id segmentation, or leg-less rows whose resolution is unknowable (v4.7). Omitted (not `false`) when the group has any resolved rows. |
 
@@ -1474,12 +1474,14 @@ seat that delivered nothing — and `rescued` travels through `tally.js` into `t
 `usedWaveId` (the ask whose text was adjudicated — the two differ when the relaunch's own answer
 needed its one repair); its `what` and `why` are unchanged. `conformance` is the
 ASKS-TO-PARSE axis and nothing else: `clean` = the first ask parsed, `repaired` = a later ask
-parsed, `unstructured` = no ask parsed (a row for a leg that never returned carries `clean` by
-default — there was no ask to parse; read `status` with it). So a relaunch-rescued judge is
-`repaired` because a later
+parsed, `unstructured` = no ask parsed, `none` = no ask was checked at all (#244: a seat, judge
+or chair row whose leg did not complete, or a Stage-1 leg or chair attempt whose output was
+never used — a dead seat, a first attempt its retry superseded, a judge that never returned, a
+failed chair attempt, the chair give-up row; earlier releases stamped such a row `clean` by
+default; a dead repair, relaunch or debate row and a judge that answered empty keep
+`unstructured`). So a relaunch-rescued judge is `repaired` because a later
 ask parsed, and a stood-down promoted judge is `unstructured` because none did; the CAUSE lives
-on the row's `role`/`promoted` and in the note, never on `conformance`, whose three values are
-unchanged. The record therefore tells a relaunch from a repair on its own — the `Note:`'s prose
+on the row's `role`/`promoted` and in the note, never on `conformance`. The record therefore tells a relaunch from a repair on its own — the `Note:`'s prose
 is no longer the only thing that does. A promoted `-q<N>` *repair* is still a `role: 'repair'`
 row carrying `promoted: true`: that is attempt 2, the one repair of a relaunch's real text, or
 an ordinary (non-promoted) judge's single repair. Only a relaunch row is `role: 'relaunch'`, and

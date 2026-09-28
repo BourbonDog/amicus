@@ -514,7 +514,12 @@ describe('deriveReliability — resolved-id grouping (v4.7 GOA-7 D10)', () => {
 describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
   function mkLedgerDir() { return fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-pr4b-')); }
 
-  /** One runStats row in the engine's shape (run-assemble.js buildRunStatsEntry). */
+  /**
+   * One runStats row in the engine's shape (run-stats-entry.js :: buildRunStatsEntry). Its
+   * `'clean'` conformance default is a convenience for the LIVE rows most fixtures here build,
+   * not the engine's default: since #244 the builder defaults `'none'` (no ask was checked), so
+   * a fixture that asserts a dead row's conformance passes `'none'` itself (T3).
+   */
   function rsRow(o) {
     return {
       model: o.model,
@@ -599,14 +604,14 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
       models: ['deepseek', 'deepseek'],
       runStats: [
         rsRow({ model: 'deepseek', conformance: 'repaired', resolvedModel: 'vendor/ds' }),
-        // pushDeadSeatRows passes NO conformance, so buildRunStatsEntry defaults 'clean'
-        rsRow({ model: 'deepseek', status: 'error' }),
+        // pushDeadSeatRows passes NO conformance, so buildRunStatsEntry defaults 'none' (#244)
+        rsRow({ model: 'deepseek', status: 'error', conformance: 'none' }),
       ],
     }));
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ resolvedModel: 'vendor/ds', conformance: 'repaired' });
     expect('resolvedModel' in rows[1]).toBe(false);
-    expect(rows[1].conformance).toBe('clean');
+    expect(rows[1].conformance).toBe('none');
   });
 
   test('T3b — leg-less row ordered FIRST: the stats anchor is the block FIRST pair group', () => {
@@ -1339,6 +1344,27 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     }));
     expect(rows).toHaveLength(1);
     expect(rows[0].conformance).toBe('weird');   // a 'clean' seed would rewrite it
+  });
+
+  test('T13d — none (#244: no checked output) ranks BELOW clean in both tables, so a real value wins from either position', () => {
+    // An unknown value ranks 0 and survives in position 0 (T13c), so without its own rank a
+    // dead twin listed first would fold a model's ledger row to none although its other twin
+    // reviewed cleanly. Named mutants: NONERANKLEDGER (delete `none: -1` from ledger.js) and
+    // NONERANKASM (delete it from run-assemble.js) each red this test, and T13a's table
+    // equality, on their own.
+    expect([CONFORMANCE_RANK.none, ASM_CONFORMANCE_RANK.none]).toEqual([-1, -1]);
+    for (const merge of [mergeConformance, worseConformance]) {
+      expect([merge('none', 'clean'), merge('clean', 'none')]).toEqual(['clean', 'clean']);
+      expect([merge('none', 'repaired'), merge('unstructured', 'none')]).toEqual(['repaired', 'unstructured']);
+      expect(merge('none', 'none')).toBe('none');
+      // An unknown value ranks 0 (T13c), so it outranks none from either position too.
+      expect([merge('none', 'weird'), merge('weird', 'none')]).toEqual(['weird', 'weird']);
+    }
+    const row = (conformance) => rsRow({ model: 'alpha', conformance, resolvedModel: 'v/a',
+      status: conformance === 'none' ? 'error' : 'complete' });
+    const fold = (a, b) => buildLedgerRows(rec({ models: ['alpha'], runStats: [row(a), row(b)] }))[0].conformance;
+    expect([fold('none', 'clean'), fold('clean', 'none')]).toEqual(['clean', 'clean']);
+    expect(fold('none', 'none')).toBe('none');
   });
 
   // ⚠️ REPLACED at v4.8 T3.3 — SI-17's normalise, owner ruling R4. This test

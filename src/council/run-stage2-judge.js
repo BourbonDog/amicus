@@ -243,7 +243,8 @@ async function adjudicateJudgeLeg(ctx, o, leg, env) {
       // parse. Carried, not re-derived: the thin-cross-review reason names the
       // reasoning channel rather than the output contract — a different fix.
       fromReasoning: !legDied && isPromotedLeg(leg),
-      conformance: leg.status === 'complete' ? 'unstructured' : 'clean',
+      // #244 residue: a judge that never returned had no ask checked — 'none', never 'clean' (named mutant DEADJUDGECLEAN).
+      conformance: leg.status === 'complete' ? 'unstructured' : 'none',
       // #83 (v4.6 Plan 2): the judge's ORIGINAL Stage-2 wave leg, mirroring
       // Stage-1's convention (reviews carry the original wave leg even when a
       // repair ran — repairs are separately recorded via appendStageWave).

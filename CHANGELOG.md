@@ -14,6 +14,20 @@ All notable changes to Amicus are documented here. Format follows
   is how 4.14.0 treats it. Per-model CI notes for glm, qwen, deepseek and gpt. The seed is copied
   only when no `MODEL-NOTES.md` exists, so an existing install keeps its own copy.
 
+### Changed
+
+- **A `runStats` row whose leg produced nothing that was checked now says `conformance: none`,
+  not `clean`.** `conformance` records which ask parsed: `clean` the first, `repaired` a later
+  one, `unstructured` no ask. A leg that never returned, or whose output was never used, had no ask
+  checked at all, and 4.14.0 documented such a row as carrying `clean` by default. It now carries
+  `none`. That covers a dead or promoted Stage-1 seat, a first attempt its retry superseded, a
+  failed chair attempt, the chair give-up row, and a Stage-2 judge that never returned. Where only
+  such rows decide a reliability-ledger row, that ledger row now records `none`, so
+  `amicus council stats --json` counts it as `none` rather than `clean`. `none` ranks below every
+  other value, so a checked bench leg's value always wins over it. Ledger rows written by earlier
+  releases are unchanged, so a model's history mixes their `clean`-for-dead rows with new `none`
+  rows. (#244)
+
 ### Fixed
 
 - **Three moderate `hono` advisories in the repository's locked production tree.** `hono` reaches

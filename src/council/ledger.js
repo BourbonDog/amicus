@@ -75,7 +75,8 @@ function countSeverity(findings) {
 // by a drift guard (tests/council/ledger.test.js T13a) that asserts pairwise
 // agreement with the exported original — including an UNKNOWN value, which is
 // where the two spellings can silently diverge.
-const CONFORMANCE_RANK = { clean: 0, repaired: 1, unstructured: 2 };
+// #244 residue: `none` (no ask was checked) ranks BELOW `clean`, so a twin's real value always wins the fold (T13d).
+const CONFORMANCE_RANK = { none: -1, clean: 0, repaired: 1, unstructured: 2 };
 /** Worst-wins merge; returns its FIRST argument on a rank tie (mirrors worseConformance). */
 function mergeConformance(a, b) {
   return (CONFORMANCE_RANK[a] || 0) >= (CONFORMANCE_RANK[b] || 0) ? a : b;

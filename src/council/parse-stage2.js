@@ -7,8 +7,9 @@
  * judge's trailing JSON block ({ranking, adjudications}) and the chair's final
  * terminal line — `VERDICT:` on a review run, `ANSWER:` on a task run (v4.9
  * W7 #146). Shares last-JSON-block extraction with findings.js.
- * Pure — the ≤2-repair loop lives in run-stages.js; the tri-state
- * (clean|repaired|unstructured) is recorded by the driver.
+ * Pure — the ≤2-repair loop lives in run-stages.js; the driver records the parse outcome
+ * (clean|repaired|unstructured). `none` is no parse outcome: the row builder's default when
+ * nothing was checked, and adjudicateJudgeLeg's value for a judge that never returned.
  */
 
 const { lastJsonBlock } = require('./findings');
