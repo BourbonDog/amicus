@@ -116,19 +116,29 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project, runId }) {
     };
   }
 
-  // D-04 (SL-4): a run dir already holding ANOTHER run's run.json is refused
-  // before anything is written, or initRun would merge this run into it.
-  // "Another run's" is `council/run-state.js :: otherRunInDir`'s rule, shared
-  // with the MCP door (`mcp-council-run-dir.js :: resolveMcpRunDir`).
+  // D-04 (SL-4): a run dir already holding ANOTHER run's run.json, or an earlier
+  // or dead record under this run's own id, is refused before anything is
+  // written, or initRun would merge this run into it. The rule is
+  // `council/run-state.js :: otherRunInDir`'s, shared with the MCP door
+  // (`mcp-council-run-dir.js :: resolveMcpRunDir`). Only a reused --run-id meets
+  // its own id (the MCP door mints a fresh one per call), so that refusal names
+  // its own fix.
   const other = otherRunInDir(runDir, runId);
   if (other) {
+    const sameId = other.runId === runId;
+    let message = `Error: '${runDir}' already holds a run.json that is not a readable run record — a new run there would write over it`;
+    if (sameId) {
+      message = `Error: '${runDir}' already holds run ${runId}'s run.json — that run id is already in use there, so a new run would merge into its record`;
+    } else if (other.runId) {
+      message = `Error: '${runDir}' already holds run ${other.runId}'s run.json — a new run there would merge into that record`;
+    }
     return {
       error: {
         code: ERROR_CODES.BAD_ARGS,
-        message: other.runId
-          ? `Error: '${runDir}' already holds run ${other.runId}'s run.json — a new run there would merge into that record`
-          : `Error: '${runDir}' already holds a run.json that is not a readable run record — a new run there would write over it`,
-        hint: 'pass an --out-dir with no run.json in it, or move the old run\'s folder aside first',
+        message,
+        hint: sameId
+          ? 'pass a fresh --run-id, or none (one is generated), or another --out-dir'
+          : 'pass an --out-dir with no run.json in it, or move the old run\'s folder aside first',
       },
     };
   }

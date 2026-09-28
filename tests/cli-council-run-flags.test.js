@@ -399,6 +399,40 @@ describe('an --out-dir already in use (D-04, SL-4)', () => {
     expect(await handleCouncilRun(argsBase({ 'run-id': 'feedc0de' }))).toBe(1);
     expect(runCouncil).not.toHaveBeenCalled();
     expect(JSON.parse(stdout()).error.message).toContain(`'${dir}' already holds run feedc0de's run.json`);
+    expect(JSON.parse(stdout()).error.hint).toBe('pass a fresh --run-id, or none (one is generated), or another --out-dir');
+  });
+
+  // The owner's tightening of D-04: the same runId is this run's own only as a LIVE pre-seed
+  // (no pid, status 'running', no completedAt). A dead one (aborted, crashed, spawn-failed, or
+  // any record with completedAt) is refused, and a reused --run-id's refusal names its own fix.
+  it('refuses a reused --run-id over that id\'s aborted record with no pid, naming a fresh --run-id as the fix', async () => {
+    const dir = path.join(tmp, 'council-feedc0de');
+    const p = seedRun(dir, { schemaVersion: 2, type: 'council-run', runId: 'feedc0de', status: 'aborted', exitCode: 143, stages: [] });
+    const before = fs.readFileSync(p, 'utf-8');
+    expect(await handleCouncilRun(argsBase({ 'run-id': 'feedc0de' }))).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    const doc = JSON.parse(stdout());
+    expect(doc.error.code).toBe('BAD_ARGS');
+    expect(doc.error.message).toBe(`Error: '${dir}' already holds run feedc0de's run.json — that run id is already in use there, so a new run would merge into its record`);
+    expect(doc.error.hint).toBe('pass a fresh --run-id, or none (one is generated), or another --out-dir');
+    expect(fs.readFileSync(p, 'utf-8')).toBe(before);
+  });
+
+  it('refuses a reused --run-id over that id\'s crashed record (status error, completedAt set)', async () => {
+    const dir = path.join(tmp, 'council-feedc0de');
+    seedRun(dir, { schemaVersion: 2, type: 'council-run', runId: 'feedc0de', status: 'error', stages: [],
+      completedAt: '2026-09-28T00:00:00.000Z', error: { code: 'INTERNAL', message: 'Council engine process exited unexpectedly' } });
+    expect(await handleCouncilRun(argsBase({ 'run-id': 'feedc0de' }))).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.message).toContain(`'${dir}' already holds run feedc0de's run.json — that run id is already in use there`);
+  });
+
+  it('refuses a reused --run-id over a record still marked running but with completedAt set', async () => {
+    seedRun(path.join(tmp, 'council-feedc0de'), { schemaVersion: 2, type: 'council-run', runId: 'feedc0de', status: 'running', stages: [],
+      completedAt: '2026-09-28T00:00:00.000Z' });
+    expect(await handleCouncilRun(argsBase({ 'run-id': 'feedc0de' }))).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.hint).toBe('pass a fresh --run-id, or none (one is generated), or another --out-dir');
   });
 
   it('refuses an unreadable run.json without naming a run', async () => {

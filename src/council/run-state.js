@@ -206,29 +206,33 @@ function listPointers(project) {
  * `initRun` merges a new seed into whatever record it finds (`mergeRun` spreads the old
  * record, then the patch), so a second run started there folds two runs into one run.json:
  * the old `createdAt`, `completedAt`, `exitCode` and `error` survive, and an old `aborted`
- * status never lifts. Every run.json counts EXCEPT this run's own pre-seed, the same runId
- * with no `pid` yet: `mcp-council-run.js :: handleCouncilRunTool` seeds without one (its
- * child's pid goes to spawn.pid), `initCouncilRun` always writes one, and `!rec.pid` is
- * the test `mcp-council-awareness.js :: enginePid` reads it with. An id outside the
- * task-id grammar is never echoed: this run did not write the file.
- * Accepted limits: the check is a read, not a lock, so two runs started into one folder
- * before either writes run.json can both pass it, and merge. And a reused `--run-id` passes
- * over that id's DEAD pid-less record too (a failed MCP spawn's or crash detection's
- * `status:'error'`, or an abort that beat the child's `initCouncilRun`): the merged record
- * keeps the failed attempt's `createdAt` and any additive key the new seed lacks (`pack`,
- * `template`, `droppedMembers`), shows its stale `error`/`completedAt` until finalize, and
- * after that abort reads `aborted` (exitCode 143) for good.
+ * status never lifts. Every run.json counts EXCEPT this run's own LIVE pre-seed: the same
+ * runId, no `pid`, `status: 'running'` and no `completedAt`. That is exactly the record
+ * `mcp-council-run.js :: handleCouncilRunTool` writes before its child starts (the child's
+ * pid goes to spawn.pid; `initCouncilRun` always writes one, and `!rec.pid` is the test
+ * `mcp-council-awareness.js :: enginePid` reads it with). A DEAD same-id record is refused
+ * like another run's: every writer that ends a pid-less record sets `completedAt` and a
+ * status other than `'running'` (a failed spawn's and crash detection's `'error'`,
+ * `abortCouncilRun`'s `'aborted'`), and merging into it would keep the failed attempt's
+ * `createdAt`, its additive keys (`pack`, `template`, `droppedMembers`) and a stale
+ * `error`, or leave the new run `aborted` for good. An id outside the task-id grammar is
+ * never echoed: this run did not write the file. Accepted limits: the check is a read,
+ * not a lock, so two runs started into one folder before either writes run.json can both
+ * pass it, and merge; and a pre-seed whose child died before anything recorded it still
+ * reads as live until crash detection writes its `'error'`.
  * @param {string} runDir
  * @param {string} runId the run about to start
- * @returns {{runId: (string|null)}|null} null when the dir holds no other run's record;
- *   `runId` is null when the file does not parse or names no valid id
+ * @returns {{runId: (string|null)}|null} null when the dir holds no run.json, or only this
+ *   run's own live pre-seed; otherwise the record's runId (this run's own for an earlier
+ *   or dead record under the same id), or null when the file does not parse or names no
+ *   valid id
  */
 function otherRunInDir(runDir, runId) {
   if (!fs.existsSync(runPath(runDir))) { return null; }
   const { TASK_ID_PATTERN } = require('../utils/validators');
   const rec = readRun(runDir);
   const id = rec && typeof rec.runId === 'string' && TASK_ID_PATTERN.test(rec.runId) ? rec.runId : null;
-  if (id !== null && id === runId && !rec.pid) { return null; }
+  if (id !== null && id === runId && !rec.pid && rec.status === 'running' && !rec.completedAt) { return null; }
   return { runId: id };
 }
 

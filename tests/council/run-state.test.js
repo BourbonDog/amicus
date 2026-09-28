@@ -270,6 +270,13 @@ describe('otherRunInDir (D-04, SL-4)', () => {
     ['another run with no pid (a dead MCP pre-seed of a different run)', { runId: 'other1' }, { runId: 'other1' }],
     ['this run\'s own MCP pre-seed (same runId, no pid)', { runId: 'r1', status: 'running' }, null],
     ['an earlier engine under the same runId (a pid is recorded)', { runId: 'r1', pid: 42 }, { runId: 'r1' }],
+    // The owner's tightening of D-04: the same runId is this run's own only as a LIVE pre-seed
+    // (no pid, status 'running', no completedAt). Every row below is dead, so it is refused.
+    ['the same runId, aborted with no pid (the status alone marks it dead)', { runId: 'r1', status: 'aborted' }, { runId: 'r1' }],
+    ['the same runId with no status at all (not a live pre-seed)', { runId: 'r1' }, { runId: 'r1' }],
+    ['the same runId, still marked running but completedAt set (completedAt alone marks it dead)', { runId: 'r1', status: 'running', completedAt: 'T1' }, { runId: 'r1' }],
+    ['the same runId, crashed (crash detection\'s status error with completedAt)', { runId: 'r1', status: 'error', completedAt: 'T1', error: { code: 'INTERNAL' } }, { runId: 'r1' }],
+    ['the same runId, aborted (abortCouncilRun\'s status aborted with completedAt)', { runId: 'r1', status: 'aborted', completedAt: 'T1', exitCode: 143 }, { runId: 'r1' }],
     ['a runId outside the task-id grammar is never echoed', { runId: 'bad id!', pid: 1 }, { runId: null }],
     ['no runId at all', { pid: 3 }, { runId: null }],
     ['a truncated file', '{ "runId": "r1", trunc', { runId: null }],
