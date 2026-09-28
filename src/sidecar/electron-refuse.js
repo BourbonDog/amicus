@@ -254,9 +254,9 @@ function refuseUnreadableArtifact({ fileName, zip, why, detail = '', log = () =>
  * and the network, and a retry is free. The table itself tells the two causes apart: no row
  * for this VERSION is a copy installed with a different Electron (or a planted version), and
  * the fix is to repair that copy with its own amicus; rows for the version but not this
- * platform-arch mean Electron publishes no such build. F5: `anchor.source` is a path
- * (attacker-influenced on rung 2), so it is sanitized; `fileName` and `version` passed
- * `isSafeArtifactName`, and the listed versions are captured as digits and dots only.
+ * platform-arch mean Electron publishes no such build. F5: `anchor.source` (a path,
+ * attacker-influenced on rung 2), `fileName` and `version` are all sanitized, so even a
+ * caller that skips `isSafeArtifactName` cannot forge a line; listed versions are digits and dots.
  * @returns {{repaired:false, integrity:'unlisted', reason:string}}
  */
 function refuseUnlistedArtifact({ anchor, fileName, version, platform, arch, log = () => {} }) {
@@ -264,13 +264,13 @@ function refuseUnlistedArtifact({ anchor, fileName, version, platform, arch, log
   const covered = keys.some((k) => k.startsWith(`electron-${version}-`));
   const listed = [...new Set(keys.map((k) => (/^electron-(v\d+\.\d+\.\d+)-/.exec(k) || [])[1]).filter(Boolean))];
   const what = covered
-    ? `the checksums.json amicus trusts lists Electron ${version} but no ${platform}-${arch} build`
-    : `the checksums.json amicus trusts covers Electron ${listed.slice(0, 3).join(', ') || '(none)'}, not ${version}`;
+    ? `the checksums.json amicus trusts lists Electron ${collapseExcerpt(version)} but no ${platform}-${arch} build`
+    : `the checksums.json amicus trusts covers Electron ${listed.slice(0, 3).join(', ') || '(none)'}, not ${collapseExcerpt(version)}`;
   const fix = covered
     ? 'Electron publishes no build for this platform in that table, so the GUI is unavailable here.'
     : 'Repair that copy with its own amicus (for the copy the MCP launches: npx -y amicus@latest doctor --fix);'
       + " if it is this amicus's own Electron, reinstall amicus.";
-  log(`[amicus] Electron artifact REFUSED (no published sha256): ${fileName}`);
+  log(`[amicus] Electron artifact REFUSED (no published sha256): ${collapseExcerpt(fileName)}`);
   log(`[amicus]   ${collapseExcerpt(anchor.source, PATH_EXCERPT_CHARS)}`);
   log(`[amicus]   ${what}.`);
   log('[amicus] Nothing was downloaded or extracted: no download can add the missing entry.');
@@ -281,7 +281,7 @@ function refuseUnlistedArtifact({ anchor, fileName, version, platform, arch, log
   return {
     repaired: false,
     integrity: 'unlisted',
-    reason: `Electron artifact ${fileName} was REFUSED: ${what}, so nothing was downloaded or extracted. ${fix}`,
+    reason: `Electron artifact ${collapseExcerpt(fileName)} was REFUSED: ${what}, so nothing was downloaded or extracted. ${fix}`,
   };
 }
 

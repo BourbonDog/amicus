@@ -161,7 +161,7 @@ async function repairElectron({
   // caches), and `fileName` is joined into paths downstream. MEASURED before the
   // check, with a planted "43.1.1/../../victim": a path two levels outside the
   // intended directory was written and a pre-existing file there was destroyed.
-  // Nothing downstream ever sees a name that is not a plain filename.
+  // Nothing downstream, the D-02 pre-check included, ever sees a name that is not a plain filename.
   if (!isSafeArtifactName(fileName)) {
     return { repaired: false, integrity: 'unsafe-name', reason: `Refusing to provision electron: ${collapseExcerpt(fileName, 160)} is not a usable artifact name.` };
   }

@@ -35,6 +35,12 @@ const HEX = 'a'.repeat(64);
 const POISON = 'POISONED-BYTES';
 const SKEW = '43.6.0';
 const SKEW_ZIP = `electron-v${SKEW}-win32-x64.zip`;
+// F5: what an attacker-written string can smuggle into a terminal line, and how to catch it.
+const ESC = '\u001b';
+const FORGED_LINE = '[amicus] Electron artifact verified. Nothing further is required.';
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
+const BIDI_CONTROLS = /[\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]/;
 
 function mkTmp(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -72,15 +78,13 @@ afterEach(() => {
 });
 
 describe('D-02: the unlisted refusal names the version, the table and the fix', () => {
-  // NAMED MUTANT
+  // NAMED MUTANTS
   //   RAWTABLEPATH electron-refuse.js :: refuseUnlistedArtifact -- drop the
   //     collapseExcerpt() around `anchor.source`. RED: the third test below.
-  const ESC = '\u001b';
-  const FORGED_LINE = '[amicus] Electron artifact verified. Nothing further is required.';
+  //   RAWNAMEVERSION electron-refuse.js :: refuseUnlistedArtifact -- drop the
+  //     collapseExcerpt() around `fileName` and `version`.
+  //     RED: the fourth test below.
   const NASTY = `${ESC}[31mEVIL${ESC}[0m\n${FORGED_LINE}\n\u202eTNEMHCATTA`;
-  // eslint-disable-next-line no-control-regex
-  const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
-  const BIDI_CONTROLS = /[\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]/;
   const SOURCE = path.join(os.tmpdir(), 'electron', 'checksums.json');
 
   /** Call the refusal with a collecting log. */
@@ -142,6 +146,25 @@ describe('D-02: the unlisted refusal names the version, the table and the fix', 
     expect(lines[1]).toContain('EVIL');           // ...and it still says where the table is
     expect(out.reason).not.toContain('\n');
   });
+
+  test('the file name and the version cannot forge a line either, even for a caller that skips the name check (RAWNAMEVERSION)', () => {
+    // repairElectron's `isSafeArtifactName` check runs first (the PRECHECKBEFORENAME test
+    // below pins that order), so this is belt and braces: the words must not DEPEND on it.
+    const { out, lines } = refuse({
+      table: { 'electron-v43.1.1-win32-x64.zip': HEX },
+      fileName: `electron-v${NASTY}-win32-x64.zip`,
+      version: `v${NASTY}`,
+    });
+    const physical = lines.join('\n').split('\n');   // what a terminal shows, line by line
+    for (const l of physical) {
+      expect(l).not.toMatch(CONTROL_CHARS);
+      expect(l).not.toMatch(BIDI_CONTROLS);
+    }
+    expect(physical.some((l) => l.startsWith(FORGED_LINE))).toBe(false);
+    expect(out.reason).not.toMatch(CONTROL_CHARS);
+    expect(out.reason).not.toMatch(BIDI_CONTROLS);
+    expect(out.reason).toContain('EVIL');         // ...and it still names what was asked for
+  });
 });
 
 describe('D-02: the refusal is WIRED before the lock, the cache and the network', () => {
@@ -193,6 +216,48 @@ describe('D-02: the refusal is WIRED before the lock, the cache and the network'
     expect(extract).toHaveBeenCalledTimes(1);
     expect(res.repaired).toBe(true);
     expect(res.unverified).toBe(true);
+  });
+});
+
+describe('D-02: the name check runs BEFORE the unlisted pre-check (F5 ordering)', () => {
+  // repairElectron refuses an unsafe artifact name before it resolves the anchor or runs
+  // the D-02 pre-check, so a planted package.json version never reaches the unlisted
+  // refusal's words. The unsafe-name tests in tests/electron-artifact-custody.test.js
+  // (NAMEUNCHECKED) and tests/electron-refusal-sanitize.test.js cannot see that order:
+  // their fixture seeds a checksums.json row for the planted name and turns rung 1 off,
+  // so `isUnlisted` is false and the pre-check never fires. Here the RUNNING amicus's
+  // table (rung 1, the doctor --fix shape) has no row for it, so a moved pre-check WOULD.
+  //
+  // NAMED MUTANT
+  //   PRECHECKBEFORENAME electron-install.js :: repairElectron -- move `policy`, `anchor`
+  //     and the D-02 pre-check above the `isSafeArtifactName` check.
+  //     RED: the test below.
+  test('a planted version that climbs, colours and forges a line is refused as unsafe-name, never echoed as unlisted (PRECHECKBEFORENAME)', async () => {
+    const planted = `43.6.0/../../${ESC}[31mEVIL${ESC}[0m\n${FORGED_LINE}`;
+    const { dir } = fakeElectronDir({ withExe: false, platform: 'win32', version: planted });
+    const self = seedElectronAnchor(mkTmp('amicus-self-'), { version: '43.1.1' });   // no row for the planted name
+    const leaves = {
+      acquireLock: jest.fn(() => ({ release: () => {} })),
+      cachedZip: jest.fn(() => null),
+      downloadArtifact: jest.fn(async () => { throw new Error('network is forbidden in this test'); }),
+      extract: jest.fn(),
+      spawn: jest.fn(),
+    };
+
+    const res = await ei.repairElectron({
+      cacheOnly: true, electronDir: dir, platform: 'win32', arch: 'x64',   // NO version: read from the planted package.json
+      deps: { selfElectronDir: self, ...leaves },
+    });
+
+    expect(res).toMatchObject({ repaired: false, integrity: 'unsafe-name' });
+    const said = stderr.join('');
+    expect(said).not.toContain('REFUSED (no published sha256)');
+    for (const l of said.split('\n')) {
+      expect(l).not.toMatch(CONTROL_CHARS);
+      expect(l).not.toMatch(BIDI_CONTROLS);
+    }
+    expect(res.reason).not.toMatch(CONTROL_CHARS);
+    for (const leaf of Object.values(leaves)) { expect(leaf).not.toHaveBeenCalled(); }
   });
 });
 
