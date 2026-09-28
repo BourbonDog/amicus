@@ -209,6 +209,38 @@ describe('amicus_council_run handler', () => {
     expect(fs.existsSync(path.resolve(tmp, '..', 'escaped-council'))).toBe(false);
   });
 
+  // D-04 (SL-4): an outDir already holding ANOTHER run's run.json is refused
+  // before the handler writes anything. The child could not refuse it: the
+  // pre-seed would already have merged into that record and overwritten its
+  // briefing.md, and the child's stdout is discarded.
+  test('an outDir already holding another run\'s run.json → isError naming it, no spawn, nothing overwritten (D-04)', async () => {
+    const dir = path.join(tmp, 'old-run');
+    fs.mkdirSync(dir);
+    const runJson = path.join(dir, 'run.json');
+    fs.writeFileSync(runJson, JSON.stringify({ runId: 'oldrun01', status: 'aborted', exitCode: 143, pid: 4242 }));
+    fs.writeFileSync(path.join(dir, 'briefing.md'), 'OLD BRIEFING');
+    const before = fs.readFileSync(runJson, 'utf-8');
+    const calls = [];
+    const res = await handleCouncilRunTool(input({ outDir: 'old-run' }), tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe(`outDir '${dir}' already holds run oldrun01's run.json — `
+      + 'pick an outDir with no run.json in it, or move the old run\'s folder aside.');
+    expect(calls).toHaveLength(0);
+    expect(fs.readFileSync(runJson, 'utf-8')).toBe(before);
+    expect(fs.readFileSync(path.join(dir, 'briefing.md'), 'utf-8')).toBe('OLD BRIEFING');
+    expect(fs.existsSync(path.join(tmp, '.claude', 'amicus_sessions'))).toBe(false);
+  });
+
+  test('an outDir holding a briefing but no run.json still launches (the skill\'s run-folder shape)', async () => {
+    const dir = path.join(tmp, 'run-folder');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'briefing.md'), 'Review this.');
+    const calls = [];
+    const res = await handleCouncilRunTool(input({ outDir: 'run-folder' }), tmp, helpers(calls));
+    expect(res.isError).toBeUndefined();
+    expect(calls).toHaveLength(1);
+  });
+
   // Task 15 (spec §5.3) delivery seam: on successful launch with
   // onComplete: 'mcp-notify', the run is marked in the shared in-process
   // registry so runWait's terminal branch (mcp-wait.js) can later consume it

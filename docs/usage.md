@@ -998,7 +998,7 @@ Every tool below also takes an optional `project` — an absolute path naming th
 - `chair` — the synthesizing model (default `deepseek`). Must NOT be a bench seat.
 - `critic` — swap one bench seat to an adversarial brief. Must BE a bench seat; mutually exclusive with `lenses`.
 - `lenses` — one expert lens per seat (count must equal seat count). Forces no-ledger; mutually exclusive with `critic`.
-- `outDir` — the run directory. Default `<project>/council-<runId>/`.
+- `outDir` — the run directory. Default `<project>/council-<runId>/`. Refused, before anything is written, when it already holds another run's `run.json`; the error names that run.
 - `maxCost` — whole-run USD ceiling, checked before each paid stage launch.
 - `noCostGate` — disable the per-leg price gate for the WHOLE run, repairs and chair included. Independent of `maxCost`, which still caps the total. See [Cost gate](configuration.md#cost-gate).
 - `timeoutMinutes` — per-leg timeout in minutes (fanout semantics). Default 15.

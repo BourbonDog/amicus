@@ -15,7 +15,6 @@ const fs = require('fs');
 const path = require('path');
 const runState = require('./council/run-state');
 const { fenceSidecarOutput } = require('./utils/untrusted-fence');
-const { isPathInside } = require('./project-root-allowlist');
 const { validateOnComplete, requestMcpNotify } = require('./mcp-notify');
 // v4.6 Plan 4 Task 4b: resolveBenchInput moved to its own leaf (size gate) —
 // see mcp-council-bench.js's module docblock for why.
@@ -132,12 +131,11 @@ async function handleCouncilRunTool(input, project, helpers) {
 
   const { generateTaskId } = require('./sidecar/start');
   const runId = generateTaskId();
-  const runDir = input.outDir
-    ? path.resolve(project, String(input.outDir))
-    : path.join(project, `council-${runId}`);
-  if (!isPathInside(runDir, project)) {
-    return textResult(`outDir must resolve to a path inside the project directory (${project}).`, true);
-  }
+  // The v4.5 containment fence + D-04's in-use refusal, both before the first
+  // write below: mcp-council-run-dir.js :: resolveMcpRunDir.
+  const rd = require('./mcp-council-run-dir').resolveMcpRunDir(input, project, runId);
+  if (rd.error) { return textResult(rd.error, true); }
+  const runDir = rd.runDir;
   const briefingPath = path.join(runDir, 'briefing.md');
   try {
     fs.mkdirSync(runDir, { recursive: true, mode: 0o700 });
