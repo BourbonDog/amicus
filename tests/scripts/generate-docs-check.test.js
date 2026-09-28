@@ -80,7 +80,7 @@ describe('generated-doc marker freshness (F-3)', () => {
 
   it('README.md and docs/*.md cross-links all resolve', () => {
     const errors = collectCrossLinkErrors(ROOT)
-      .filter((err) => !err.startsWith('CLAUDE.md: ')); // covered by the test above
+      .filter((err) => !err.startsWith('CLAUDE.md: ')); // CLAUDE.md: 'CLAUDE.md cross-links all resolve' above
     if (errors.length > 0) {
       throw new Error(
         `Broken cross-link(s):\n${errors.join('\n')}\nRun \`${FIX_COMMAND}\` and fix any remaining broken links by hand.`,
@@ -120,5 +120,32 @@ describe('collectCrossLinkTargets fails loudly instead of emptying the roster (R
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('collectCrossLinkErrors reports what it must (R-E20 D3 negative fixtures)', () => {
+  const os = require('node:os');
+  let tmp;
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'xlink-neg-'));
+    fs.mkdirSync(path.join(tmp, 'docs'));
+    fs.writeFileSync(path.join(tmp, 'CLAUDE.md'), '# c\n');
+    fs.writeFileSync(path.join(tmp, 'docs', 'b.md'), '# b\n');
+  });
+  afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+
+  it('reports a link whose target does not exist', () => {
+    fs.writeFileSync(path.join(tmp, 'README.md'), 'see [gone](docs/missing.md)\n');
+    expect(collectCrossLinkErrors(tmp)).toEqual([
+      'README.md: Broken link: [gone](docs/missing.md) -> docs/missing.md not found',
+    ]);
+  });
+
+  it("resolves a docs/*.md file's links against docs/, so a root-relative path there is reported", () => {
+    fs.writeFileSync(path.join(tmp, 'README.md'), 'from the root [b](docs/b.md)\n');
+    fs.writeFileSync(path.join(tmp, 'docs', 'a.md'), 'wrong [b](docs/b.md), right [b](b.md)\n');
+    expect(collectCrossLinkErrors(tmp)).toEqual([
+      'docs/a.md: Broken link: [b](docs/b.md) -> docs/b.md not found',
+    ]);
   });
 });
