@@ -103,3 +103,45 @@ describe('F4 — every pattern is answered by a real message, and only by one', 
     }
   });
 });
+
+describe('F4 — the LIVE classifier, zip-from-buffer.js :: NAME_REFUSAL', () => {
+  // The copy the in-memory extractor applies to every yauzl 'error': a match is
+  // the terminal UNZIP_UNSAFE_ARCHIVE, a miss is the UNZIP_BUFFER_FAILED the
+  // native rescue fires on. The rescue's pre-scan never passes through it (the
+  // boundary builds its own refusal), so what it must recognise is REAL
+  // yauzl's wording, and nothing else.
+  const { NAME_REFUSAL } = require('../../src/sidecar/zip-from-buffer');
+  const { buildZip, FLAG_ENCRYPTED } = require('../helpers/zip-fixture');
+
+  /** The message REAL yauzl emits when its walk over `bytes` breaks, or null. */
+  const walkError = (bytes) => new Promise((resolve) => {
+    yauzl.fromBuffer(bytes, { lazyEntries: true, validateEntrySizes: true }, (err, zipfile) => {
+      if (err) { resolve(err.message); return; }
+      zipfile.on('error', (e) => resolve(e.message));
+      zipfile.on('entry', () => zipfile.readEntry());
+      zipfile.on('end', () => resolve(null));
+      zipfile.readEntry();
+    });
+  });
+
+  test('NAME_REFUSAL recognises every refusal real yauzl raises', () => {
+    for (const message of [real.relative, real.absolute, real.drive, real.backslash]) {
+      expect({ message, matched: NAME_REFUSAL.test(message) }).toEqual({ message, matched: true });
+    }
+  });
+
+  test('NAME_REFUSAL recognises nothing benign, so a clean but broken archive stays rescuable', async () => {
+    // What real yauzl raises on the rescue's own fixture: an entry with the
+    // encrypted flag set, which breaks the walk before any name is validated.
+    const realWalk = await walkError(buildZip([{ name: 'first.bin', body: 'DATA', flags: FLAG_ENCRYPTED }]));
+    expect(realWalk).toMatch(/^compressed\/uncompressed size mismatch/);
+    for (const benign of [
+      realWalk,
+      'end of central directory record signature not found',
+      stalled('no extract progress for 30000ms').message,
+      extractorUnavailable('Cannot find module').message,
+    ]) {
+      expect({ benign, matched: NAME_REFUSAL.test(benign) }).toEqual({ benign, matched: false });
+    }
+  });
+});

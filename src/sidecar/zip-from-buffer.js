@@ -90,7 +90,13 @@ const {
   IDLE_MS, MAX_MS, UNWIND_MS, stalled, awaitUnwind,
 } = require('./zip-stall-bound');
 
-/** yauzl's own validateFileName refusals — three of unzip.js's UNSAFE_PATTERNS. */
+/**
+ * yauzl's own validateFileName refusals — three of unzip.js's UNSAFE_PATTERNS —
+ * and the LIVE classifier: it decides between the terminal UNZIP_UNSAFE_ARCHIVE
+ * and the UNZIP_BUFFER_FAILED the native rescue fires on, so it has to match
+ * every real refusal and nothing benign. Exported only for
+ * tests/sidecar/unzip-refusal-strings.test.js, which pins both.
+ */
 const NAME_REFUSAL = /^(absolute path|invalid relative path|invalid characters in fileName): /;
 
 /** yauzl's callback API as a promise, with `fromBuffer`'s options pinned here. */
@@ -228,4 +234,4 @@ async function extractZipBuffer(bytes, {
   return { strategy: 'buffer', entries };
 }
 
-module.exports = { extractZipBuffer };
+module.exports = { extractZipBuffer, NAME_REFUSAL };

@@ -14,8 +14,8 @@ describe('helpers/read-if-present: readIfPresent() contract', () => {
 
   test('returns the contents of a file that exists', () => {
     const file = path.join(dir, 'present.js');
-    fs.writeFileSync(file, "require('extract-zip');\n");
-    expect(readIfPresent(file)).toBe("require('extract-zip');\n");
+    fs.writeFileSync(file, "require('yauzl');\n");
+    expect(readIfPresent(file)).toBe("require('yauzl');\n");
   });
 
   test('returns null for a file that vanished between the listing and the read', () => {

@@ -103,8 +103,11 @@ describe('F5 — an unsafe archive cannot write the refusal it is refused with (
   test('an unsafe-archive refusal cannot forge an [amicus] line, colour the terminal, or reverse the sentence', async () => {
     const { dir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     const extract = jest.fn(async () => {
-      // The shape `robustExtract` threw, with the ARCHIVE'S entry name inside it.
-      const e = new Error(`refusing to extract cached.zip: invalid relative path: ${NASTY}`);
+      // yauzl's refusal for this name, in the shape the in-memory extractor
+      // raises it (`zip-from-buffer.js :: NAME_REFUSAL`'s branch). That branch
+      // sanitizes it first; this injects it RAW, so the pin is on
+      // refuseUnsafeArchive's own sanitizer.
+      const e = new Error(`invalid relative path: ${NASTY}`);
       e.code = 'UNZIP_UNSAFE_ARCHIVE';
       throw e;
     });
@@ -179,14 +182,15 @@ describe('F5 — the sanitizer did not eat the message', () => {
   test('an ordinary refusal still reads exactly as it did before', async () => {
     const { dir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     const extract = jest.fn(async () => {
-      const e = new Error('refusing to extract cached.zip: invalid relative path: ../../evil');
+      // The same live shape as above, without the payload.
+      const e = new Error('invalid relative path: ../../evil');
       e.code = 'UNZIP_UNSAFE_ARCHIVE';
       throw e;
     });
     const res = await repair({ dir, zip: writeZip(), deps: { extract } });
     expect(res.reason).toBe(
-      `Electron artifact ${ZIP_NAME} was REFUSED: refusing to extract cached.zip: `
-      + 'invalid relative path: ../../evil. It was NOT retried and NOT removed.',
+      `Electron artifact ${ZIP_NAME} was REFUSED: invalid relative path: ../../evil. `
+      + 'It was NOT retried and NOT removed.',
     );
     expect(stderr.join('')).toContain('invalid relative path: ../../evil');
   });

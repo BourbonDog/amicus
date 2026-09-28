@@ -9,17 +9,19 @@
  *
  * `UNSAFE_PATTERNS` is not applied by any code in this file: the in-memory
  * extractor classifies its own refusals (`zip-entry-write.js :: outOfBound`,
- * `zip-from-buffer.js`'s own `NAME_REFUSAL`), and the rescue's name scan builds
- * its own (`zip-name-scan.js :: nameRefusal`). It stays exported as the single
- * source of truth those wordings are tested against
+ * `zip-from-buffer.js :: NAME_REFUSAL`), and the rescue's name scan builds
+ * its own (`zip-name-scan.js :: nameRefusal`). It stays exported as the
+ * reference those wordings are tested against
  * (tests/sidecar/unzip-refusal-strings.test.js, tests/electron-custody.test.js,
- * tests/sidecar/zip-name-scan.test.js), so an upstream yauzl reword still goes
- * red instead of silently letting a path-traversal refusal (C4) be retried.
+ * tests/sidecar/zip-name-scan.test.js), and the first of those also pins the
+ * live `NAME_REFUSAL` against real yauzl output, so an upstream yauzl reword
+ * still goes red instead of silently letting a path-traversal refusal (C4) be
+ * retried.
  *
  * HISTORY: through v4.14.1 this file also owned `robustExtract()`, which ran
  * the `extract-zip` dependency (bounded by `IDLE_MS`/`MAX_MS`) and fell back to
  * these same native strategies when it stalled or threw — the Node-24 field
- * bug the module was built for. Removed (N-06): it had no production caller
+ * bug the module was built for. Removed (D-01/N-06): it had no production caller
  * (the self-heal extracts through `zip-from-buffer.js`'s in-memory path
  * instead), so it — and the one dependency only it required — were dead
  * weight carrying amicus's one production dependency with an unfixable

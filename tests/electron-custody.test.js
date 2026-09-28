@@ -398,6 +398,18 @@ describe('extractZipBuffer — extraction with no filesystem source', () => {
     expect(treeOf(dir)).toEqual(['sub/file.txt:1']);
   });
 
+  test('a backslash TRAVERSAL name is rewritten, then refused terminally, and writes nothing outside', async () => {
+    // The other half of that rewrite: yauzl turns `..\..\evil` into `../../evil`
+    // BEFORE validating it, so the refusal is its relative-path one, and
+    // `zip-from-buffer.js :: NAME_REFUSAL` makes that terminal.
+    const dir = mkTmp();
+    const err = await extractZipBuffer(buildZip([{ name: '..\\..\\evil', body: 'x' }]), { dir }).catch((e) => e);
+
+    expect(err.code).toBe('UNZIP_UNSAFE_ARCHIVE');
+    expect(err.message).toBe('invalid relative path: ../../evil');
+    expect(fs.existsSync(path.join(dir, '..', '..', 'evil'))).toBe(false);
+  });
+
   test('an entry that escapes through a pre-planted directory symlink is REFUSED', async () => {
     // extract-zip's own out-of-bound check, kept VERBATIM and re-run per entry:
     // `realpath(destDir)` resolving outside the root is the shape a symlink an

@@ -113,6 +113,15 @@ describe('no phantom dependencies in shipped code', () => {
     expect(required.has('extract-zip')).toBe(false);
   });
 
+  it('no file under scripts/ requires extract-zip either (the shipped postinstall runs in production)', () => {
+    // package.json `files` ships scripts/postinstall.js and scripts/setup-hooks.js,
+    // and every `npm i -g amicus` runs the postinstall: an undeclared require
+    // there is the v4.5.2 failure class again, outside the three directories above.
+    const inScripts = collectExternalRequires(path.join(ROOT, 'scripts'));
+    expect(inScripts.size).toBeGreaterThan(0);
+    expect(inScripts.has('extract-zip')).toBe(false);
+  });
+
   it('tiktoken is not declared in package.json', () => {
     expect(declared.has('tiktoken')).toBe(false);
   });
