@@ -514,7 +514,12 @@ describe('deriveReliability — resolved-id grouping (v4.7 GOA-7 D10)', () => {
 describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
   function mkLedgerDir() { return fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-pr4b-')); }
 
-  /** One runStats row in the engine's shape (run-assemble.js buildRunStatsEntry). */
+  /**
+   * One runStats row in the engine's shape (run-stats-entry.js :: buildRunStatsEntry). Its
+   * `'clean'` conformance default is a convenience for the LIVE rows most fixtures here build,
+   * not the engine's default: since #244 the builder defaults `'none'` (no ask was checked), so
+   * a fixture that asserts a dead row's conformance passes `'none'` itself (T3).
+   */
   function rsRow(o) {
     return {
       model: o.model,
@@ -599,14 +604,14 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
       models: ['deepseek', 'deepseek'],
       runStats: [
         rsRow({ model: 'deepseek', conformance: 'repaired', resolvedModel: 'vendor/ds' }),
-        // pushDeadSeatRows passes NO conformance, so buildRunStatsEntry defaults 'clean'
-        rsRow({ model: 'deepseek', status: 'error' }),
+        // pushDeadSeatRows passes NO conformance, so buildRunStatsEntry defaults 'none' (#244)
+        rsRow({ model: 'deepseek', status: 'error', conformance: 'none' }),
       ],
     }));
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ resolvedModel: 'vendor/ds', conformance: 'repaired' });
     expect('resolvedModel' in rows[1]).toBe(false);
-    expect(rows[1].conformance).toBe('clean');
+    expect(rows[1].conformance).toBe('none');
   });
 
   test('T3b — leg-less row ordered FIRST: the stats anchor is the block FIRST pair group', () => {

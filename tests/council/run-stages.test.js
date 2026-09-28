@@ -1344,7 +1344,7 @@ describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)
     expect(repairRows).toHaveLength(2);                          // cap = 2 re-prompts; BOTH get a row
     expect(repairRows.map(r => r.waveId)).toEqual(['abc123-p1', 'abc123-p2']);
     expect(repairRows.every(r => r.status === 'error')).toBe(true);
-    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the '|| clean' default
+    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the builder's default ('none' since #244)
   });
 
   test('a dead seat with no retry attempted gets a primary error row from its own (only) dead leg', async () => {
@@ -3483,7 +3483,7 @@ ${
     expect(repairRows.map(r => r.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
     expect(repairRows.every(r => r.status === 'error')).toBe(true);
     expect(repairRows.every(r => r.model === 'gemini')).toBe(true);
-    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the '|| clean' default
+    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the builder's default ('none' since #244)
   });
 
   test('date-stamps the judge bundle it writes to bundle-stage2.md (spec §4.3)', async () => {

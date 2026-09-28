@@ -11,13 +11,14 @@
  * touches: gpt's Stage-1 leg dies (a dead-seat row built on the builder's default),
  * and qwen's Stage-2 judge leg dies (run-stage2-judge.js :: adjudicateJudgeLeg's
  * unusable-judge row). The living seat and judge are the controls: their rows keep
- * the value their own check produced. Four tests, one fact each, so each can be
+ * the value their own check produced. Five tests, one fact each, so each can be
  * seen failing on its own.
  */
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { runCouncil } = require('../../src/council/run');
+const { buildLedgerRows, appendRun, deriveReliability } = require('../../src/council/ledger');
 const { scriptedLaunchers, baseOptions, review, judgeOut, mkLeg, okWave } =
   require('./helpers/fake-launchers');
 
@@ -25,11 +26,12 @@ let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'conformance-none-')); });
 afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
-const deps = (launchers) => ({ launchers, appendRunFn: jest.fn(), statsFn: () => [],
+const deps = (launchers, appendRunFn = jest.fn()) => ({ launchers, appendRunFn, statsFn: () => [],
   installSignalAbortFn: () => () => {} });
 
-/** Runs the one council the three tests read; returns a (model, role) → rows lookup. */
-async function runWithDeadSeatAndDeadJudge() {
+/** Runs the one council the five tests read; returns a (model, role) → rows lookup. A caller that
+ *  passes `appendRunFn` receives the record the run hands the ledger. */
+async function runWithDeadSeatAndDeadJudge(appendRunFn) {
   const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
   try {
     const script = {
@@ -48,7 +50,7 @@ async function runWithDeadSeatAndDeadJudge() {
       'abc123-ch1': (o) => okWave([mkLeg(o.model, 'Synthesis.\n\nVERDICT: Ship it')]),
     };
     const opts = baseOptions(tmp);
-    await runCouncil(opts, deps(scriptedLaunchers(script)));
+    await runCouncil(opts, deps(scriptedLaunchers(script), appendRunFn));
     const verdict = JSON.parse(fs.readFileSync(path.join(opts.runDir, 'verdict.json'), 'utf-8'));
     return (model, role) => verdict.runStats.filter(r => r.model === model && r.role === role);
   } finally { spy.mockRestore(); }
@@ -58,6 +60,18 @@ test('a dead Stage-1 seat reads conformance none in verdict.json, not clean', as
   const rows = await runWithDeadSeatAndDeadJudge();
   expect(rows('gpt', 'seat').length).toBeGreaterThan(0);          // non-vacuity: the row exists
   expect(rows('gpt', 'seat').map(r => r.conformance)).toEqual(rows('gpt', 'seat').map(() => 'none'));
+});
+
+test('a model whose only leg died gets a none ledger row and a none count in council stats, not clean (spec §6)', async () => {
+  const appendRunFn = jest.fn();
+  await runWithDeadSeatAndDeadJudge(appendRunFn);
+  expect(appendRunFn).toHaveBeenCalledTimes(1);   // non-vacuity: the run handed the ledger its record
+  const record = appendRunFn.mock.calls[0][0];
+  appendRun(record, { dir: tmp });                 // the test's own temp dir, never the config dir
+  const ledger = buildLedgerRows(record).filter(r => r.model === 'gpt').map(r => r.conformance);
+  const stats = deriveReliability({ dir: tmp }).filter(m => m.aliases.includes('gpt')).map(m => m.conformance);
+  // One assertion over both hops, so a failure shows what each hop read.
+  expect([ledger, stats]).toEqual([['none'], [{ none: 1 }]]);
 });
 
 test('a dead Stage-2 judge reads conformance none in verdict.json, not clean', async () => {
