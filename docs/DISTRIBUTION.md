@@ -270,6 +270,11 @@ publish attempt 422'd on a 199-char description (2026-07-03); now pinned by
 `community.chocolatey.org` (checked 2026-09-28). The package wraps a global npm
 install (`npm install -g amicus@<version>`) behind a `nodejs-lts` dependency,
 rather than bundling a Node binary — Chocolatey installs the dependency first.
+That dependency is a floor (`>=22.12.0`, from `package.json`'s `engines`),
+not a cap, so which LTS major Chocolatey installs moves with the `nodejs-lts`
+feed (22.x and 24.x are both on it, checked 2026-09-28). CI tests Node 22 and
+24 (`.github/workflows/ci.yml`); a new LTS major can reach Chocolatey users
+before CI tests it.
 
 **Repo home:** `packaging/chocolatey/amicus.nuspec` and
 `packaging/chocolatey/tools/chocolateyInstall.ps1` /

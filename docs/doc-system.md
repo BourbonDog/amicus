@@ -60,6 +60,8 @@ reference-style links and HTML `<img src>` attributes are not:
 - External URLs (`https://...`) are skipped
 - Anchor-only links (`#section`) are skipped
 - Broken links cause `--check` to exit 1
+- Targets resolve against the repo tree, not the npm tarball: a link to a repo file that
+  `package.json`'s `files` does not ship still passes, though it is dead in an installed copy
 
 ## Plans Index
 
