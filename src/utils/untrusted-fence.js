@@ -139,7 +139,7 @@ function defangOutboundFenceTags(text) {
 // `scripts/generate-docs-helpers.js :: extractExports`, which renders EVERY
 // export as `name()` and keeps only the first five. Ordering conceals a
 // constant behind that cap; MEASURED here, it cannot, because this module
-// exports three names and the cap never fires. So CLAUDE.md's Key Exports cell
+// exports three names and the cap never fires. So docs/architecture-map.md's Key Exports cell
 // reads `OUTBOUND_FENCE_TAGS()` for what is an array — a known-defect instance
 // of the generator bug, not a claim this module makes, and the second one below
 // the workaround's floor after `utils/text-sanitize.js`. It goes away with the

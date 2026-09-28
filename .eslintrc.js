@@ -78,8 +78,8 @@ module.exports = {
         // transpiler, and are written in ES5 IIFE style throughout (159 `var`
         // declarations). Converting them is a large untested rewrite of a GUI
         // that has never been linted — out of scope for a patch release (owner
-        // ruling on ENV-5: config + errors only). Tallied and deferred to v4.5;
-        // see BACKLOG.md.
+        // ruling on ENV-5: config + errors only). CLOSED, not deferred (v4.8
+        // spec R17 supersedes the 2026-07-27 BACKLOG entry this used to cite).
         // Left 'off' rather than 'warn' on purpose: lint-staged runs
         // `eslint --fix`, which auto-fixes warnings too, so 'warn' would
         // silently perform at commit time exactly the var→let rewrite this
@@ -109,8 +109,8 @@ module.exports = {
       // issue 214 allowlist for the `openrouter/` prefix-stripping ban above.
       // Each entry was READ before being listed, not grandfathered wholesale:
       //
-      //  - curated-models.js: OWNS the operation. :159 is toCanonicalDefault
-      //    itself (the primitive the ban points callers away from); :201 is
+      //  - curated-models.js: OWNS the operation. :129 is stripGatewayPrefix
+      //    itself (the primitive the ban points callers away from); :173 is
       //    vendorOf. This is the one file that legitimately derives an
       //    executable id by stripping.
       //  - fallback-chains.js :36 (vendorOf), model-tiers.js :83

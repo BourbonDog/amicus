@@ -284,8 +284,8 @@ function noteSessionVersion(serverVersion, deps = {}) {
 }
 
 // Ordered so the FUNCTIONS this module is used for come first: the generated
-// `Key Exports` cell in CLAUDE.md keeps five names and renders each as `name()`,
-// so a constant in that window reads as a function it is not (round-2 B8).
+// `Key Exports` cell — docs/architecture-map.md now, not CLAUDE.md (46d2694a)
+// — keeps five names and renders each as `name()` (round-2 B8).
 module.exports = {
   noteSessionVersion,
   currentEngineSkew,
