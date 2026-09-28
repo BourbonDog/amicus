@@ -7,7 +7,9 @@
  * `path.txt` — the second asked whether `dist/` held THIS HOST'S default exe —
  * and a package cross-installed through `npm_config_platform` holds a different
  * basename, so a failed promote destroyed a working tree (A1). Two copies of a
- * rule are free to drift; this module exists so there is one.
+ * rule are free to drift; this module exists so there is one. Since D-03 the
+ * CONTAINMENT bound is shared too (`containedExe`): a `path.txt` name may not
+ * climb out of the directory it is joined onto, for the spawn or for the delete.
  *
  * WHICH VALUE `promoteDist`'S GUARD MAY READ, since getting this wrong is how
  * the fix would have been as blind as the defect:
@@ -71,6 +73,28 @@ function heldExeRel(raw, platform) {
 }
 
 /**
+ * `rel` joined onto `base`, or null when that join lands OUTSIDE `base` (D-03, B-SEC-6).
+ *
+ * THE ONE CONTAINMENT BOUND for a `path.txt` name, used by both callers of this module:
+ * `distHeldExe`'s arm 2 (what a promote may DELETE) and `resolveElectronBinary` (what
+ * amicus SPAWNS). Until D-03 only the first had it, so `../SIBLING` could not vouch for a
+ * delete but could name the spawn. The test is `zip-entry-write.js :: writeSymlink`'s plus
+ * the `''` arm (`.` or `a/..` names `base` itself, a directory). The `path.sep` is
+ * load-bearing (DISTHOLDSDOTPREFIX: `..electron.exe` is a legal filename inside `base`).
+ * LEXICAL, not a realpath: a symlink or junction inside `base` is not seen through, and
+ * whoever can plant one there can write the exe itself.
+ * @param {string} base  the directory the name is joined onto (`dist/`, or the override)
+ * @param {string} rel   the name `heldExeRel` returned
+ * @returns {string|null} the joined path, or null when it escapes `base`
+ */
+function containedExe(base, rel) {
+  const full = path.join(base, rel);
+  const inside = path.relative(base, full);
+  if (inside === '' || inside === '..' || inside.startsWith(`..${path.sep}`) || path.isAbsolute(inside)) { return null; }
+  return full;
+}
+
+/**
  * WHICH executable `distDir` holds — under either name it could resolve
  * through — or `null` for a tree that is not an install under any of them.
  *
@@ -91,7 +115,8 @@ function heldExeRel(raw, platform) {
  *   CONTAINED — a `path.txt` of `..`, `.`, `''` or `../SIBLING` joins to
  *   something that EXISTS outside `dist/` (all MEASURED true), which would
  *   refuse every promote forever while claiming `dist/` held an exe it never
- *   held. The predicate is `zip-entry-write.js :: writeSymlink`'s, verbatim —
+ *   held. The predicate is `containedExe` (shared with `resolveElectronBinary`
+ *   since D-03), which is `zip-entry-write.js :: writeSymlink`'s, verbatim —
  *   including the `path.sep`, whose absence MEASURABLY fails OPEN: a legal
  *   `dist/..electron.exe` reads as escaping and the tree is deleted.
  *   A FILE, NOT A DIRECTORY — every natural truncation of the darwin name
@@ -116,10 +141,9 @@ function distHeldExe({ distDir, raw, platform, fs }) {
   try { if (fs.existsSync(path.join(distDir, fallback))) { return fallback; } } catch { return fallback; }
   const held = heldExeRel(raw, platform);
   if (held === fallback) { return null; }
-  // ARM 2 — the name path.txt gives, contained and required to be a file.
-  const full = path.join(distDir, held);
-  const inside = path.relative(distDir, full);
-  if (inside === '' || inside === '..' || inside.startsWith(`..${path.sep}`) || path.isAbsolute(inside)) { return null; }
+  // ARM 2 — the name path.txt gives, contained (`containedExe`) and required to be a file.
+  const full = containedExe(distDir, held);
+  if (!full) { return null; }
   try { return fs.statSync(full).isFile() ? held : null; } catch { return null; }
 }
 
@@ -128,4 +152,4 @@ function writePathTxt({ electronDir, platform, fs }) {
   fs.writeFileSync(path.join(electronDir, 'path.txt'), platformExe(platform));
 }
 
-module.exports = { platformExe, writePathTxt, heldExeRel, distHeldExe };
+module.exports = { platformExe, writePathTxt, heldExeRel, distHeldExe, containedExe };

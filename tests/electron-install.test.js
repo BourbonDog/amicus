@@ -124,6 +124,58 @@ describe('resolveElectronBinary and the promote guard read path.txt by ONE rule 
   }
 });
 
+describe('resolveElectronBinary refuses a path.txt name that climbs out of its directory (D-03, B-SEC-6)', () => {
+  // B-SEC-6: the resolver joined path.txt's name onto dist/ UNCHECKED and
+  // isElectronUsable was a bare existsSync, so a name like ../SIBLING made ANY
+  // existing file read as the installed Electron: repairElectron never ran and
+  // that file was what the GUI spawned. `electron-exe-rel.js :: containedExe` is
+  // now the ONE bound for the spawn (here) and for the promote guard's delete
+  // (`distHeldExe`). Every target below EXISTS, which is exactly what made it
+  // "usable" before.
+  //
+  // NAMED MUTANT
+  //   RESOLVERUNBOUNDED electron-install.js :: resolveElectronBinary -- return
+  //     `path.join(base, heldExeRel(raw, platform))` instead of `containedExe(...)`.
+  //     RED: every "is refused, never resolved" row below.
+  const ESCAPES = [...new Set(['..', '.', '../SIBLING', 'a/../../SIBLING', path.join('..', 'SIBLING')])];
+
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    for (const raw of ESCAPES) {
+      test(`${platform}: path.txt ${JSON.stringify(raw)} is refused, never resolved (RESOLVERUNBOUNDED)`, () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-escape-'));
+        fs.mkdirSync(path.join(dir, 'dist'), { recursive: true });
+        fs.mkdirSync(path.join(dir, 'OVR'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'SIBLING'), 'NOT-ELECTRON');
+        fs.writeFileSync(path.join(dir, 'path.txt'), raw);
+        const override = { ELECTRON_OVERRIDE_DIST_PATH: path.join(dir, 'OVR') };
+
+        expect(ei.resolveElectronBinary({ electronDir: dir, env: {}, platform })).toBeNull();
+        expect(ei.isElectronUsable({ electronDir: dir, env: {}, platform })).toBe(false);
+        expect(ei.resolveElectronBinary({ electronDir: dir, env: override, platform })).toBeNull();
+        expect(ei.isElectronUsable({ electronDir: dir, env: override, platform })).toBe(false);
+
+        fs.rmSync(dir, { recursive: true, force: true });
+      });
+    }
+  }
+
+  test('a name that merely BEGINS with .. is still inside dist/ (DISTHOLDSDOTPREFIX control)', () => {
+    // `..electron.exe` is a legal filename INSIDE dist/ (it creates fine on NTFS).
+    // A containment test written `inside.startsWith('..')`, without the path.sep,
+    // would refuse it. This row is GREEN before and after D-03.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-dotprefix-'));
+    fs.mkdirSync(path.join(dir, 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'dist', '..electron.exe'), 'MZ');
+    fs.writeFileSync(path.join(dir, 'path.txt'), '..electron.exe');
+
+    expect(ei.resolveElectronBinary({ electronDir: dir, env: {}, platform: 'win32' }))
+      .toBe(path.join(dir, 'dist', '..electron.exe'));
+    expect(ei.isElectronUsable({ electronDir: dir, env: {}, platform: 'win32' })).toBe(true);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe('cachedZip (#53)', () => {
   test('locates a fixtured electron-v<ver>-<platform>-<arch>.zip under a cache root', () => {
     const cacheRoot = mkTmp('amicus-electron-cache-');

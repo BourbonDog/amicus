@@ -17,7 +17,7 @@
  * AT THE SIZE GATE, so pieces live next door: `./electron-custody` reads the
  * artifact into memory once, `./zip-from-buffer` extracts what was read,
  * `./electron-exe-rel` holds the ONE `path.txt` rule (`platformExe`/`heldExeRel`/
- * `writePathTxt`/`distHeldExe`), shared with `promoteDist`'s retirement guard since
+ * `writePathTxt`/`distHeldExe`/`containedExe`), shared with `promoteDist`'s retirement guard since
  * v4.9.7 (A1); `./electron-layout` holds `promoteDist`/`extractBytesToDist`
  * (`platformExe` re-exported here for `ei.platformExe`), `./electron-refuse`
  * holds the refusal messages, `./electron-repair-cache` the whole cached-artifact
@@ -34,7 +34,7 @@ const { cachedZip } = require('./electron-cache');
 const { isSafeArtifactName } = require('./electron-custody');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 const { acquireRepairLock } = require('./electron-lock');
-const { platformExe, heldExeRel } = require('./electron-exe-rel');
+const { platformExe, heldExeRel, containedExe } = require('./electron-exe-rel');
 const { controlledProvision } = require('./electron-provision');
 const { repairFromCache } = require('./electron-repair-cache');
 const { isUnsafeArchive, refuseUnsafeArchive } = require('./electron-refuse');
@@ -60,17 +60,17 @@ function defaultElectronDir() {
  * Resolve the on-disk electron exe path from the package layout.
  * Mirrors ELECTRON_OVERRIDE_DIST_PATH semantics (#59): when set, the exe is
  * <override>/<exeBasename>; otherwise it is <electronDir>/dist/<exeBasename>.
- * @returns {string|null} resolved exe path, or null if path.txt is unreadable.
+ * D-03 (B-SEC-6): the path.txt name must stay INSIDE that directory, the bound the
+ * promote guard already applied (electron-exe-rel.js :: containedExe). A name that
+ * climbs out (`..`, `.`, `../SIBLING`) is REFUSED: null, so `isElectronUsable` is
+ * false and the repair's promote rewrites path.txt (electron-layout.js :: promoteDist).
+ * @returns {string|null} resolved exe path, or null when path.txt's name escapes it.
  */
 function resolveElectronBinary({ electronDir = defaultElectronDir(), env = process.env, platform = process.platform, fs = fsDefault } = {}) {
   let raw = null;
   try { raw = fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf-8'); } catch { /* absent or unreadable */ }
-  const exeRel = heldExeRel(raw, platform);   // the ONE rule (electron-exe-rel.js)
-  const override = env.ELECTRON_OVERRIDE_DIST_PATH;
-  if (override) {
-    return path.join(override, exeRel);
-  }
-  return path.join(electronDir, 'dist', exeRel);
+  const base = env.ELECTRON_OVERRIDE_DIST_PATH || path.join(electronDir, 'dist');
+  return containedExe(base, heldExeRel(raw, platform));   // the ONE rule and its ONE bound (electron-exe-rel.js)
 }
 
 /**
@@ -79,6 +79,7 @@ function resolveElectronBinary({ electronDir = defaultElectronDir(), env = proce
  */
 function isElectronUsable({ electronDir = defaultElectronDir(), env = process.env, platform = process.platform, fs = fsDefault } = {}) {
   const exe = resolveElectronBinary({ electronDir, env, platform, fs });
+  if (!exe) { return false; }   // D-03: a refused path.txt is not an install; never hand null to an injected fs
   try {
     return fs.existsSync(exe);
   } catch {

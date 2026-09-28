@@ -259,6 +259,42 @@ describe('#58 ensureElectron drives the REAL repair on first GUI use', () => {
     expect(repair).not.toHaveBeenCalled();
   });
 
+  test('a TAMPERED path.txt that climbs out of dist/ is never launched: the real repair rewrites it (D-03)', async () => {
+    // B-SEC-6, end to end. A GOOD dist/electron.exe sits behind a path.txt that
+    // names a SIBLING file which exists, so until D-03 isElectronUsable was TRUE,
+    // repairElectron never ran, and the sibling was the path handed to the spawn.
+    const dir = fakeElectronDir({ withExe: true });
+    fs.writeFileSync(path.join(dir, 'path.txt'), '../SIBLING');
+    fs.writeFileSync(path.join(dir, 'SIBLING'), 'NOT-ELECTRON');
+    const zip = path.join(mkTmp('amicus-cz-tamper-'), 'electron-v43.1.1-win32-x64.zip');
+    fs.writeFileSync(zip, ZIP_BODY);
+    const extract = jest.fn(async (_zip, opts) => {
+      fs.writeFileSync(path.join(opts.dir, WIN_EXE), 'MZextracted');
+    });
+    const lines = [];
+
+    const result = await ee.ensureElectron({
+      deps: {
+        isElectronUsable: () => ei.isElectronUsable({ electronDir: dir, env: {}, platform: 'win32' }),
+        resolveElectronBinary: () => ei.resolveElectronBinary({ electronDir: dir, env: {}, platform: 'win32' }),
+        repairElectron: (opts) => ei.repairElectron({
+          ...opts,
+          electronDir: dir,
+          platform: 'win32',
+          version: '43.1.1',
+          arch: 'x64',
+          deps: { ...SELF_ANCHOR_OFF, cachedZip: () => zip, extract, spawn: jest.fn(), ...noopLock() },
+        }),
+        logProgress: (m) => lines.push(String(m)),
+      },
+    });
+
+    expect(result).toEqual({ ok: true, path: path.join(dir, 'dist', WIN_EXE) });
+    expect(fs.readFileSync(path.join(dir, 'path.txt'), 'utf8')).toBe(WIN_EXE);
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync(path.join(dir, 'SIBLING'), 'utf8')).toBe('NOT-ELECTRON');
+  });
+
   test('deferred real repair surfaces ok:false with a doctor --fix pointer', async () => {
     const dir = fakeElectronDir({ withExe: false });
     const result = await ee.ensureElectron({
