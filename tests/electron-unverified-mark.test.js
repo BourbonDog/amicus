@@ -264,12 +264,16 @@ describe('A2/B3 — the mark is READ, not merely written (MARKUNREAD)', () => {
   // both routes but nothing in the changed src/ or scripts/ reads it — it is a
   // write-only field", while docs/troubleshooting.md said the outcome "is marked
   // `unverified`". A flag no code and no human ever sees establishes no
-  // property. There are three readers now, one per surface the user meets.
+  // property. There are four readers now: install time, launch time, and both of
+  // doctor --fix's Electron checks (the interactive one since R-B3's M3).
   //
   // MUTANT MARKUNREAD: delete any one of the three consumers below (the
   // `warnIfUnverified` call in scripts/postinstall.js, the `result.unverified`
   // block in electron-ensure.js, or the `unverified` tally in
   // doctor-electron-mcp-check.js). RED: the matching test here.
+  // NAMED MUTANT INTERACTIVEMARKUNREAD doctor-electron-mcp-check.js ::
+  //   evaluateElectronInteractive -- ignore `res.unverified` (the fourth reader).
+  //   RED: the last test here.
 
   test('INSTALL TIME: postinstall says so on a successful but unverified repair', async () => {
     // eslint-disable-next-line global-require
@@ -343,6 +347,23 @@ describe('A2/B3 — the mark is READ, not merely written (MARKUNREAD)', () => {
 
     expect(out.fixed).toBe(true);
     expect(`${out.message} ${out.fixDetail}`).toMatch(/UNVERIFIED/);
+  });
+
+  test("REPORT TIME: doctor --fix's interactive check names an unverified self-heal too (INTERACTIVEMARKUNREAD)", async () => {
+    // Owner ruling Q2: an artifact the hatch lets through is "loudly marked unverified",
+    // and docs/troubleshooting.md says `amicus doctor --fix` names it in its self-heal line.
+    // eslint-disable-next-line global-require
+    const { evaluateElectronInteractive } = require('../src/utils/doctor-electron-mcp-check');
+    const run = (res) => evaluateElectronInteractive(
+      { getElectronPath: () => null, fix: true, repairElectron: async () => res }, { fixTimeoutMs: 1000 },
+    );
+    const marked = await run({ repaired: true, unverified: true });
+    expect(marked).toMatchObject({ status: 'ok', fixed: true });
+    expect(marked.message).toMatch(/^installed \(self-healed, UNVERIFIED \(no published sha256/);
+    expect(marked.fixDetail).toMatch(/, UNVERIFIED \(no published sha256/);
+    const clean = await run({ repaired: true });
+    expect(clean.message).toBe('installed (self-healed)');   // a VERIFIED repair says nothing extra
+    expect(clean.fixDetail).toBe('provisioned the Electron binary in place');
   });
 });
 

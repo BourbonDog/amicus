@@ -20,6 +20,10 @@ const HINTS = require('./remediation-hints');
 
 const plural = (n, one, many) => (n === 1 ? one : many);
 
+/** Why a self-heal is UNVERIFIED, in the one set of words both Electron checks print. */
+const UNVERIFIED_WHY = '(no published sha256 covered the artifact, or its sha256 contradicted'
+  + ' the published one and the hatch accepted it)';
+
 /** One-line detail for a broken copy, distinguishing the two states (#76). */
 const describeBroken = (i) => (i.state === 'binary-missing'
   ? `${i.pkgDir} (binary missing; electron dir: ${i.electronDir})`
@@ -142,9 +146,7 @@ async function evaluateElectronMcp(d) {
     // NOTHING. A repair that no published digest could vouch for is exactly the
     // thing a `doctor --fix` report exists to say out loud.
     const unverified = results.filter((r) => r.repaired && r.unverified).length;
-    const mark = unverified > 0
-      ? `, ${unverified} UNVERIFIED (no published sha256 covered the artifact, or its sha256`
-        + ' contradicted the published one and the hatch accepted it)' : '';
+    const mark = unverified > 0 ? `, ${unverified} UNVERIFIED ${UNVERIFIED_WHY}` : '';
     return {
       ...after,
       message: `${after.message} (self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')}${mark})`,
@@ -197,9 +199,11 @@ async function evaluateElectronInteractive(d, { fixTimeoutMs }) {
     }
     res = res || {};
     if (res.repaired) {
+      // M3 (owner ruling Q2, "loudly marked unverified"): the mark the MCP check prints, here too.
+      const mark = res.unverified ? `, UNVERIFIED ${UNVERIFIED_WHY}` : '';
       return {
-        id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed (self-healed)', hint: null,
-        fixed: true, fixDetail: 'provisioned the Electron binary in place',
+        id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: `installed (self-healed${mark})`, hint: null,
+        fixed: true, fixDetail: `provisioned the Electron binary in place${mark}`,
       };
     }
     const why = res.reason ? ` — ${res.reason}` : '';

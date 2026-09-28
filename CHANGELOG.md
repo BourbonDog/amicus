@@ -34,6 +34,14 @@ All notable changes to Amicus are documented here. Format follows
   Electron writes such a name (Electron's own installer and amicus each write one of three fixed
   names), so this closes a tampered or corrupted file, not an acquisition path.
 
+### Fixed
+
+- **`amicus doctor --fix`'s interactive Electron check now says when its self-heal is
+  unverified.** It reported `installed (self-healed)` whatever the repair returned, while the
+  MCP-launch check already added an `UNVERIFIED` mark. Both now print the same mark, so an artifact
+  no published sha256 covered, or one `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` let through, is named
+  as unverified in the self-heal line, as `docs/troubleshooting.md` says.
+
 ## [4.14.1] - 2026-09-28
 
 ### Added
