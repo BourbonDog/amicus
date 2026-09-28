@@ -96,4 +96,4 @@ Hook order:
 |---------|---------|
 | "Marker not found" error | Ensure `<!-- AUTO:name -->` and `<!-- /AUTO:name -->` exist in CLAUDE.md |
 | Stale markers after code change | Run `node scripts/generate-docs.js` manually |
-| Cross-link validation failure | Fix the broken link in CLAUDE.md or create the missing file |
+| Cross-link validation failure | Fix the broken link in the file named at the start of the error line (CLAUDE.md, README.md or a top-level `docs/*.md` file), or create the missing file |

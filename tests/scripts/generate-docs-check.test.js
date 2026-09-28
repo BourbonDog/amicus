@@ -23,6 +23,7 @@ const {
   checkMarkersAreCurrent,
   validateCrossLinks,
   collectCrossLinkTargets,
+  collectCrossLinkErrors,
   TREE_DIRS,
 } = require('../../scripts/generate-docs');
 
@@ -70,7 +71,7 @@ describe('generated-doc marker freshness (F-3)', () => {
     expect(targets[1]).toBe('README.md');
     const docs = targets.slice(2);
     for (const rel of docs) {
-      expect(rel).toMatch(/^docs\/[^/]+\.md$/); // '/'-separated on every OS
+      expect(rel).toMatch(/^docs\/[^/\\]+\.md$/); // '/'-separated on every OS
     }
     expect(docs).toEqual([...docs].sort());
     expect(docs).toContain('docs/usage.md');
@@ -78,15 +79,8 @@ describe('generated-doc marker freshness (F-3)', () => {
   });
 
   it('README.md and docs/*.md cross-links all resolve', () => {
-    const errors = [];
-    for (const rel of collectCrossLinkTargets(ROOT)) {
-      if (rel === 'CLAUDE.md') { continue; } // covered by the test above
-      const abs = path.join(ROOT, rel);
-      const content = fs.readFileSync(abs, 'utf-8');
-      for (const err of validateCrossLinks(content, path.dirname(abs))) {
-        errors.push(`${rel}: ${err}`);
-      }
-    }
+    const errors = collectCrossLinkErrors(ROOT)
+      .filter((err) => !err.startsWith('CLAUDE.md: ')); // covered by the test above
     if (errors.length > 0) {
       throw new Error(
         `Broken cross-link(s):\n${errors.join('\n')}\nRun \`${FIX_COMMAND}\` and fix any remaining broken links by hand.`,

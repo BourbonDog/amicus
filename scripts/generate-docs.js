@@ -217,6 +217,31 @@ function collectCrossLinkTargets(rootDir) {
   return ['CLAUDE.md', 'README.md', ...docFiles];
 }
 
+/**
+ * Validate the markdown cross-links of every collectCrossLinkTargets() file, resolving each
+ * file's links against its own directory (so a docs/*.md link resolves against docs/). Throws
+ * rather than exiting, so tests/scripts/generate-docs-check.test.js can call it in-process.
+ * @param {string} rootDir - Project root
+ * @returns {string[]} Broken-link errors, each prefixed with its file's repo-relative path
+ * @throws {Error} `Cannot read <rel>` if a target file cannot be read
+ */
+function collectCrossLinkErrors(rootDir) {
+  const errors = [];
+  for (const rel of collectCrossLinkTargets(rootDir)) {
+    let content;
+    try {
+      content = fs.readFileSync(path.join(rootDir, rel), 'utf-8');
+    } catch {
+      throw new Error(`Cannot read ${rel}`);
+    }
+    const ownDir = path.dirname(path.join(rootDir, rel));
+    for (const err of validateCrossLinks(content, ownDir)) {
+      errors.push(`${rel}: ${err}`);
+    }
+  }
+  return errors;
+}
+
 /** Check mode: validate markers in every target doc and cross-links, exit 1 if stale. */
 function runCheckMode(rootDir, generated) {
   const grouped = groupMarkersByTarget(generated, MARKER_TARGETS);
@@ -235,19 +260,12 @@ function runCheckMode(rootDir, generated) {
     }
   }
 
-  const linkErrors = [];
-  for (const rel of collectCrossLinkTargets(rootDir)) {
-    let content;
-    try {
-      content = fs.readFileSync(path.join(rootDir, rel), 'utf-8');
-    } catch {
-      console.error(`Cannot read ${rel}`);
-      process.exit(1);
-    }
-    const ownDir = path.dirname(path.join(rootDir, rel));
-    for (const err of validateCrossLinks(content, ownDir)) {
-      linkErrors.push(`${rel}: ${err}`);
-    }
+  let linkErrors;
+  try {
+    linkErrors = collectCrossLinkErrors(rootDir);
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
   }
 
   if (stale.length > 0) {
@@ -347,6 +365,7 @@ module.exports = {
   groupMarkersByTarget,
   applyGeneratedMarkers,
   collectCrossLinkTargets,
+  collectCrossLinkErrors,
   MARKER_TARGETS,
   extractJSDocDescription,
   extractExports,
