@@ -42,9 +42,22 @@ $packageVersion = $env:chocolateyPackageVersion -replace '^(\d+\.\d+\.\d+)\.\d+$
 # The guard fixes only the registration half. This package currently supports same-account
 # elevation only: npm's global prefix is per-account (Node's bundled npmrc sets
 # prefix=${APPDATA}\npm), so under a different admin account or SYSTEM, amicus and its
-# amicus/am shims land in that account's %APPDATA%\npm, off the interactive user's PATH --
-# and the install still exits 0. A machine-wide prefix is the alternative; choosing it is an
-# owner decision (B-REL-5), deliberately not made in this draft.
+# amicus/am shims land in that account's %APPDATA%\npm, off the interactive user's PATH.
+# SYSTEM (SID S-1-5-18) is never the interactive user, so the check below refuses it,
+# non-zero. A different admin account cannot be told apart from the intended user from inside
+# this script, so that case still installs and exits 0. A machine-wide prefix is the
+# alternative; choosing it is an owner decision (B-REL-5), deliberately not made in this draft.
+#
+# Get-AmicusInstallSid is defined only when no function of that name exists yet, so the test
+# harness can stand in a SYSTEM identity without running as SYSTEM; Chocolatey defines none.
+if (-not (Get-Command Get-AmicusInstallSid -CommandType Function -ErrorAction SilentlyContinue)) {
+  function Get-AmicusInstallSid { [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value }
+}
+if ((Get-AmicusInstallSid) -eq 'S-1-5-18') {
+  throw ("Refusing to install $packageName as SYSTEM: npm's global prefix is per-account, so " +
+    "amicus would land in SYSTEM's %APPDATA%\npm, off every user's PATH. Run choco install " +
+    'from an elevated prompt of the account that will use amicus.')
+}
 try {
   # nodejs-lts is a nuspec <dependency>, so Chocolatey installs it first -- but PATH may not
   # be refreshed in THIS elevated session yet. Update-SessionEnvironment (aliased `refreshenv`)

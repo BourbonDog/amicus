@@ -67,7 +67,8 @@ This package installs the `amicus` npm package globally (`npm install -g amicus`
 Node.js LTS dependency (`nodejs-lts`). It currently supports same-account elevation only:
 npm's global prefix is per-account (Node's bundled npmrc sets `prefix=${APPDATA}\npm`), so
 under a different admin account or SYSTEM, amicus and its `amicus`/`am` shims land in that
-account's `%APPDATA%\npm`, off the interactive user's PATH. It does **not** run amicus's
+account's `%APPDATA%\npm`, off the interactive user's PATH; the install refuses to run as
+SYSTEM, which is never the interactive user. It does **not** run amicus's
 postinstall registration during `choco install` — after installing, open an ordinary
 (non-elevated) prompt, check that `where.exe amicus` finds it, and run `amicus init`,
 `amicus setup`, and `amicus doctor`.

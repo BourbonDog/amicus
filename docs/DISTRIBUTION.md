@@ -292,7 +292,10 @@ registration half. The package currently supports same-account elevation
 only: npm's global prefix is per-account (Node's bundled npmrc sets
 `prefix=${APPDATA}\npm`), so under a different admin account or SYSTEM,
 amicus and its `amicus`/`am` shims land in that account's `%APPDATA%\npm`,
-off the interactive user's PATH — and the install still exits 0. A
+off the interactive user's PATH. `chocolateyInstall.ps1` refuses to run as
+SYSTEM (SID `S-1-5-18`, which is never the interactive user) and exits
+non-zero. A different admin account cannot be told apart from the intended
+user from inside the install, so that case still installs and exits 0. A
 machine-wide prefix is the alternative; choosing it is an owner decision
 (B-REL-5), not part of this draft.
 
