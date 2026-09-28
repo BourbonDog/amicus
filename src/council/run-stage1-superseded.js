@@ -7,16 +7,21 @@
 // because the dead-seat half left behind needs both, so they ride in as parameters. And it
 // RETURNS its rows rather than pushing onto the caller's `extraRows`: an extracted helper that
 // mutates its caller's accumulator is the shape this release ruled out.
-// Its two requires are the two the moved block already had — ./run-assemble and
+// Its first two requires are the two the moved block already had — ./run-assemble and
 // ../utils/degrade — so the split added no import edge the tree did not already carry.
 // MEASURED, not argued: their eager require closure is 13 first-party modules and contains
 // neither run-stages.js nor run-stage1-rows.js nor this file, so the parent-child cycle
 // run-stage1-rows.js's own header documents eliminating stays eliminated on this path too.
+// D-06 added a third, ./run-retry-gate (below). Its closure is ../utils/output-length and three
+// more src/utils modules, and nothing under src/utils requires council/, so that still holds.
 const { buildRunStatsEntry } = require('./run-assemble');
 // v4.8 T-A5: the ONE voice, for the one thing this file can now detect and refuse (below).
 // ../utils/degrade requires nothing at all, so this is a leaf import and the cycle the
 // header above documents eliminating stays eliminated.
 const { formatDegrade } = require('../utils/degrade');
+// D-06: the ONE spelling of the death class the retry holds back, for the held-leg exception in
+// `supersededRows` below. A held leg is never relaunched, so it is not a split.
+const { isOutputLengthLoss } = require('./run-retry-gate');
 // The announcement must not be defeatable by the caller's sink, so anything that cannot carry it
 // falls back to the same sentence on stderr — resolved inside `supersededRows` (see `sink` there),
 // never by a parameter default, which substitutes only for `undefined`.
@@ -83,6 +88,12 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
   // it just cannot reach this join.) Break either fact and the skipped twin takes its own
   // first leg as a primary row AND gets a superseded row for it: one billed leg counted
   // twice.
+  // ⚠️ D-06 is the ONE sanctioned exception to (2). A leg `run-retry-gate.js :: isOutputLengthLoss`
+  // names rides a zero-model `held` unit of its own (`run-retry-group.js :: groupStage1Losses`)
+  // and is never relaunched, so an UNBOUND held twin IS skipped while its sibling is retried. That
+  // is not a split: no retry replaced the held leg, so no superseded row was ever its due. The loop
+  // below decides its row exactly as for any skipped leg (the refusal still turns on
+  // `willTakeItsOwnLeg`), but never announces a held leg: there is no disagreement to report.
   // ⚠️ v4.8 T-A5 — and the paragraph above is now the DERIVATION, not the safety. Both facts
   // exist to make ONE statement true: no first leg is SKIPPED while its alias key is superseded.
   // `retry.skippedDeadLegs` states that directly, in leg OBJECTS — the very members of
@@ -125,8 +136,9 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
   // hands that row the HEALED twin's first leg, which already carries a superseded row: one leg,
   // two rows. Probed at the push site — `finalLeg` is that leg (not null), `borrowed` null, spare
   // pool empty. A borrow needs `attemptedSeats.has(join)` TRUE: the negation of this shape.
-  // It is announced either way, because a silently corrected number is the failure mode this join
-  // is watched for; a THROW would be wrong here, aborting a paid-for council over a row miscount.
+  // It is announced either way (a held leg aside, per the D-06 exception above: nothing about it
+  // was corrected), because a silently corrected number is the failure mode this join is watched
+  // for; a THROW would be wrong here, aborting a paid-for council over a row miscount.
   // Channel `internal` — the runtime disagreed with itself, which is not a seat loss. All FOUR
   // readers of a note's `data.seat` (verdict.js, workspace-seats.js, live-dead-seats.js,
   // workspace/seat-space.js) gate on dead-leg/dead-wave/seat-unbound first, so it reaches none, and it cannot
@@ -146,7 +158,11 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
   };
   for (const dead of deadLegs0) {
     if (!supersededKeys.has(keyOf(dead))) { continue; }
-    if (skippedLegs.has(dead) && willTakeItsOwnLeg(dead)) { refuseSupersede(dead); continue; }
+    if (skippedLegs.has(dead) && willTakeItsOwnLeg(dead)) {
+      // D-06: a HELD leg is refused its row like any skipped leg, but silently: it is not a split.
+      if (!isOutputLengthLoss(dead)) { refuseSupersede(dead); }
+      continue;
+    }
     rows.push(buildRunStatsEntry({ leg: dead, model: dead.modelInput || dead.model,
       role: 'superseded', wasChair: false }));
   }
