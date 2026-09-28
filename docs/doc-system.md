@@ -50,9 +50,11 @@ Each marker is routed to the document that owns it by the `MARKER_TARGETS` table
 
 ## Cross-Link Validation
 
-When running `--check` mode, the script validates every markdown link in CLAUDE.md:
+When running `--check` mode, the script validates every markdown link in CLAUDE.md, README.md and
+each top-level `docs/*.md` file (the same set `package.json`'s `files` field ships):
 
-- `[text](path)` links are resolved relative to the project root
+- A link's target is resolved relative to the directory of the file that contains it (so a
+  `docs/*.md` file's own-directory-relative links resolve against `docs/`, not the project root)
 - External URLs (`https://...`) are skipped
 - Anchor-only links (`#section`) are skipped
 - Broken links cause `--check` to exit 1
@@ -63,8 +65,9 @@ No plans index is generated **today**. `buildPlansIndex()` in `scripts/generate-
 `docs/plans/` and `docs/archive/plans/`, but neither directory exists in this repo, and
 `runWriteMode()` writes `docs/plans/index.md` only when `docs/plans/` already exists — so the write
 never fires. Note that guard is a runtime `fs.existsSync` check, not a disabled feature: creating
-`docs/plans/` would silently reactivate it, emitting a bare list of `- [name](path)` links without
-the per-plan first heading or date the old text here promised. Plans actually live in
+`docs/plans/` would silently reactivate it, emitting a bare list of hyphen-prefixed markdown links
+(plan title, then a parenthesized path) without the per-plan first heading or date the old text
+here promised. Plans actually live in
 `docs/superpowers/plans/`, which are working documents pruned at each release cut — specs in `docs/superpowers/specs/` are the permanent record.
 
 ## Commands

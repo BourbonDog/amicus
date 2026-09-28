@@ -196,6 +196,27 @@ function main() {
   runWriteMode(rootDir, generated, plans);
 }
 
+/**
+ * Files whose markdown cross-links are validated in --check mode: CLAUDE.md, README.md, and every
+ * top-level docs/*.md (mirrors package.json's shipped `docs/*.md` glob — not recursive, so
+ * docs/superpowers/, docs/plans/, docs/cards/ and docs/probes/ are not included).
+ * @param {string} rootDir - Project root
+ * @returns {string[]} Repo-relative paths to validate
+ */
+function collectCrossLinkTargets(rootDir) {
+  const docsDir = path.join(rootDir, 'docs');
+  let docFiles = [];
+  try {
+    docFiles = fs.readdirSync(docsDir)
+      .filter((name) => name.endsWith('.md') && fs.statSync(path.join(docsDir, name)).isFile())
+      .sort()
+      .map((name) => `docs/${name}`);
+  } catch {
+    docFiles = [];
+  }
+  return ['CLAUDE.md', 'README.md', ...docFiles];
+}
+
 /** Check mode: validate markers in every target doc and cross-links, exit 1 if stale. */
 function runCheckMode(rootDir, generated) {
   const grouped = groupMarkersByTarget(generated, MARKER_TARGETS);
@@ -214,14 +235,20 @@ function runCheckMode(rootDir, generated) {
     }
   }
 
-  let claudeMd;
-  try {
-    claudeMd = fs.readFileSync(path.join(rootDir, 'CLAUDE.md'), 'utf-8');
-  } catch {
-    console.error('Cannot read CLAUDE.md');
-    process.exit(1);
+  const linkErrors = [];
+  for (const rel of collectCrossLinkTargets(rootDir)) {
+    let content;
+    try {
+      content = fs.readFileSync(path.join(rootDir, rel), 'utf-8');
+    } catch {
+      console.error(`Cannot read ${rel}`);
+      process.exit(1);
+    }
+    const ownDir = path.dirname(path.join(rootDir, rel));
+    for (const err of validateCrossLinks(content, ownDir)) {
+      linkErrors.push(`${rel}: ${err}`);
+    }
   }
-  const linkErrors = validateCrossLinks(claudeMd, rootDir);
 
   if (stale.length > 0) {
     console.error(`Stale markers: ${stale.join(', ')}`);
@@ -319,6 +346,7 @@ module.exports = {
   checkMarkersAreCurrent,
   groupMarkersByTarget,
   applyGeneratedMarkers,
+  collectCrossLinkTargets,
   MARKER_TARGETS,
   extractJSDocDescription,
   extractExports,

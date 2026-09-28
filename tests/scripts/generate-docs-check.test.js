@@ -22,6 +22,7 @@ const {
   buildModuleIndex,
   checkMarkersAreCurrent,
   validateCrossLinks,
+  collectCrossLinkTargets,
   TREE_DIRS,
 } = require('../../scripts/generate-docs');
 
@@ -58,6 +59,37 @@ describe('generated-doc marker freshness (F-3)', () => {
     if (errors.length > 0) {
       throw new Error(
         `Broken CLAUDE.md cross-link(s):\n${errors.join('\n')}\nRun \`${FIX_COMMAND}\` and fix any remaining broken links by hand.`,
+      );
+    }
+  });
+
+  it('the cross-link roster is CLAUDE.md, README.md and every top-level docs/*.md file', () => {
+    // Properties, not a count: adding a doc to docs/ must not turn this red.
+    const targets = collectCrossLinkTargets(ROOT);
+    expect(targets[0]).toBe('CLAUDE.md');
+    expect(targets[1]).toBe('README.md');
+    const docs = targets.slice(2);
+    for (const rel of docs) {
+      expect(rel).toMatch(/^docs\/[^/]+\.md$/); // '/'-separated on every OS
+    }
+    expect(docs).toEqual([...docs].sort());
+    expect(docs).toContain('docs/usage.md');
+    expect(targets.filter((rel) => /^docs\/.*\//.test(rel))).toEqual([]); // not recursive
+  });
+
+  it('README.md and docs/*.md cross-links all resolve', () => {
+    const errors = [];
+    for (const rel of collectCrossLinkTargets(ROOT)) {
+      if (rel === 'CLAUDE.md') { continue; } // covered by the test above
+      const abs = path.join(ROOT, rel);
+      const content = fs.readFileSync(abs, 'utf-8');
+      for (const err of validateCrossLinks(content, path.dirname(abs))) {
+        errors.push(`${rel}: ${err}`);
+      }
+    }
+    if (errors.length > 0) {
+      throw new Error(
+        `Broken cross-link(s):\n${errors.join('\n')}\nRun \`${FIX_COMMAND}\` and fix any remaining broken links by hand.`,
       );
     }
   });
