@@ -10,10 +10,17 @@ $packageName = 'amicus'
 # `npm install -g amicus`. Tolerate a non-zero exit rather than throw -- npm may already be
 # gone (e.g. nodejs-lts was uninstalled first in a bulk `choco uninstall`), and a failed
 # uninstall script leaves the package stuck in a bad state for the user.
+#
+# Same account only, like the install (see chocolateyInstall.ps1's KEY RISK note): npm's global
+# prefix is per-account, so this removes amicus from the RUNNING account's %APPDATA%\npm only.
+# Run it as the account that installed amicus; under another admin account or SYSTEM it cannot
+# reach that install, and npm reports only on the running account's own global packages.
 $removed = $false
 try {
   # As in chocolateyInstall.ps1: under Windows PowerShell 5.1, npm's stderr warnings would
-  # otherwise become terminating errors, so relax the preference for this one call.
+  # otherwise become terminating errors, so relax the preference for this one call. If npm is
+  # already gone, `& npm` raises command-not-found, which ends the statement, so the catch
+  # below still runs even under 'Continue' and $removed stays false.
   $ErrorActionPreference = 'Continue'
   & npm uninstall --global $packageName 2>&1 | Write-Host
   if ($LASTEXITCODE -eq 0) {
@@ -33,6 +40,8 @@ if ($removed) {
 } else {
   Write-Host "npm uninstall did not succeed (see the warning above), so $packageName may still be installed."
 }
+Write-Host 'npm''s global prefix is per-account: if amicus was installed from another account, run'
+Write-Host '`npm uninstall -g amicus` from that account as well.'
 Write-Host 'This package never registered the MCP server or copied skills at install time'
 Write-Host '(chocolateyInstall.ps1 sets AMICUS_SKIP_POSTINSTALL=1), so there is nothing under'
 Write-Host '~/.claude, ~/.claude.json or %APPDATA%\Claude for it to clean up here. If you ran'
