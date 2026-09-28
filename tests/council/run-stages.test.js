@@ -901,20 +901,24 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     expect(r.degraded).toBe(true);
   });
 
-  // D-06: whatever skips an OUTPUT_LENGTH leg, its announcement says why no retry ran. The clause is
-  // keyed on the LEG (run-retry-gate.js :: outputLengthSkipClause), not on the skip path, so an
-  // over-budget run (run-retry.js's D7 arm) is enough to pin it. Minted with the real formatter.
-  test('D-06: an OUTPUT_LENGTH leg on the skipped path says its retry was skipped and why', async () => {
+  // D-06 (council round 1, B2/C2, MEASURED): the clause says why no retry ran, and it rides only a
+  // leg the HOLD skipped. Even over max-cost the hold comes first: retryStage1Losses's zero-model
+  // guard skips the `held` unit before its D7 cost arm is ever consulted, so the cost arm never sees
+  // an OUTPUT_LENGTH leg (the spy counts ONE consultation, the bench unit's), and a leg the cost arm
+  // skipped carries no clause. (Before the gate existed, at Task 2, the cost arm did skip this leg.)
+  test('D-06: over max-cost the OUTPUT_LENGTH leg is still skipped by the hold and says why; a leg the cost arm skipped gets no clause', async () => {
     const { formatOutputLengthReason } = require('../../src/utils/output-length');
     const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
       budget: 64000, reasoningOnly: true, ambientFlag: null });
     const dead = { ...deadLeg('b', 'error', MINTED, 'abc123-s1', 2), finish: 'length' };
-    const ctx = makeCtx({ models: ['a', 'b'], overBudget: () => true });
+    const overBudget = jest.fn(() => true);
+    const ctx = makeCtx({ models: ['a', 'b', 'c'], overBudget });
     ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
-      legs: [usableLeg('a', 'abc123-s1', 1), dead] }, exitCode: 0 });
+      legs: [usableLeg('a', 'abc123-s1', 1), dead, deadLeg('c', 'error', 'boom', 'abc123-s1', 3)] }, exitCode: 0 });
     const r = await runStage1(ctx);
     expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1); // no retry launch
-    const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    expect(overBudget).toHaveBeenCalledTimes(1);               // the bench unit's D7 check, never the held unit's
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg' && x.data.seat === 'b');
     // Named mutant "CLAUSEDROPPED" (run-stages.js stops appending
     // run-retry-gate.js :: outputLengthSkipClause): the note loses its clause, and this line reds.
     expect(n.why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
@@ -922,6 +926,10 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     expect(n.why).toContain('outputBudget is 64000'); // the budget in force, named by the minted reason
     // No retryWaveId: nothing was relaunched (live-dead-seats.js :: deadSeats reads it alone).
     expect(n.data).toEqual({ seat: 'b', status: 'error', reason: MINTED });
+    // Named mutant "CLAUSEEVERYLEG" (run-retry-gate.js :: outputLengthSkipClause returns the clause
+    // for every leg): the leg the cost arm skipped carries it too, and this line reds.
+    expect(ctx._notes.find((x) => x.channel === 'dead-leg' && x.data.seat === 'c').why)
+      .toBe("the leg ended 'error': boom with no usable output");
     expect(r.degraded).toBe(true);
   });
 
