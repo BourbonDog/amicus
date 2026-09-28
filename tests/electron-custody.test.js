@@ -464,7 +464,7 @@ describe('extractZipBuffer — extraction with no filesystem source', () => {
 });
 
 describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALLUNBOUNDED)', () => {
-  // THE LOSS THIS CLOSES. unzip.js exists for a field bug that was never
+  // THE LOSS THIS CLOSES. unzip.js was built for a field bug that was never
   // root-caused: extract-zip@2.0.1 stalls mid-extract on some Node 24 boxes, its
   // promise never resolving and never rejecting, so the awaiting self-heal let
   // the event loop drain and Node exited 0 with a partial extract and NO
@@ -472,8 +472,7 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
   // what stops the process exiting mid-stall. When the electron artifact moved
   // onto extractZipBuffer that bound went with unzip.js and nothing replaced
   // it — grep for stall/idle/timeout across the new modules and their tests
-  // returned nothing on the subject. It is back, with unzip.js's own numbers,
-  // and unzip.js itself is untouched.
+  // returned nothing on the subject. It is back, with the numbers unzip.js used.
 
   /** Injectable timers: nothing here waits on a real clock. */
   function fakeTimers() {

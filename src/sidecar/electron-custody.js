@@ -114,7 +114,7 @@ function isSafeArtifactName(fileName) {
  * THERE IS NO "COULD NOT ALLOCATE" BRANCH, and that is deliberate. Two council
  * designs promised one; both were MEASURED wrong. `Buffer.allocUnsafe` does not
  * throw when the machine is out of memory — the process dies, exactly as it
- * does today when extract-zip inflates a 215 MiB entry. Writing a clean
+ * did when extract-zip inflated a 215 MiB entry. Writing a clean
  * `{why:'no-memory'}` refusal and claiming it works would be a failure branch
  * this change never executed. What DOES protect the allocation is `maxBytes`,
  * checked against `fstat` before a byte is reserved.

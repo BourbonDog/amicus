@@ -19,7 +19,7 @@ const { failure } = require('./zip-entry-write');
 /**
  * THE STALL BOUND, and what did and did not come back with it.
  *
- * unzip.js exists for a field bug that was never root-caused: "on some Node 24
+ * unzip.js was built for a field bug that was never root-caused: "on some Node 24
  * boxes extract-zip@2.0.1 STALLS mid-extract — its promise never resolves AND
  * never rejects", so the awaiting self-heal let the event loop drain and Node
  * exited 0 with a partial extract and no message. It answered that with three
@@ -31,8 +31,8 @@ const { failure } = require('./zip-entry-write');
  * filter, an `openReadStream` callback that never arrives) hung `ensureElectron`
  * forever — and in `scripts/postinstall.js` the loop drained and Node exited 0.
  *
- * LAYER 1 IS BACK, with unzip.js's own numbers (30 s idle, 240 s hard) and
- * unzip.js itself untouched: `IDLE_MS`/`MAX_MS` below.
+ * LAYER 1 IS BACK, with the numbers unzip.js used (30 s idle, 240 s hard):
+ * `IDLE_MS`/`MAX_MS` below.
  *
  * ── THE FIRST CUT WAS WRONG IN BOTH DIRECTIONS (round 3) ──────────────────
  * Seat A1: "the advertised idle timeout fires during legitimate active writes
@@ -107,7 +107,7 @@ const { failure } = require('./zip-entry-write');
  * `electron-quarantine.verifyExtractOutcome` stats the exe after a non-throwing
  * extract.
  */
-/** No-progress window, then the hard cap. unzip.js's IDLE_MS / MAX_MS, to the ms. */
+/** No-progress window, then the hard cap: the numbers unzip.js used, to the ms. */
 const IDLE_MS = 30_000;
 const MAX_MS = 240_000;
 /** How long an ABORTED write is given to come apart before it is abandoned. */

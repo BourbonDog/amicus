@@ -10,7 +10,7 @@
  *
  * Two of the strings in an Electron refusal are written by the party the refusal
  * is about:
- *   - an UNSAFE-ARCHIVE refusal quotes extract-zip's message, which quotes the
+ *   - an UNSAFE-ARCHIVE refusal quotes the extractor's message, which quotes the
  *     archive's own entry name;
  *   - a cached artifact's PATH carries a `<sha>` directory name read out of a
  *     cache root anyone can write.
@@ -103,7 +103,7 @@ describe('F5 — an unsafe archive cannot write the refusal it is refused with (
   test('an unsafe-archive refusal cannot forge an [amicus] line, colour the terminal, or reverse the sentence', async () => {
     const { dir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     const extract = jest.fn(async () => {
-      // The shape unzip.js throws, with the ARCHIVE'S entry name inside it.
+      // The shape `robustExtract` threw, with the ARCHIVE'S entry name inside it.
       const e = new Error(`refusing to extract cached.zip: invalid relative path: ${NASTY}`);
       e.code = 'UNZIP_UNSAFE_ARCHIVE';
       throw e;

@@ -53,7 +53,7 @@ const UNREADABLE_REASON = {
   grew: 'changed size while amicus was reading it',
 };
 
-/** The terminal path-traversal refusal `robustExtract` throws (unzip.js C4). */
+/** The terminal path-traversal refusal (C4): `zip-from-buffer.js :: extractZipBuffer` throws it, and so does `electron-native-rescue.js :: withNativeRescue` (via `hostileName`). */
 function isUnsafeArchive(err) {
   return !!err && err.code === 'UNZIP_UNSAFE_ARCHIVE';
 }

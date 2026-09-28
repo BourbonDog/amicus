@@ -49,7 +49,7 @@ const outOfBound = (where, fileName) => failure('UNZIP_UNSAFE_ARCHIVE', `Out of 
 
 /**
  * @returns {Error} yauzl would not load. NOT an archive failure and NOT a
- * destination failure: the artifact is fine and so is the disk. unzip.js
+ * destination failure: the artifact is fine and so is the disk. unzip.js@1851a6eb:215-222
  * records the v4.5.2 outage where an undeclared `extract-zip` threw
  * MODULE_NOT_FOUND out of a bare `require` and took a whole function with it;
  * `yauzl` is declared for that reason, and this guard is what stops a hoisting

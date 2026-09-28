@@ -105,8 +105,6 @@
 
 const { spawnSync } = require('child_process');
 
-// The cap comes from `unzip.js`, which is byte-for-byte unchanged: this is a
-// re-wiring of a caller, not a change to that module.
 const { MAX_MS } = require('./unzip');
 // The mechanism this file decides about: writing the buffer down, walking the
 // platform's plan, sweeping up. `RESCUE_ZIP` and `INCOMING_PREFIX` are re-exported

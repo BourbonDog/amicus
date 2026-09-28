@@ -123,8 +123,8 @@ async function repairElectron({
 } = {}) {
   const fs = deps.fs || fsDefault;
   // Default extract: from the BUFFER amicus already hashed, never from a name.
-  // `unzip.js` is byte-for-byte unchanged; the one thing still taken from it is
-  // its native PLAN, and only behind the hatch (see ./electron-native-rescue).
+  // The one thing still taken from `unzip.js` is its native PLAN, and only
+  // behind the hatch (see ./electron-native-rescue).
   //
   // WHAT CAME WITH IT AND WHAT DID NOT. Its idle + hard-cap STALL BOUND is
   // reimplemented in `zip-from-buffer.js` with the same numbers, so this path is

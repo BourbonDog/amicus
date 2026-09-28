@@ -773,8 +773,8 @@ describe('C2 — the docs say what the hatch now arms (HATCHDOCSSTALE)', () => {
  * `recovered via the native extractor (Expand-Archive)`. Nothing escaped only
  * because each Windows tool refuses `..` itself — `tar.exe: ../../../PWNED-BY-
  * NATIVE.txt: Path contains '..'` (exit 1), `Expand-Archive: Can not process
- * invalid archive entry '…'` (exit 0) — which is the reliance unzip.js says
- * amicus will not make.
+ * invalid archive entry '…'` (exit 0) — which is the reliance unzip.js said
+ * amicus will not make (unzip.js@1851a6eb:244-247).
  *
  * So these run REAL archives, built in front of the reader, through the REAL
  * extractor and the real boundary.
