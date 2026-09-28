@@ -26,15 +26,17 @@
  * this list. Re-derive the strings before touching the regexes.
  *
  * ── NAMED MUTANTS ─────────────────────────────────────────────────────────
- * Applied and reverted by byte copy, MEASURED 2026-09-07 (pre-N-06; still
- * apply — nothing about the classified strings changed).
+ * Applied and reverted by byte copy, MEASURED 2026-09-28 against this file.
  *
  * REFUSALSTRINGDRIFT  src/sidecar/unzip.js — stand in for an upstream reword:
  *   `/^invalid relative path: /` -> `/^invalid relative pathname: /`.
+ *   RED: "each UNSAFE_PATTERN matches at least one message a real source
+ *   produced".
  * STALLTERMINAL       src/sidecar/unzip.js — add `/^stalled: /`, widening the
  *   patterns the way F4 must NOT.
- * Both still RED on "each UNSAFE_PATTERN matches at least one message a real
- * library produced" and "nothing else is classified as a refusal" below.
+ *   RED: "each UNSAFE_PATTERN matches at least one message a real source
+ *   produced" and "nothing else yauzl or an ordinary extract failure says is
+ *   classified as a refusal".
  * ──────────────────────────────────────────────────────────────────────────
  */
 
