@@ -210,6 +210,30 @@ describe('verifyArtifactBytes — THE GATE', () => {
     expect(lines.join('\n')).toMatch(/could not be verified/);
   });
 
+  test('a table that EXISTS but has no row for this artifact is REFUSED: unlisted, not the legacy no-digest (D-02, UNLISTEDALLOWED)', () => {
+    const lines = [];
+    const r = trust.verifyArtifactBytes({
+      bytes: bytes(), anchor: { table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 }, source: '<test>' },
+      fileName: ZIP_NAME, policy: trust.electronTrustPolicy(NO_ENV), log: (m) => lines.push(m),
+    });
+    expect(r).toMatchObject({ verdict: 'unlisted', allowed: false });
+    expect(r.reason).toMatch(/lists no sha256 for it/);
+    expect(lines.join('\n')).not.toMatch(/could not be verified/);   // not the legacy NOTE
+  });
+
+  test('with the hatch set an unlisted artifact is accepted LOUDLY, and is still not verified (D-02, HATCHIGNOREDGATE)', () => {
+    const lines = [];
+    const r = trust.verifyArtifactBytes({
+      bytes: bytes(), anchor: { table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 }, source: '<test>' },
+      fileName: ZIP_NAME, policy: trust.electronTrustPolicy({ AMICUS_ALLOW_UNVERIFIED_ELECTRON: '1' }),
+      log: (m) => lines.push(m),
+    });
+    expect(r).toEqual({ verdict: 'unlisted', allowed: true });
+    const text = lines.join('\n');
+    expect(text).toContain(`AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${ZIP_NAME} although`);
+    expect(text).toMatch(/fail closed/);
+  });
+
   test('AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 downgrades a mismatch to a LOUD warning', () => {
     const lines = [];
     const r = trust.verifyArtifactBytes({

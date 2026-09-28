@@ -182,6 +182,7 @@ function sha256Bytes(bytes) {
  *
  * @returns {{verdict:'verified',   allowed:true,  actual:string}
  *         | {verdict:'mismatch',   allowed:boolean, expected:string, actual:string}
+ *         | {verdict:'unlisted',   allowed:boolean, reason?:string}
  *         | {verdict:'no-digest',  allowed:true}}
  *
  * IT TAKES A BUFFER, AND THE PATH FORM IS GONE. `verifyArtifact({zip, ...})` and
@@ -205,9 +206,22 @@ function sha256Bytes(bytes) {
  * would push that machine into a permanent re-download loop for a file no
  * download can improve. THE NOTE BELOW IS THE CACHE ROUTE'S stderr line, the one
  * `docs/troubleshooting.md` promises; the download route prints its own.
+ *
+ * `unlisted` is REFUSED (D-02, B-SEC-7): a table EXISTS and is silent about this
+ * file — a copy installed with a different Electron, or a planted version — and no
+ * download can add the row. `repairElectron` refuses it before either route runs
+ * (electron-refuse.js :: refuseUnlistedArtifact); this branch is the invariant for
+ * any other caller, and the one place AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 accepts it.
  */
 function verifyArtifactBytes({ bytes, anchor, fileName, policy = {}, log = () => {} }) {
   const expected = expectedDigest(anchor, fileName);
+  if (isUnlisted(anchor, fileName)) {
+    const reason = 'the checksums.json amicus trusts lists no sha256 for it';
+    if (!policy.allowUnverified) { return { verdict: 'unlisted', allowed: false, reason }; }
+    log(`[amicus] WARNING: AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${fileName} although`);
+    log(`[amicus]   ${reason}. Unset that variable to fail closed.`);
+    return { verdict: 'unlisted', allowed: true };
+  }
   if (!expected) {
     log(`[amicus] NOTE: no published sha256 for ${fileName} (this electron package ships no`);
     log('[amicus]   checksums.json entry for it), so its bytes could not be verified.');

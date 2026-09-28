@@ -27,7 +27,9 @@ const { refuseUnlistedArtifact } = require('../src/sidecar/electron-refuse');
 const fs = require('fs');
 
 const ei = require('../src/sidecar/electron-install');
-const { fakeElectronDir, seedElectronAnchor, ZIP_BODY } = require('./helpers/fake-electron-dir');
+const { controlledProvision } = require('../src/sidecar/electron-provision');
+const { repairFromCache } = require('../src/sidecar/electron-repair-cache');
+const { fakeElectronDir, seedElectronAnchor, ZIP_BODY, ZIP_SHA256 } = require('./helpers/fake-electron-dir');
 
 const HEX = 'a'.repeat(64);
 const POISON = 'POISONED-BYTES';
@@ -191,5 +193,61 @@ describe('D-02: the refusal is WIRED before the lock, the cache and the network'
     expect(extract).toHaveBeenCalledTimes(1);
     expect(res.repaired).toBe(true);
     expect(res.unverified).toBe(true);
+  });
+});
+
+describe('D-02: the GATE fails closed on its own, and the hatch accepts LOUDLY', () => {
+  // repairElectron refuses an unlisted artifact before either route runs, so the
+  // first two tests reach the gate directly: it is the invariant for any caller
+  // that bypasses the pre-check. The third is the one place the hatch accepts
+  // such bytes, and it must say so.
+  //
+  // NAMED MUTANTS
+  //   UNLISTEDALLOWED electron-trust.js :: verifyArtifactBytes -- delete the
+  //     `isUnlisted(...)` branch. RED: all three tests below.
+  //   HATCHIGNOREDGATE electron-trust.js :: verifyArtifactBytes -- refuse even
+  //     with the hatch set. RED: the third test below.
+  const ZIP_NAME = 'electron-v43.1.1-win32-x64.zip';
+  const UNLISTED = { table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 }, source: '<test>' };
+
+  test('a direct controlledProvision over an unlisted anchor never extracts what it downloaded (UNLISTEDALLOWED)', async () => {
+    const extract = jest.fn();
+    const out = await controlledProvision({
+      electronDir: mkTmp('amicus-pkg-'), platform: 'win32', arch: 'x64', version: '43.1.1', anchor: UNLISTED,
+      downloadArtifact: jest.fn(async () => writeZip()), extract, fs, env: {},
+    });
+    expect(extract).not.toHaveBeenCalled();
+    expect(out.pinned).toBe(false);
+    expect(out.refused).toMatchObject({ repaired: false, integrity: 'unlisted' });
+  });
+
+  test('a direct repairFromCache over an unlisted anchor refuses before extracting (UNLISTEDALLOWED)', async () => {
+    const extract = jest.fn();
+    const out = await repairFromCache({
+      zip: writeZip(), fileName: ZIP_NAME, anchor: UNLISTED, policy: {},
+      electronDir: mkTmp('amicus-pkg-'), platform: 'win32', arch: 'x64', version: '43.1.1', cacheOnly: true,
+      extract, verifyOutcome: () => ({ repaired: true }), fs, env: {},
+    });
+    expect(extract).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ done: true, result: { repaired: false, integrity: 'unlisted' } });
+  });
+
+  test('with the hatch set, the skewed copy is accepted with a WARNING, not the legacy NOTE (HATCHIGNOREDGATE)', async () => {
+    process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON = '1';
+    const { dir, exeName, self } = skewedCopy();
+    const extract = jest.fn(async (_bytes, opts) => { fs.writeFileSync(path.join(opts.dir, exeName), 'MZextracted'); });
+
+    const res = await ei.repairElectron({
+      cacheOnly: true, electronDir: dir, platform: 'win32', arch: 'x64',
+      deps: {
+        selfElectronDir: self, acquireLock: () => ({ release: () => {} }), extract, spawn: jest.fn(),
+        cachedZip: () => writeZip({ name: SKEW_ZIP }),
+      },
+    });
+
+    expect(res).toMatchObject({ repaired: true, unverified: true });
+    const text = stderr.join('');
+    expect(text).toContain(`AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${SKEW_ZIP} although`);
+    expect(text).not.toMatch(/so its bytes could not be verified/);
   });
 });
