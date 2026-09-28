@@ -1629,7 +1629,7 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     const r = await runStage1(ctx);
     const usage = { cost: { amount: 0.01, source: 'reported' } };
     const row = (model, role, waveId, status) => ({ model, role, wasChair: false,
-      conformance: 'clean', waveId, resolvedModel: model, status, durationMs: 1000, usage });
+      conformance: 'none', waveId, resolvedModel: model, status, durationMs: 1000, usage });
     expect(r.extraRows).toEqual([
       row('gemini', 'superseded', 'abc123-s1', 'error'),
       row('gpt', 'superseded', 'abc123-s1', 'error'),
@@ -1838,7 +1838,7 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
     // neither mints nor borrows; this is the boundary the fix must not cross.
     const uniq = run({ stillDeadWaves: [{ ...wave, models: ['gpt'] }],
       retry: withSpare([{ ...spare, model: 'gpt-x', modelInput: 'gpt' }], 'gpt') })[0];
-    expect(uniq).toEqual({ model: 'gpt', role: 'seat', wasChair: false, conformance: 'clean',
+    expect(uniq).toEqual({ model: 'gpt', role: 'seat', wasChair: false, conformance: 'none',
       waveId: 'r1-s1r1', resolvedModel: 'gpt-x', status: 'timed-out', durationMs: 4242,
       usage: spare.usage });
   });

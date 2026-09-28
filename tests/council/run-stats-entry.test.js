@@ -400,3 +400,35 @@ describe('the ttftMs emit gate is ONE predicate (PR #207 round 3, B3)', () => {
     }
   });
 });
+
+/**
+ * #244 residue — a row says `clean` only when a check said so
+ * (docs/superpowers/specs/2026-09-27-244-conformance-none-design.md). Every production
+ * caller that relies on the default describes a leg nobody checked: a dead seat, a
+ * superseded first attempt, a failed chair attempt, the chair give-up row. So the default
+ * is `none`, and the one success on the default path — the Claude seat's validated file
+ * review — passes `clean` itself.
+ */
+describe('run-stats-entry — conformance defaults to none (#244 residue)', () => {
+  test('no conformance passed: none, whatever the leg (absent, dead, timed out, complete, promoted)', () => {
+    const legs = [null, { status: 'error' }, { status: 'timeout' }, { status: 'complete' },
+      { status: 'complete', promoted: true }];
+    // one pair per leg shape, so a failure names the shape
+    expect(legs.map(leg => [leg, rse.buildRunStatsEntry({ leg, model: 'alpha', role: 'seat' }).conformance]))
+      .toEqual(legs.map(leg => [leg, 'none']));
+  });
+
+  test('an explicit conformance always wins, clean included (named mutant EXPLICITIGNORED)', () => {
+    // EXPLICITIGNORED: replace `conformance || 'none'` with the constant `'none'`.
+    for (const conformance of ['clean', 'repaired', 'unstructured', 'none']) {
+      expect(rse.buildRunStatsEntry({ leg: { status: 'complete' }, model: 'alpha', role: 'seat', conformance })
+        .conformance).toBe(conformance);
+    }
+  });
+
+  test("the Claude seat's validated file review passes clean itself (named mutant CLAUDENOTCLEAN)", () => {
+    // CLAUDENOTCLEAN: delete `conformance: 'clean'` from run-assemble.js :: claudeRunStatsRow.
+    // The row then takes the builder's default and reads none: a valid review called unchecked.
+    expect(asm.claudeRunStatsRow().conformance).toBe('clean');
+  });
+});

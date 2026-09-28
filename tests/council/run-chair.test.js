@@ -556,10 +556,14 @@ describe('chair-class runStats rows (v4.7 D2)', () => {
     expect(input.runStats.some(r => r.wasChair === true)).toBe(false);
     const attemptRows = input.runStats.filter(r => r.role === 'chair-attempt');
     expect(attemptRows.map(r => r.waveId)).toEqual(['abc123-ch1', 'abc123-ch2']);
+    // #244 residue: a failed attempt was never checked, so it is not `clean`.
+    expect(attemptRows.map(r => r.conformance)).toEqual(['none', 'none']);
     const giveUpRows = input.runStats.filter(r => r.role === 'chair' && r.status === 'error');
     expect(giveUpRows).toHaveLength(1);
     expect(giveUpRows[0]).toMatchObject({ model: 'deepseek', wasChair: false, usage: null });
     expect('waveId' in giveUpRows[0]).toBe(false);
+    // #244 residue: the give-up row has no leg at all, so nothing was checked.
+    expect(giveUpRows[0].conformance).toBe('none');
   });
 
   // v4.7 D2 review fix (errata E3): both attempts die PRE-WAVE — no leg

@@ -112,7 +112,7 @@ function labelClaudeReview(claudeReview, labels) {
  * instead would emit `status: 'error'` and call a valid review dead.
  */
 function claudeRunStatsRow() {
-  return buildRunStatsEntry({ leg: { status: 'complete' }, model: CLAUDE_SEAT, role: CLAUDE_SEAT });
+  return buildRunStatsEntry({ leg: { status: 'complete' }, model: CLAUDE_SEAT, role: CLAUDE_SEAT, conformance: 'clean' }); // #244: the one default-path success — its file was validated (named mutant CLAUDENOTCLEAN)
 }
 
 /**
