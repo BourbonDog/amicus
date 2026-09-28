@@ -235,6 +235,16 @@ describe('amicus_council_run handler', () => {
   // the task-id grammar) is refused too, and its id is never echoed. The predicate is shared
   // with the CLI door, but this message is built here, in mcp-council-run-dir.js ::
   // resolveMcpRunDir, so this door needs its own pin.
+  // Named mutants MCPNAMEDONLY and MCPALWAYSNAMES: mcp-council-run-dir.js :: resolveMcpRunDir
+  // refuses only a NAMED record (`if (other && other.runId)`), or always renders the named
+  // message (`run ${other.runId}'s run.json` unconditionally, so "run null's"). MEASURED
+  // 2026-09-28 at 52de867 over this file alone, each applied alone and restored by byte copy:
+  //   MCPNAMEDONLY RED 1 of 39: "an outDir holding a run.json that names no valid run (a
+  //     forged runId) → isError naming no run, no spawn, run.json untouched (D-04)", at
+  //     `expect(res.isError).toBe(true)` (received undefined).
+  //   MCPALWAYSNAMES RED 1 of 39: the same test, at its exact-text `toBe` (received
+  //     "… already holds run null's run.json …").
+  // ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
   test('an outDir holding a run.json that names no valid run (a forged runId) → isError naming no run, no spawn, run.json untouched (D-04)', async () => {
     const dir = path.join(tmp, 'forged-run');
     fs.mkdirSync(dir);

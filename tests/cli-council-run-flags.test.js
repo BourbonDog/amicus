@@ -582,6 +582,13 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
   // D-04 (SL-4): the local-tool relaxation skips only the placement fence, never the
   // in-use check. An outside --out-dir reused run after run is where a second run would
   // otherwise merge into the first one's run.json.
+  // Named mutant LOCALSKIPSINUSE: cli-council-run-tools.js :: checkCouncilRunTools skips the
+  // in-use check whenever a local tool relaxed the placement fence (`if (other &&
+  // !wantsLocalTool)`). MEASURED 2026-09-28 at 52de867 over this file alone, applied alone
+  // and restored by byte copy: RED 1 of 62: "a local tool relaxes the placement fence, not
+  // D-04: an outside --out-dir holding another run's run.json is refused", at
+  // `expect(code).toBe(1)` (received 0).
+  // ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
   test('a local tool relaxes the placement fence, not D-04: an outside --out-dir holding another run\'s run.json is refused', async () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-out-inuse-'));
     try {
