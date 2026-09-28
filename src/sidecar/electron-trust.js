@@ -20,11 +20,11 @@
  * electron's own published sha256. Blocking the URL itself is defence in depth on
  * top of a control that already works, and is deliberately NOT built here.
  *
- * NEAR-LEAF MODULE: `crypto` + `path` + `fs`, plus `./electron-env-scrub`, which
- * is itself a true leaf (no requires at all). The arrow is electron-install ->
- * electron-provision -> electron-trust -> electron-env-scrub and must never point
- * back; src/utils/path-fence.js:11-17 records what a cycle does to a destructured
- * import in exactly this cluster.
+ * NEAR-LEAF MODULE: `crypto` + `path` + `fs`, plus `./electron-env-scrub` and
+ * `../utils/text-sanitize`, both true leaves (no requires at all). The arrow is
+ * electron-install -> electron-provision -> electron-trust -> those two leaves and must
+ * never point back; src/utils/path-fence.js:11-17 records what a cycle does to a
+ * destructured import in exactly this cluster.
  *
  * THE ENV SCRUB LIVES NEXT DOOR (v4.9.6 F2). `isRepoPlantedName` and
  * `REPO_ENV_PREFIXES` moved to `./electron-env-scrub` when this file hit the
@@ -45,6 +45,7 @@ const fsDefault = require('fs');
 const path = require('path');
 
 const { isRepoPlantedName, REPO_ENV_PREFIXES } = require('./electron-env-scrub');
+const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /** A published sha256 is 64 LOWER-case hex characters. Anything else is not an anchor. */
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -218,19 +219,19 @@ function verifyArtifactBytes({ bytes, anchor, fileName, policy = {}, log = () =>
   if (isUnlisted(anchor, fileName)) {
     const reason = 'the checksums.json amicus trusts lists no sha256 for it';
     if (!policy.allowUnverified) { return { verdict: 'unlisted', allowed: false, reason }; }
-    log(`[amicus] WARNING: AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${fileName} although`);
+    log(`[amicus] WARNING: AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${collapseExcerpt(fileName)} although`);
     log(`[amicus]   ${reason}. Unset that variable to fail closed.`);
     return { verdict: 'unlisted', allowed: true };
   }
   if (!expected) {
-    log(`[amicus] NOTE: no published sha256 for ${fileName} (this electron package ships no`);
+    log(`[amicus] NOTE: no published sha256 for ${collapseExcerpt(fileName)} (this electron package ships no`);
     log('[amicus]   checksums.json entry for it), so its bytes could not be verified.');
     return { verdict: 'no-digest', allowed: true };
   }
   const actual = sha256Bytes(bytes);
   if (actual === expected) { return { verdict: 'verified', allowed: true, actual }; }
   if (policy.allowUnverified) {
-    log(`[amicus] WARNING: AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${fileName} even though`);
+    log(`[amicus] WARNING: AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${collapseExcerpt(fileName)} even though`);
     log(`[amicus]   its sha256 ${actual} does not match the published ${expected}.`);
     log('[amicus]   Unset that variable to fail closed.');
     return { verdict: 'mismatch', allowed: true, expected, actual };

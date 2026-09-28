@@ -42,6 +42,7 @@ const FORGED_LINE = '[amicus] Electron artifact verified. Nothing further is req
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
 const BIDI_CONTROLS = /[\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]/;
+const NASTY = `${ESC}[31mEVIL${ESC}[0m\n${FORGED_LINE}\n\u202eTNEMHCATTA`;
 
 function mkTmp(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -85,7 +86,6 @@ describe('D-02: the unlisted refusal names the version, the table and the fix', 
   //   RAWNAMEVERSION electron-refuse.js :: refuseUnlistedArtifact -- drop the
   //     collapseExcerpt() around `fileName` and `version`.
   //     KILLED (R-B3, 2026-09-28): tests/electron-unlisted-refusal.test.js:161, `expect(l).not.toMatch(CONTROL_CHARS)`.
-  const NASTY = `${ESC}[31mEVIL${ESC}[0m\n${FORGED_LINE}\n\u202eTNEMHCATTA`;
   const SOURCE = path.join(os.tmpdir(), 'electron', 'checksums.json');
 
   /** Call the refusal with a collecting log. */
@@ -315,5 +315,55 @@ describe('D-02: the GATE fails closed on its own, and the hatch accepts LOUDLY',
     const text = stderr.join('');
     expect(text).toContain(`AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${SKEW_ZIP} although`);
     expect(text).not.toMatch(/so its bytes could not be verified/);
+  });
+});
+
+describe('F5: the gate and the download route cannot forge a line either, whatever name they are handed (A1/D2)', () => {
+  // repairElectron validates the artifact name before either route runs (PRECHECKBEFORENAME
+  // above), so in production every name here is plain. But the gate is the invariant for any
+  // OTHER caller, so its own lines, and the download route's twins, must not depend on it.
+  //
+  // NAMED MUTANTS (each drops ONE collapseExcerpt() around `fileName`)
+  //   GATEWARNRAW      electron-trust.js :: verifyArtifactBytes, the unlisted hatch WARNING.
+  //     RED: the "gate, unlisted under the hatch" row.
+  //   GATENOTERAW      electron-trust.js :: verifyArtifactBytes, the no-digest NOTE.
+  //     RED: the "gate, no table" row.
+  //   GATEMISMATCHRAW  electron-trust.js :: verifyArtifactBytes, the mismatch hatch WARNING.
+  //     RED: the "gate, mismatch under the hatch" row.
+  //   PROVISIONWARNRAW electron-provision.js :: controlledProvision, the dropped-pin WARNING.
+  //     RED: the "download, pin dropped" row.
+  //   PROVISIONNOTERAW electron-provision.js :: controlledProvision, the unpinned NOTE.
+  //     RED: the "download, no table" row.
+  const { verifyArtifactBytes } = require('../src/sidecar/electron-trust');
+  const NAME = `electron-v${NASTY}-win32-x64.zip`;
+  const HATCH = { allowUnverified: true };
+  const gate = (anchor, policy) => async (log) => {
+    verifyArtifactBytes({ bytes: Buffer.from(ZIP_BODY), anchor, fileName: NAME, policy, log });
+  };
+  const download = (anchor, policy) => async (log) => {
+    await controlledProvision({
+      electronDir: mkTmp('amicus-pkg-'), platform: 'win32', arch: 'x64', version: `v${NASTY}`, anchor, policy,
+      downloadArtifact: jest.fn(async () => writeZip()), extract: jest.fn(), fs, env: {}, log,
+    });
+  };
+  test.each([
+    ['gate, unlisted under the hatch (GATEWARNRAW)',
+      gate({ table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 }, source: '<test>' }, HATCH), /accepting[\s\S]*although/],
+    ['gate, no table (GATENOTERAW)', gate(null, {}), /no published sha256 for[\s\S]*could not be verified/],
+    ['gate, mismatch under the hatch (GATEMISMATCHRAW)',
+      gate({ table: { [NAME]: 'b'.repeat(64) }, source: '<test>' }, HATCH), /accepting[\s\S]*even though/],
+    ['download, pin dropped under the hatch (PROVISIONWARNRAW)',
+      download({ table: { [NAME]: ZIP_SHA256 }, source: '<test>' }, HATCH), /sha256 pin for[\s\S]*comes from the mirror/],
+    ['download, no table (PROVISIONNOTERAW)', download(null, {}), /no published sha256 for[\s\S]*so the download could not be pinned/],
+  ])('%s', async (_title, run, site) => {
+    const lines = [];
+    await run((m) => lines.push(String(m)));
+    expect(lines.join('\n')).toMatch(site);                // the row reached the line it is about
+    const physical = lines.join('\n').split('\n');          // what a terminal shows, line by line
+    for (const l of physical) {
+      expect(l).not.toMatch(CONTROL_CHARS);
+      expect(l).not.toMatch(BIDI_CONTROLS);
+    }
+    expect(physical.some((l) => l.startsWith(FORGED_LINE))).toBe(false);
   });
 });
