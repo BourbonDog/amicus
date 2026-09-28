@@ -923,6 +923,56 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     expect(r.degraded).toBe(true);
   });
 
+  // D-06 on a TWIN bench (Task 3 review, Important). `run-stage1-rows.js :: pushDeadSeatRows`
+  // records this area's bug class: two dead twins used to collapse into ONE dead-seat row, and one
+  // twin's first leg could be handed to the other as its "final" leg. The held arm moves ONE twin
+  // out of the bench unit, so a held twin and a retried twin run here through the real runStage1.
+  // Engine-shaped taskIds, so bindSeats binds each first leg to its own seat. The held twin sits at
+  // slot 2 and each first leg carries its own usage, so a row built from the other twin's leg
+  // would read 0.02, not 0.03. Minted with the real formatter, never pasted.
+  test('D-06: a held OUTPUT_LENGTH twin keeps its own row beside a retried twin — two notes, two rows, never one', async () => {
+    const { formatOutputLengthReason } = require('../../src/utils/output-length');
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+      budget: null, reasoningOnly: false, ambientFlag: null });
+    const cost = (amount) => ({ cost: { amount, source: 'reported' } });
+    // roster (-s1): ['deepseek', 'deepseek'] -> #1=slot1, #2=slot2. #1 dies an ordinary death and
+    // #2 dies OUTPUT_LENGTH, so the retry roster (-s1r1) is #1 alone, at slot 1, and it heals.
+    const boom = { ...deadLeg('deepseek', 'error', 'boom', 'abc123-s1', 1), usage: cost(0.02) };
+    const held = { ...deadLeg('deepseek', 'error', MINTED, 'abc123-s1', 2), finish: 'length', usage: cost(0.03) };
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1', legs: [boom, held] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [usableLeg('deepseek', 'abc123-s1r1', 1)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    // ONE retry launch, for ONE slot. Named mutant "HELDBYALIAS" (the held arm in
+    // run-retry-group.js :: groupStage1Losses tests the ALIAS, holding every dead leg whose alias
+    // has an OUTPUT_LENGTH death, instead of the leg): #1 is held too, and this line reds.
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(2);
+    expect(ctx.launchers.launchWave.mock.calls[1][0].models).toEqual(['deepseek']);
+    // Two notes, one per twin, and nothing else (no `internal` refusal from
+    // run-stage1-superseded.js :: supersededRows): #1's heal names its own seat, and #2's
+    // dead-leg note carries the D-06 clause.
+    expect(ctx._notes.map((n) => n.channel)).toEqual(['stage1-retry', 'dead-leg']);
+    expect(ctx._notes[0].data.firstFailure.seatId).toBe('deepseek#1');
+    expect(ctx._notes[1].why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
+      + 'its once-only retry was skipped: a relaunch reserves the same output budget');
+    expect(ctx._notes[1].data).toEqual({ seat: 'deepseek', status: 'error', reason: MINTED });
+    // #1's retry leg is its review, bound to #1 (run-assemble.js :: buildTallyInput builds its row
+    // from `reviews`, so extraRows below holds only #1's superseded half).
+    expect(r.reviews.map((x) => [x.seat && x.seat.id, x.leg.waveId])).toEqual([['deepseek#1', 'abc123-s1r1']]);
+    // Two rows, one per twin FIRST leg, never collapsed: #1's is superseded by its healed retry,
+    // and #2's own first leg is its primary 'seat' error row, stamped with #2's seat id and
+    // carrying #2's own usage.
+    const row = (role, extra) => ({ model: 'deepseek', role, wasChair: false, conformance: 'none',
+      waveId: 'abc123-s1', resolvedModel: 'deepseek', status: 'error', durationMs: 1000, ...extra });
+    expect(r.extraRows).toEqual([
+      row('superseded', { usage: cost(0.02) }),
+      row('seat', { seat: 'deepseek#2', usage: cost(0.03) }),
+    ]);
+    expect(r.degraded).toBe(true);
+  });
+
   test('legs with no finish produce no output-truncated note', async () => {
     const ctx = makeCtx({ models: ['a', 'b'],
       onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, review(m), 'complete', opts.waveId, i + 1))),
