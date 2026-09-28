@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  UNTESTED until an elevated local install passes. Before the first `choco push`, run
+  `choco pack` then `choco install -s .` on a real Windows account (ideally elevated, and
+  ideally a second/different account from the one that built the package) and confirm
+  `amicus init` afterward finds Node on PATH and completes. See the postinstall-elevation
+  note in tools/chocolateyInstall.ps1 for the specific risk this guards against.
+
+  Fields sourced from:
+    - id/authors/projectUrl: package.json (name, author, repository)
+    - title: server.json "title"
+    - tags: seven of package.json's "keywords", plus amicus, anthropic, mcp, cli and nodejs
+    - summary: the first sentence of server.json's "description"
+    - description: written for this package, adapting package.json's "description" (which
+      .claude-plugin/plugin.json repeats) and README.md's opening paragraph
+    - copyright: LICENSE (root of amicus repo)
+    - dependency floor: package.json "engines".node (>=22.12.0)
+  iconUrl deliberately omitted for v1 — Chocolatey moderation treats it as a guideline,
+  not a requirement, and no existing amicus asset is a good square-icon candidate without
+  the owner picking one. Add it in a later package revision.
+-->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>amicus</id>
+    <!-- Keep in lockstep with package.json/server.json/.claude-plugin/plugin.json at
+         release time (docs/publishing.md's release checklist) — no script syncs
+         this today, same as the other three files it already lists as manual. -->
+    <version>4.14.1</version>
+    <title>Amicus</title>
+    <authors>Christian Wagner</authors>
+    <owners>BourbonDog</owners>
+    <projectUrl>https://github.com/BourbonDog/amicus</projectUrl>
+    <projectSourceUrl>https://github.com/BourbonDog/amicus</projectSourceUrl>
+    <docsUrl>https://github.com/BourbonDog/amicus#documentation</docsUrl>
+    <bugTrackerUrl>https://github.com/BourbonDog/amicus/issues</bugTrackerUrl>
+    <packageSourceUrl>https://github.com/BourbonDog/amicus/tree/main/packaging/chocolatey</packageSourceUrl>
+    <licenseUrl>https://github.com/BourbonDog/amicus/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <copyright>Copyright (c) 2026 Christian Wagner; Copyright (c) 2025 John Renaldi</copyright>
+    <tags>amicus claude claude-code anthropic llm multi-model council mcp cli nodejs sidecar opencode</tags>
+    <summary>Multi-model LLM Council and parallel AI window for Claude Code.</summary>
+    <description><![CDATA[
+Amicus is a multi-model LLM Council and parallel AI window for Claude Code, installed as a
+global npm CLI (`amicus` / `am`) plus an MCP server.
+
+Hand Claude a plan, a diff, or a design and say "council review this": Amicus routes it
+through several models from different families, has them anonymously cross-review each
+other, and a non-Claude chair synthesizes a verdict. Or fork a single conversation to
+Gemini, GPT, DeepSeek, or another model, work in parallel, and fold the result back.
+
+This package installs the `amicus` npm package globally (`npm install -g amicus`) via its
+Node.js LTS dependency (`nodejs-lts`). It does **not** run amicus's own interactive setup
+during `choco install` — after installing, open an ordinary (non-elevated) prompt and run
+`amicus init`, `amicus setup`, and `amicus doctor`.
+
+Requires at least one model API key (OpenRouter recommended) or a local OpenAI-compatible
+server (Ollama / LM Studio / vLLM) — see `amicus setup`.
+
+Project: https://github.com/BourbonDog/amicus
+License: MIT
+    ]]></description>
+    <releaseNotes>https://github.com/BourbonDog/amicus/blob/main/CHANGELOG.md</releaseNotes>
+    <dependencies>
+      <!-- amicus requires Node >=22.12.0 (package.json "engines"). nodejs-lts already
+           exists on community.chocolatey.org (confirmed 2026-09-28); using it instead of
+           bundling a binary is the whole point of this package per B-REL-5. -->
+      <dependency id="nodejs-lts" version="22.12.0" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
