@@ -666,9 +666,11 @@ them.** Revisit as a funded track; it earns a version number when that track is 
 >
 > **Resolved 2026-09-28 (D-07):** the GoA family (GOA-1 through GOA-8) is parked: not built
 > (beyond GOA-7's shipped ledger prerequisite). Its design is preserved in the GoA paper-review
-> adoption notes, cited by each of the nine closed GOA rows in `BACKLOG.md` (GOA-3a/3b,
-> GOA-4a/4b/4c, GOA-5, GOA-6, GOA-7, GOA-8). B4 itself is untouched — the reconciliation above
-> still applies if B4 is ever scoped.
+> adoption notes (the 2026-08-05 plan doc titled "GoA paper review — adoption notes & design
+> inputs (GOA-1…GOA-8)"), cited by path from each of the nine closed GOA rows in `BACKLOG.md`
+> (GOA-3a/3b, GOA-4a/4b/4c, GOA-5, GOA-6, GOA-7, GOA-8). GOA-1 and GOA-2 have no `BACKLOG.md`
+> row: their original entries are in `BACKLOG-ARCHIVE.md`. B4 itself is untouched — the
+> reconciliation above still applies if B4 is ever scoped.
 
 ### Composition / chained waves (F6) *(unscheduled — dropped from v4.7, 2026-08-05)*
 `--input-from <id>` / `--prompt-file -` pipe + per-source digests *(M)*, bringing the `{{input}}`
