@@ -17,8 +17,8 @@ Code / Claude Desktop / Cowork and copies both skills (`sidecar`,
 `second-opinion`) into `~/.claude/skills/`. It does **not** copy
 `commands/council.md` — that only ships via the plugin channel below. This
 is a known, accepted gap for npm/install-script users (slash commands are
-plugin-channel-only by design; see the npm-vs-plugin note at the top of the
-CHANGELOG's Unreleased section).
+plugin-channel-only by design; see the npm-vs-plugin note in CHANGELOG.md's
+`[1.9.0]` entry).
 
 ## 2. Claude Code community marketplace (claude-community)
 
@@ -288,8 +288,12 @@ non-elevated prompt.
 **Before the first submission:** a real elevated local install (`choco pack`
 then `choco install -s .`) has not been run — this package is untested
 against a real Chocolatey install. Test that first, ideally on a second
-Windows account, then create a community.chocolatey.org account + API key
-and `choco push`.
+Windows account. After the install, open an ordinary (non-elevated) prompt,
+run `amicus doctor`, and confirm it finds the OpenCode engine binary, because
+the package installs through `npm install -g`, npm 11 can skip a
+dependency's install script unless that package is allowlisted, and
+opencode-ai's install script is what places the engine binary. Then create
+a community.chocolatey.org account + API key and `choco push`.
 
 **Version:** `amicus.nuspec`'s `<version>` is a manual pin site, kept in
 lockstep with `package.json`/`server.json`/`.claude-plugin/plugin.json` by
@@ -306,7 +310,7 @@ Status as of 2026-09-28:
 | Glama | Listed (auto-indexed from the MCP Registry), **unclaimed** | Owner: claim via GitHub OAuth, HTTP, or DNS at glama.ai/mcp/servers/BourbonDog/amicus |
 | PulseMCP | Listed (auto-ingested from the MCP Registry) | None — submissions/changes are globally paused |
 | mcp.so | Not listed | Owner: submit at mcp.so/submit (free reviewed queue, or a paid immediate track) |
-| Smithery | Not listed — **deferred** | None planned. Its current publish flow needs either a hosted Streamable-HTTP endpoint or a pre-built MCPB bundle; amicus's MCP server is stdio-only (`server.json`'s `transport.type`) and has neither. Owner-deferred 2026-09-28. |
+| Smithery | Not listed — **deferred** | None planned. Its current publish flow needs either a hosted Streamable-HTTP endpoint or a pre-built MCPB bundle; amicus's MCP server is stdio-only (`server.json`'s `packages[0].transport.type`) and has neither. Owner-deferred 2026-09-28. |
 | `punkpeye/awesome-mcp-servers` | Not listed | Owner: fork + one-line README PR under "Coding Agents" |
 
 Pattern: the two directories that already carry amicus (Glama, PulseMCP) are the

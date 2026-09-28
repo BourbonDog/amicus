@@ -4,7 +4,11 @@
   `choco pack` then `choco install -s .` on a real Windows account (ideally elevated, and
   ideally a second/different account from the one that built the package) and confirm
   `amicus init` afterward finds Node on PATH and completes. See the postinstall-elevation
-  note in tools/chocolateyInstall.ps1 for the specific risk this guards against.
+  note in tools/chocolateyInstall.ps1 for the specific risk this guards against. After the
+  install, open an ordinary (non-elevated) prompt, run `amicus doctor`, and confirm it finds
+  the OpenCode engine binary, because the package installs through `npm install -g`, npm 11
+  can skip a dependency's install script unless that package is allowlisted, and
+  opencode-ai's install script is what places the engine binary.
 
   Fields sourced from:
     - id/authors/projectUrl: package.json (name, author, repository)
