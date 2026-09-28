@@ -240,7 +240,7 @@ list. Two findings drove it:
   It *was* a live defect: ledger rows keyed by council alias and aliases silently retarget (`gpt-pro` →
   `gpt-5.6-sol-pro`, the `opus` re-pin — both 2026-08-04), so `council stats` conflates distinct
   models under one name. The ledger is append-only, so every run adds rows that will later have to
-  be distrusted, and both GOA-1 and GOA-2 plan to build on this data. Bump `LEDGER_SCHEMA_VERSION`;
+  be distrusted, and both GOA-1 and GOA-2 planned to build on this data (both parked since D-07). Bump `LEDGER_SCHEMA_VERSION`;
   old rows stay readable (absent id ⇒ legacy). Full write-up and schema discipline: `BACKLOG.md`
   GOA-7. *(Recency decay — GOA-7's second half — is NOT in this rev.)*
 - **Session/wave tagging + `--search` + grouped history** (F8) *(S–M)* — **shipped**
@@ -664,10 +664,11 @@ them.** Revisit as a funded track; it earns a version number when that track is 
 > seat choice — that is B4's core idea arriving as a single-user feature rather than an enterprise
 > learning loop. Reconcile before either is scoped; do not build both.
 >
-> **Resolved 2026-09-28 (D-07):** the GoA family (GOA-1 through GOA-8) is parked: not built; its
-> design is preserved in the GoA paper-review adoption notes, which each of the nine closed GOA
-> rows in `BACKLOG.md` (GOA-3a/3b, GOA-4a/4b/4c, GOA-5, GOA-6, GOA-7, GOA-8) cites. B4 itself is
-> untouched — the reconciliation above still applies if B4 is ever scoped.
+> **Resolved 2026-09-28 (D-07):** the GoA family (GOA-1 through GOA-8) is parked: not built
+> (beyond GOA-7's shipped ledger prerequisite). Its design is preserved in the GoA paper-review
+> adoption notes, cited by each of the nine closed GOA rows in `BACKLOG.md` (GOA-3a/3b,
+> GOA-4a/4b/4c, GOA-5, GOA-6, GOA-7, GOA-8). B4 itself is untouched — the reconciliation above
+> still applies if B4 is ever scoped.
 
 ### Composition / chained waves (F6) *(unscheduled — dropped from v4.7, 2026-08-05)*
 `--input-from <id>` / `--prompt-file -` pipe + per-source digests *(M)*, bringing the `{{input}}`
