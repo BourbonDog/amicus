@@ -4,8 +4,9 @@
  *
  * An OUTPUT_LENGTH death (`utils/output-length.js :: isOutputLengthDeath`) is a leg whose
  * provider stopped at the max_tokens reservation before any answer text. Its retry would run on
- * the run's one engine (`run-server.js :: acquireRunServer`), whose output budget was read once at
- * spawn (`opencode-client.js :: startServer`), so the relaunch reserves the same budget again.
+ * an engine started from the same config.json (the run's shared engine, or a per-wave one:
+ * `run-server.js :: acquireRunServer`), whose output budget is read once at that engine's spawn
+ * (`opencode-client.js :: startServer`), so the relaunch reserves the same budget again.
  * The lever for this death is `outputBudget`, ONE top-level key in config.json
  * (`utils/config.js :: getOutputBudget`; amicus has no per-alias budget), and the leg's own reason
  * already names the value in force and the fix.

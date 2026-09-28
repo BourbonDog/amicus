@@ -10,8 +10,9 @@ All notable changes to Amicus are documented here. Format follows
 - **A Stage-1 seat whose leg died at its output reservation is no longer retried.** A leg that
   ends `error` with an `OUTPUT_LENGTH:` reason (the provider stopped at the `max_tokens`
   reservation before any answer text) is announced as a dead leg without a relaunch: the
-  once-only retry would run on the same engine with the same `outputBudget`, and the quoted reason
-  already names the budget in force and the fix. The notice's reason now ends
+  once-only retry would run on an engine started from the same config.json (the run's shared
+  engine, or a per-wave one) with the same `outputBudget`, and the quoted reason already names the
+  budget in force and the fix. The notice's reason now ends
   `its once-only retry was skipped: a relaunch reserves the same output budget`; no retry wave is
   launched or billed, and the seat keeps its own first leg as its dead-seat row. The run exits
   degraded (2) as before, or 1 (`COUNCIL_QUORUM`) when fewer than two reviews survive, exactly as
