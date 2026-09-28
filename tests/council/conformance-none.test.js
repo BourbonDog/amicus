@@ -11,7 +11,7 @@
  * touches: gpt's Stage-1 leg dies (a dead-seat row built on the builder's default),
  * and qwen's Stage-2 judge leg dies (run-stage2-judge.js :: adjudicateJudgeLeg's
  * unusable-judge row). The living seat and judge are the controls: their rows keep
- * the value their own check produced. Three tests, one fact each, so each can be
+ * the value their own check produced. Four tests, one fact each, so each can be
  * seen failing on its own.
  */
 const fs = require('fs');
@@ -69,4 +69,13 @@ test('controls: the completed seat and the completed judge keep the value their 
   const rows = await runWithDeadSeatAndDeadJudge();
   expect(rows('gemini', 'seat').map(r => r.conformance)).toEqual(['clean']);
   expect(rows('gemini', 'judge').map(r => r.conformance)).toEqual(['clean']);
+});
+
+test('a completed seat whose own judge died keeps its review\'s value through the Stage-1 × Stage-2 merge (named mutant NONEOUTRANKS)', async () => {
+  const rows = await runWithDeadSeatAndDeadJudge();
+  // qwen reviewed in Stage 1 and its own judge leg died. run.js :: runCouncil merges each
+  // review with its own judge row by worst-wins (worseConformance(review, judge)), so the
+  // judge's `none` must never replace the review's `clean` (spec §6). NONEOUTRANKS: rank
+  // `none` above `clean` in run-assemble.js's CONFORMANCE_RANK (for example `none: 3`).
+  expect(rows('qwen', 'seat').map(r => r.conformance)).toEqual(['clean']);
 });
