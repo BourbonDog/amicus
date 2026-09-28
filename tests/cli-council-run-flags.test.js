@@ -579,6 +579,21 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     expect(runCouncil).not.toHaveBeenCalled();
     fs.rmSync(outside, { recursive: true, force: true });
   });
+  // D-04 (SL-4): the local-tool relaxation skips only the placement fence, never the
+  // in-use check. An outside --out-dir reused run after run is where a second run would
+  // otherwise merge into the first one's run.json.
+  test('a local tool relaxes the placement fence, not D-04: an outside --out-dir holding another run\'s run.json is refused', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-out-inuse-'));
+    try {
+      fs.writeFileSync(path.join(outside, 'run.json'), JSON.stringify({ runId: 'oldrun01', pid: 4242 }));
+      const code = await handleCouncilRun(argsBase({ tools: 'read', 'out-dir': outside }));
+      expect(code).toBe(1);
+      expect(runCouncil).not.toHaveBeenCalled();
+      expect(JSON.parse(stdout()).error.message).toContain("already holds run oldrun01's run.json");
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
 
   // council #247 round 5 (P2-R51, D4): an --agent run has no local tool of
   // its own (--agent + --tools is refused outright above), so the ordinary
