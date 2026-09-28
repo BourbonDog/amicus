@@ -872,6 +872,28 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     expect(n.data.firstFailure.reason).toBe(MINTED);
   });
 
+  // D-06: whatever skips an OUTPUT_LENGTH leg, its announcement says why no retry ran. The clause is
+  // keyed on the LEG (run-retry-gate.js :: outputLengthSkipClause), not on the skip path, so an
+  // over-budget run (run-retry.js's D7 arm) is enough to pin it. Minted with the real formatter.
+  test('D-06: an OUTPUT_LENGTH leg on the skipped path says its retry was skipped and why', async () => {
+    const { formatOutputLengthReason } = require('../../src/utils/output-length');
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+      budget: 64000, reasoningOnly: true, ambientFlag: null });
+    const dead = { ...deadLeg('b', 'error', MINTED, 'abc123-s1', 2), finish: 'length' };
+    const ctx = makeCtx({ models: ['a', 'b'], overBudget: () => true });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1), dead] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1); // no retry launch
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    expect(n.why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
+      + 'its once-only retry was skipped: a relaunch reserves the same output budget');
+    expect(n.why).toContain('outputBudget is 64000'); // the budget in force, named by the minted reason
+    // No retryWaveId: nothing was relaunched (live-dead-seats.js :: deadSeats reads it alone).
+    expect(n.data).toEqual({ seat: 'b', status: 'error', reason: MINTED });
+    expect(r.degraded).toBe(true);
+  });
+
   test('legs with no finish produce no output-truncated note', async () => {
     const ctx = makeCtx({ models: ['a', 'b'],
       onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, review(m), 'complete', opts.waveId, i + 1))),
