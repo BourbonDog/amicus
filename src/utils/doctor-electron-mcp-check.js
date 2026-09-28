@@ -217,7 +217,10 @@ async function evaluateElectronInteractive(d, { fixTimeoutMs }) {
         : res.contended
           ? `repair already in progress${why}`
           : `not provisioned${why}`;
-    return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `${detail} — headless still works`, hint: HINTS.doctorFix };
+    // A3 (D-02): an `unlisted` refusal already names its fix (no build for this platform, or
+    // reinstall amicus), and doctor --fix would only refuse again, so it gets no hint.
+    const hint = res.integrity === 'unlisted' ? null : HINTS.doctorFix;
+    return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `${detail} — headless still works`, hint };
   }
   return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: 'not installed — headless still works', hint: HINTS.doctorFix };
 }

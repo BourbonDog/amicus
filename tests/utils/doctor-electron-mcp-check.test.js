@@ -2,7 +2,7 @@
 'use strict';
 const path = require('path');
 const {
-  evaluateElectronInstalls, evaluateElectronMcp, scanElectronInstalls,
+  evaluateElectronInstalls, evaluateElectronMcp, evaluateElectronInteractive, scanElectronInstalls,
 } = require('../../src/utils/doctor-electron-mcp-check');
 const HINTS = require('../../src/utils/remediation-hints');
 const { refuseUnlistedArtifact } = require('../../src/sidecar/electron-refuse');
@@ -305,5 +305,45 @@ describe('scanElectronInstalls (default wiring — #69 lesson: exercise the real
     expect(npx.state).toBe('ok');
     const run = installs.find((i) => i.kind === 'running');
     expect(run.state).toBe('package-missing');
+  });
+});
+
+describe('evaluateElectronInteractive (--fix): an unlisted refusal is not sent back to doctor --fix (A3)', () => {
+  // The running copy's OWN table judges its own Electron, so it refuses as `unlisted` only on
+  // an unpublished host platform, or for a version its own table lacks. Either way the reason
+  // names the real fix ("the GUI is unavailable here", or "reinstall amicus"), and a
+  // `→ amicus doctor --fix` hint would only run the same refusal again.
+  //
+  // NAMED MUTANTS
+  //   INTERACTIVEUNLISTEDHINT doctor-electron-mcp-check.js :: evaluateElectronInteractive --
+  //     keep HINTS.doctorFix for an `unlisted` refusal. RED: the first test below.
+  //   INTERACTIVEHINTDROPPED doctor-electron-mcp-check.js :: evaluateElectronInteractive --
+  //     drop the hint for every failure. RED: the second test below.
+  const HEX = 'a'.repeat(64);
+  const run = (res) => evaluateElectronInteractive(
+    { getElectronPath: () => null, fix: true, repairElectron: async () => res }, { fixTimeoutMs: 1000 },
+  );
+
+  test('both unlisted branches keep their own fix in the message, and no hint points back at doctor --fix (INTERACTIVEUNLISTEDHINT)', async () => {
+    const platformOnly = refuseUnlistedArtifact({
+      anchor: { table: { 'electron-v43.1.1-darwin-arm64.zip': HEX }, source: '<test>' },
+      fileName: 'electron-v43.1.1-freebsd-x64.zip', version: 'v43.1.1', platform: 'freebsd', arch: 'x64',
+    });
+    const ownVersionMissing = refuseUnlistedArtifact({
+      anchor: { table: { 'electron-v43.1.1-win32-x64.zip': HEX }, source: '<test>' },
+      fileName: 'electron-v43.9.9-win32-x64.zip', version: 'v43.9.9', platform: 'win32', arch: 'x64',
+    });
+    for (const refused of [platformOnly, ownVersionMissing]) {
+      const r = await run(refused);
+      expect(r.status).toBe('warn');
+      expect(r.message).toContain(refused.reason);
+      expect(r.hint).toBeNull();
+    }
+  });
+
+  test('any other failed repair keeps the doctor --fix hint (INTERACTIVEHINTDROPPED)', async () => {
+    const r = await run({ repaired: false, reason: 'offline' });
+    expect(r.message).toMatch(/not provisioned — offline/);
+    expect(r.hint).toBe(HINTS.doctorFix);
   });
 });

@@ -20,8 +20,9 @@ All notable changes to Amicus are documented here. Format follows
   the legacy allow exists to prevent. The message names the version the table covers and the fix:
   repair that copy with its own amicus (`npx -y amicus@latest doctor --fix` for the copy the MCP
   launches), which checks it against its own table and so gives a verified repair, and
-  `doctor --fix`'s `→` hint now names that same command. `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1`
-  accepts such an artifact, marked `unverified`, with a warning on stderr. An Electron package with
+  `doctor --fix`'s `→` hint now names that same command (its interactive check, where the refused
+  Electron is amicus's own, shows no hint). `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` accepts such
+  an artifact, marked `unverified`, with a warning on stderr. An Electron package with
   no `checksums.json` amicus can read (none at all, or one that is unparseable, empty, or holds no
   well-formed sha256 row) is still extracted and marked `unverified`, as disclosed in 4.9.6.
 
