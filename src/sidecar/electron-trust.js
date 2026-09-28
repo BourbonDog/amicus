@@ -165,12 +165,12 @@ function expectedDigest(anchor, fileName) {
  * D-02 (B-SEC-7): WHICH of the two null digests this is. `expectedDigest` returns
  * null both for NO TABLE AT ALL (a package that predates checksums.json: still
  * extracted, and marked) and for a table SILENT about this file (a copy installed
- * with a different Electron, or a planted version: refused). `readChecksumTable`
- * never yields an empty table, so a truthy `anchor.table` holds at least one row.
+ * with a different Electron, or a planted version: refused). An EMPTY table is no table
+ * too, whoever built the anchor (`readChecksumTable` never yields one): the legacy case.
  * @returns {boolean} true when a usable table exists and names no sha256 for `fileName`
  */
 function isUnlisted(anchor, fileName) {
-  return !!(anchor && anchor.table) && expectedDigest(anchor, fileName) === null;
+  return !!(anchor && anchor.table) && Object.keys(anchor.table).length > 0 && expectedDigest(anchor, fileName) === null;
 }
 
 /** sha256 of an artifact amicus already holds in its own heap. */

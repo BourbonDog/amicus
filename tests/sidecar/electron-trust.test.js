@@ -133,9 +133,13 @@ describe('isUnlisted — WHICH of the two null digests (D-02)', () => {
   // still extracted, and marked) and for a table SILENT about this file (refused,
   // D-02). This predicate is the one place the two are told apart.
   //
-  // NAMED MUTANT
+  // NAMED MUTANTS
   //   UNLISTEDASLEGACY electron-trust.js :: isUnlisted -- `return false;`.
   //     RED: the third test below.
+  //   EMPTYTABLEUNLISTED electron-trust.js :: isUnlisted -- drop the empty-table test, so a
+  //     `{ table: {} }` anchor reads as unlisted (refused). RED: the fourth test below.
+  //   EMPTYTABLEANCHOR electron-trust.js :: readChecksumTable -- return a row-less table
+  //     instead of null. RED: the fourth test below.
   const withRow = { table: { [ZIP_NAME]: ZIP_SHA256 }, source: '<test>' };
   const without = { table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 }, source: '<test>' };
 
@@ -153,6 +157,14 @@ describe('isUnlisted — WHICH of the two null digests (D-02)', () => {
     expect(trust.isUnlisted(without, ZIP_NAME)).toBe(true);
     // ...including the version a planted package.json names (ANCHORVERSIONFROMTARGET's lever)
     expect(trust.isUnlisted(withRow, 'electron-v99.0.0-win32-x64.zip')).toBe(true);
+  });
+
+  test('an EMPTY table is no table: the legacy allow, however the anchor was built (EMPTYTABLEUNLISTED, EMPTYTABLEANCHOR)', () => {
+    // The docs say a checksums.json amicus cannot use (none, unparseable, empty, or no
+    // well-formed row) takes the legacy allow. resolveAnchor never yields an empty table,
+    // and isUnlisted must not DEPEND on that: a direct caller's `{}` is no table too.
+    expect(trust.isUnlisted({ table: {}, source: '<test>' }, ZIP_NAME)).toBe(false);
+    expect(trust.resolveAnchor({ electronDir: fakePkg({ table: {} }), fs, selfElectronDir: null })).toBeNull();
   });
 });
 
