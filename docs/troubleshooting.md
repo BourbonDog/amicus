@@ -548,9 +548,10 @@ The third line names which way the read failed:
 - **A `path.txt` that points outside `dist/` is never launched.** `path.txt` holds the executable's
   name relative to `dist/` (or to `ELECTRON_OVERRIDE_DIST_PATH` when that is set). A name that climbs
   out of it (`..`, `.`, `../anything`) is refused before any spawn: the GUI launch prints `path.txt
-  points outside its own directory` and re-provisions Electron, which rewrites `path.txt`. Through
-  v4.14.1 such a name read as installed whenever the file it pointed at existed, so the self-heal never
-  ran and that file was what the GUI tried to launch.
+  points outside its own directory` and re-provisions Electron. A repair that succeeds rewrites
+  `path.txt`; one that is refused or fails leaves it as it was and says why. Through v4.14.1 such a
+  name read as installed whenever the file it pointed at existed, so the self-heal never ran and that
+  file was what the GUI tried to launch.
 - **A related refusal**, `Refusing to provision electron: … is not a usable artifact name`, means the
   `version` in the Electron package's own `package.json` is not a plausible version string. Amicus
   builds the artifact filename from it and refuses to use anything that is not a plain filename, since

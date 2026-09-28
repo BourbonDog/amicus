@@ -32,9 +32,9 @@ All notable changes to Amicus are documented here. Format follows
   repair never ran, and that file was what the GUI spawned. The resolver now applies the containment
   bound the promote guard (`distHeldExe`) already had, through one shared predicate (`containedExe`).
   A name that climbs out of `dist/`, or out of `ELECTRON_OVERRIDE_DIST_PATH`, resolves to nothing; the
-  GUI launch says so and re-provisions, and the provision rewrites `path.txt`. Nothing that installs
-  Electron writes such a name (Electron's own installer and amicus each write one of three fixed
-  names), so this closes a tampered or corrupted file, not an acquisition path.
+  GUI launch says so and re-provisions, and a provision that succeeds rewrites `path.txt`. Nothing
+  that installs Electron writes such a name (Electron's own installer and amicus each write one of
+  three fixed names), so this closes a tampered or corrupted file, not an acquisition path.
 
 ### Fixed
 

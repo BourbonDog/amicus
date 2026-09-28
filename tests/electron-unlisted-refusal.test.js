@@ -367,3 +367,49 @@ describe('F5: the gate and the download route cannot forge a line either, whatev
     expect(physical.some((l) => l.startsWith(FORGED_LINE))).toBe(false);
   });
 });
+
+describe('D-02 x D-03: a refused re-provision is never promised a path.txt rewrite (D3)', () => {
+  // ensureElectron announces a refused path.txt BEFORE it provisions. On a copy whose version
+  // this amicus's table does not list, the provision is refused too (D-02, before the lock), so
+  // nothing is promoted and path.txt is never rewritten: the NOTE may not promise that it is.
+  //
+  // NAMED MUTANT
+  //   NOTEPROMISES electron-ensure.js :: ensureElectron -- restore the unconditional
+  //     "re-provisioning Electron below rewrites path.txt." RED: the test below.
+  test('a tampered path.txt on a skewed copy: the repair refuses, path.txt is untouched, and nothing promised otherwise (NOTEPROMISES)', async () => {
+    const ee = require('../src/sidecar/electron-ensure');
+    ee._resetEnsureElectron();
+    const { dir, self } = skewedCopy();
+    fs.writeFileSync(path.join(dir, 'path.txt'), '../SIBLING');
+    fs.writeFileSync(path.join(dir, 'SIBLING'), 'NOT-ELECTRON');
+    const leaves = {
+      acquireLock: jest.fn(() => ({ release: () => {} })),
+      cachedZip: jest.fn(() => null),
+      downloadArtifact: jest.fn(async () => { throw new Error('network is forbidden in this test'); }),
+      extract: jest.fn(),
+      spawn: jest.fn(),
+    };
+    const lines = [];
+
+    const out = await ee.ensureElectron({
+      deps: {
+        isElectronUsable: () => ei.isElectronUsable({ electronDir: dir, env: {}, platform: 'win32' }),
+        resolveElectronBinary: () => ei.resolveElectronBinary({ electronDir: dir, env: {}, platform: 'win32' }),
+        repairElectron: (opts) => ei.repairElectron({
+          ...opts, electronDir: dir, platform: 'win32', arch: 'x64', deps: { selfElectronDir: self, ...leaves },
+        }),
+        logProgress: (m) => lines.push(String(m)),
+      },
+    });
+    ee._resetEnsureElectron();
+
+    expect(out.ok).toBe(false);
+    expect(out.reason).toMatch(/was REFUSED: the checksums\.json amicus trusts covers Electron v43\.1\.1, not v43\.6\.0/);
+    expect(fs.readFileSync(path.join(dir, 'path.txt'), 'utf8')).toBe('../SIBLING');   // nothing rewrote it
+    for (const leaf of Object.values(leaves)) { expect(leaf).not.toHaveBeenCalled(); }
+    const text = lines.join('\n');
+    expect(text).toMatch(/path\.txt points outside its own directory/);
+    expect(text).not.toMatch(/below rewrites path\.txt/);                  // the unconditional promise
+    expect(text).toMatch(/a repair that succeeds rewrites path\.txt/);
+  });
+});

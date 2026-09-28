@@ -68,7 +68,7 @@ function ensureElectron({ deps = {}, repairOptions = {} } = {}) {
     // path.txt (electron-layout.js :: promoteDist).
     if (resolve() === null) {
       logProgress("[amicus] NOTE: Electron's path.txt points outside its own directory, so amicus will not launch");
-      logProgress('[amicus]   what it names; re-provisioning Electron below rewrites path.txt.');
+      logProgress('[amicus]   what it names. Re-provisioning Electron below; a repair that succeeds rewrites path.txt.');
     }
     logProgress('[amicus] Provisioning the Electron GUI binary (first GUI use, ~170MB). This runs once...');
     let result;
