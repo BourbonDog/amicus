@@ -33,12 +33,12 @@
  * REFUSALSTRINGDRIFT  src/sidecar/unzip.js — stand in for an upstream reword:
  *   `/^invalid relative path: /` -> `/^invalid relative pathname: /`.
  *   RED: "each UNSAFE_PATTERN matches at least one message a real source
- *   produced".
+ *   produced" (:81).
  * STALLTERMINAL       src/sidecar/unzip.js — add `/^stalled: /`, widening the
  *   patterns the way F4 must NOT.
  *   RED: "each UNSAFE_PATTERN matches at least one message a real source
- *   produced" and "nothing else yauzl or an ordinary extract failure says is
- *   classified as a refusal".
+ *   produced" (:81) and "nothing else yauzl or an ordinary extract failure
+ *   says is classified as a refusal" (:102, on the two 'stalled: …' literals).
  * ──────────────────────────────────────────────────────────────────────────
  */
 

@@ -16,6 +16,14 @@
  *
  * A dev tree cannot detect this by resolving the module — it always succeeds.
  * The only sound check is DECLARATION, which is what this asserts.
+ *
+ * ── NAMED MUTANT ──────────────────────────────────────────────────────────
+ * NORECURSE  no-phantom-dependencies.test.js :: collectExternalRequires —
+ *   never descend into a subdirectory, so only top-level src/, bin/ and
+ *   electron/ files are scanned. Applied and reverted by byte copy, MEASURED
+ *   2026-09-28. RED: "no file under src/, bin/ or electron/ requires
+ *   extract-zip", on its yauzl positive control (:112).
+ * ──────────────────────────────────────────────────────────────────────────
  */
 
 const fs = require('fs');
