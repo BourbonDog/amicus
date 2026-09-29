@@ -103,8 +103,8 @@ describe('resolveAnchor + expectedDigest', () => {
     // that fallback was reachable by DATA: a planted {"version":"99.0.0"} made the
     // scanned tree the anchor for its own bytes. The self table is keyed by the
     // FULL artifact filename, so a genuine version disagreement needs no version
-    // check: it simply yields no entry, and the gate's no-digest verdict extracts
-    // and MARKS instead of trusting the target.
+    // check: it simply yields no entry, and since D-02 that is REFUSED as
+    // `unlisted` (electron-trust.js :: isUnlisted) instead of trusting the target.
     const scanned = fakePkg({ table: { 'electron-v99.0.0-win32-x64.zip': 'b'.repeat(64) } });
     const self = fakePkg({ version: '43.1.1', table: { [ZIP_NAME]: ZIP_SHA256 } });
     const selfSource = path.join(self, 'checksums.json');
@@ -125,6 +125,46 @@ describe('resolveAnchor + expectedDigest', () => {
       const fell = trust.resolveAnchor({ electronDir: scanned, version: '43.1.1', fs, selfElectronDir: emptySelf });
       expect(fell.source).toBe(path.join(scanned, 'checksums.json'));
     }
+  });
+});
+
+describe('isUnlisted — WHICH of the two null digests (D-02)', () => {
+  // `expectedDigest` returns null both for NO TABLE AT ALL (the legacy package:
+  // still extracted, and marked) and for a table SILENT about this file (refused,
+  // D-02). This predicate is the one place the two are told apart.
+  //
+  // NAMED MUTANTS
+  //   UNLISTEDASLEGACY electron-trust.js :: isUnlisted -- `return false;`.
+  //     RED: the third test below.
+  //   EMPTYTABLEUNLISTED electron-trust.js :: isUnlisted -- drop the empty-table test, so a
+  //     `{ table: {} }` anchor reads as unlisted (refused). KILLED (R-B5, 2026-09-28): tests/sidecar/electron-trust.test.js:166.
+  //   EMPTYTABLEANCHOR electron-trust.js :: readChecksumTable -- return a row-less table
+  //     instead of null. KILLED (R-B5, 2026-09-28): tests/sidecar/electron-trust.test.js:167, and the older :74 and :126 too.
+  const withRow = { table: { [ZIP_NAME]: ZIP_SHA256 }, source: '<test>' };
+  const without = { table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 }, source: '<test>' };
+
+  test('no table at all is NOT unlisted: the legacy case keeps its allow', () => {
+    expect(trust.isUnlisted(null, ZIP_NAME)).toBe(false);
+    expect(trust.isUnlisted(undefined, ZIP_NAME)).toBe(false);
+    expect(trust.isUnlisted({ source: '<test>' }, ZIP_NAME)).toBe(false);
+  });
+
+  test('a table WITH the row is not unlisted', () => {
+    expect(trust.isUnlisted(withRow, ZIP_NAME)).toBe(false);
+  });
+
+  test('a table that EXISTS but has no row for this file IS unlisted (UNLISTEDASLEGACY)', () => {
+    expect(trust.isUnlisted(without, ZIP_NAME)).toBe(true);
+    // ...including the version a planted package.json names (ANCHORVERSIONFROMTARGET's lever)
+    expect(trust.isUnlisted(withRow, 'electron-v99.0.0-win32-x64.zip')).toBe(true);
+  });
+
+  test('an EMPTY table is no table: the legacy allow, however the anchor was built (EMPTYTABLEUNLISTED, EMPTYTABLEANCHOR)', () => {
+    // The docs say a checksums.json amicus cannot use (none, unparseable, empty, or no
+    // well-formed row) takes the legacy allow. resolveAnchor never yields an empty table,
+    // and isUnlisted must not DEPEND on that: a direct caller's `{}` is no table too.
+    expect(trust.isUnlisted({ table: {}, source: '<test>' }, ZIP_NAME)).toBe(false);
+    expect(trust.resolveAnchor({ electronDir: fakePkg({ table: {} }), fs, selfElectronDir: null })).toBeNull();
   });
 });
 
@@ -180,6 +220,30 @@ describe('verifyArtifactBytes — THE GATE', () => {
     expect(r).toEqual({ verdict: 'no-digest', allowed: true });
     expect(lines.join('\n')).toContain(ZIP_NAME);
     expect(lines.join('\n')).toMatch(/could not be verified/);
+  });
+
+  test('a table that EXISTS but has no row for this artifact is REFUSED: unlisted, not the legacy no-digest (D-02, UNLISTEDALLOWED)', () => {
+    const lines = [];
+    const r = trust.verifyArtifactBytes({
+      bytes: bytes(), anchor: { table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 }, source: '<test>' },
+      fileName: ZIP_NAME, policy: trust.electronTrustPolicy(NO_ENV), log: (m) => lines.push(m),
+    });
+    expect(r).toMatchObject({ verdict: 'unlisted', allowed: false });
+    expect(r.reason).toMatch(/lists no sha256 for it/);
+    expect(lines.join('\n')).not.toMatch(/could not be verified/);   // not the legacy NOTE
+  });
+
+  test('with the hatch set an unlisted artifact is accepted LOUDLY, and is still not verified (D-02, HATCHIGNOREDGATE)', () => {
+    const lines = [];
+    const r = trust.verifyArtifactBytes({
+      bytes: bytes(), anchor: { table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 }, source: '<test>' },
+      fileName: ZIP_NAME, policy: trust.electronTrustPolicy({ AMICUS_ALLOW_UNVERIFIED_ELECTRON: '1' }),
+      log: (m) => lines.push(m),
+    });
+    expect(r).toEqual({ verdict: 'unlisted', allowed: true });
+    const text = lines.join('\n');
+    expect(text).toContain(`AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${ZIP_NAME} although`);
+    expect(text).toMatch(/fail closed/);
   });
 
   test('AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 downgrades a mismatch to a LOUD warning', () => {

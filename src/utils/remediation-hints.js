@@ -66,6 +66,15 @@ const REMEDIATION_HINTS = Object.freeze({
   doctorFix: 'amicus doctor --fix  (self-heal the Electron GUI in place — provisions the binary; no reinstall, so it can\'t loop)',
 
   /**
+   * D-02: the fix for an npx-cache copy whose repair was REFUSED as `unlisted` (the
+   * checksums.json this amicus trusts has no sha256 for that copy's Electron). `doctorFix`
+   * would re-run the command that just refused; the copy the MCP launches, run by its own
+   * amicus, checks itself against the table it shipped with. The same command
+   * `electron-refuse.js :: refuseUnlistedArtifact` names in its reason.
+   */
+  mcpCopyDoctorFix: 'npx -y amicus@latest doctor --fix  (repairs the copy the MCP launches with its own amicus, against the checksums.json it shipped with)',
+
+  /**
    * Duplicate legacy 'sidecar' MCP registration (Phase 4 de-bloat): pre-1.8
    * postinstalls registered the same server twice. `doctor --fix` removes the
    * twin only when it points at amicus; a customized entry is never touched.

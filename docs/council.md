@@ -351,7 +351,10 @@ assistant message carries `finish: 'length'` and still delivered answer text, th
 exit code) naming the seat and the engine's reasoning/output token counts for the leg, with `Try:
 raise outputBudget…`. The chair packet marks that review too — its header reads `--- Review by
 <seat> — CUT at its output reservation (…) ---` — so the chair weighs it as partial. A length stop
-with **no** answer text is a dead leg whose reason starts `OUTPUT_LENGTH:` — see
+with **no** answer text is a dead leg whose reason starts `OUTPUT_LENGTH:`, and it is the one death
+class the once-only Stage-1 retry never attempts (since the next release after 4.14.1): a relaunch
+reserves the same output budget, so the `Notice:` says the retry was skipped, and the quoted reason
+names the `outputBudget` in force — see
 [Troubleshooting](./troubleshooting.md#headless-leg-fails-with-output_length).
 
 **Read the tiers correctly.** A task run's report carries the line *"Tiers report peer concurrence,

@@ -5,12 +5,59 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Security
+
+- **A `checksums.json` amicus can read that lists no sha256 for the requested Electron artifact now
+  refuses it, instead of extracting it unverified.** `expectedDigest` returned the same `null` for
+  "this Electron package ships no `checksums.json` amicus can read" (the legacy case) and for "the
+  table amicus trusts has no entry for this file", and `verifyArtifactBytes` allowed both, marked
+  `unverified`. The second is what a planted `package.json` version produces, and, with no planting
+  at all, what `amicus doctor --fix` meets whenever an npx-cache copy was installed with a different
+  Electron release than the amicus running the repair (npm resolves the newest `^43` release at each
+  install). In that situation a file planted in the Electron download cache for that version was
+  extracted into the copy the MCP launches. It is now refused (`integrity: 'unlisted'`) before the
+  lock, the cache or the network, so a retry costs nothing and cannot become the re-download loop
+  the legacy allow exists to prevent. The message names the version the table covers and the fix:
+  repair that copy with its own amicus (`npx -y amicus@latest doctor --fix` for the copy the MCP
+  launches), which checks it against its own table and so gives a verified repair, and
+  `doctor --fix`'s `→` hint now names that same command (its interactive check, where the refused
+  Electron is amicus's own, shows no hint). `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` accepts such
+  an artifact, marked `unverified`, with a warning on stderr. An Electron package with
+  no `checksums.json` amicus can read (none at all, or one that is unparseable, empty, or holds no
+  well-formed sha256 row) is still extracted and marked `unverified`, as disclosed in 4.9.6.
+
+- **A `path.txt` that names a file outside `dist/` is no longer launched.** `resolveElectronBinary`
+  joined the name onto `dist/` unchecked, and `isElectronUsable` only asked whether the result
+  existed, so a `path.txt` of `../SIBLING` made any existing file read as the installed Electron: the
+  repair never ran, and that file was what the GUI spawned. The resolver now applies the containment
+  bound the promote guard (`distHeldExe`) already had, through one shared predicate (`containedExe`).
+  A name that climbs out of `dist/`, or out of `ELECTRON_OVERRIDE_DIST_PATH`, resolves to nothing; the
+  GUI launch says so and re-provisions, and a provision that succeeds rewrites `path.txt`. Nothing
+  that installs Electron writes such a name (Electron's own installer and amicus each write one of
+  three fixed names), so this closes a tampered or corrupted file, not an acquisition path.
+
 ### Added
 
 - A Chocolatey package is drafted at `packaging/chocolatey/` (untested until a local
   elevated install passes) — not yet published to the community feed.
 
 ### Changed
+
+- **A Stage-1 seat whose leg died at its output reservation is no longer retried.** A leg that
+  ends `error` with an `OUTPUT_LENGTH:` reason (the provider stopped at the `max_tokens`
+  reservation before any answer text) is announced as a dead leg without a relaunch: the
+  once-only retry would run on an engine started from the same config.json (the run's shared
+  engine, or a per-wave one) with the same `outputBudget`, and the quoted reason already names the
+  budget in force and the fix. The notice's reason now ends
+  `its once-only retry was skipped: a relaunch reserves the same output budget`; no retry wave is
+  launched or billed, and the seat keeps its own first leg as its dead-seat row. The run exits
+  degraded (2) as before, or 1 (`COUNCIL_QUORUM`) when fewer than two reviews survive, exactly as
+  it would have had the retry died. Every other Stage-1 loss is retried exactly as before, and a
+  seat whose retry leg dies `OUTPUT_LENGTH` is announced exactly as before. Measured across every
+  CI council run since 4.9.4, both such deaths were retried at the same budget and neither retry
+  delivered a review: on run 34376584500 the retry died the same way and billed $0.2224 a second
+  time, and on run 35514703539 the retry stopped early and its only "heal" was promoted
+  reasoning. (#218)
 
 - `node scripts/generate-docs.js --check`'s cross-link validation now also covers `README.md`
   and every top-level `docs/*.md` file (previously `CLAUDE.md` only), resolving each file's
@@ -37,6 +84,12 @@ All notable changes to Amicus are documented here. Format follows
   verdict other than agree, dispute or neutral rendered as the literal `undefined` in the markdown
   and HTML matrices; both now print `?`, as the Council Workspace matrix already did. A missing
   vote is still a blank cell. (B-CV-11)
+
+- **`amicus doctor --fix`'s interactive Electron check now says when its self-heal is
+  unverified.** It reported `installed (self-healed)` whatever the repair returned, while the
+  MCP-launch check already added an `UNVERIFIED` mark. Both now print the same mark, so an artifact
+  no published sha256 covered, or one `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` let through, is named
+  as unverified in the self-heal line, as `docs/troubleshooting.md` says.
 
 - Corrected stale shipped-docs claims. `docs/DISTRIBUTION.md` said the MCP Registry publish was
   still pending (amicus has been published there since v1.9.1, 2026-07-03) and that the

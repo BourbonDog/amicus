@@ -2,12 +2,13 @@
 'use strict';
 // Stage-1 loss grouping: lensIndexOf + recordFailure + groupStage1Losses.
 // Moved verbatim from run-retry.js:24-126 (v4.8 PR0 size-gate split, zero
-// behavior). Pure but for two leaf requires: ./run-retry-keys and ./promoted (#257),
-// both of which are themselves require-free.
+// behavior). Pure. Two leaf requires, ./run-retry-keys and ./promoted (#257), both require-free,
+// plus ./run-retry-gate (D-06), whose one require (../utils/output-length) reaches src/utils only.
 // run-retry.js re-exports groupStage1Losses so existing import paths
 // (tests/council/run-retry.test.js) stay stable.
 const { seatKey, twinAliases, legLossKey, srcLegClaimer } = require('./run-retry-keys');
 const { promotedFacts } = require('./promoted');
+const { isOutputLengthLoss } = require('./run-retry-gate'); // D-06: the one death class the retry holds back
 
 /** 1-based lens index for a loss: the waveId convention, else the seat's own
  *  bench position, else the alias's first bench index. v4.8 PR2b H4: the old
@@ -161,6 +162,12 @@ function recordFailure(unit, seat, ff, trackModel = true, seatObj = null, twins 
  * on EITHER carrier — waveId convention or model — mirroring
  * verdict.js summarizeSeatLoss.
  *
+ * D-06: a dead LEG that died OUTPUT_LENGTH (`run-retry-gate.js :: isOutputLengthLoss`) joins no
+ * retry unit. It rides a `held` unit instead, with zero models, so the first guard of
+ * `run-retry.js :: retryStage1Losses` routes its sources to `skippedDeadLegs` and run-stages.js
+ * announces it like any skipped leg, never silently (the null-lens precedent below). Emitted
+ * LAST: it is never launched, so it perturbs no unit's order.
+ *
  * `seatOf` (v4.8 PR2b) is Stage-1's leg->seat binding, keyed by leg OBJECT
  * identity: it is how a dead LEG contributes the seat it was actually bound to
  * rather than one guessed from its alias. A wave-origin loss carries its own
@@ -176,6 +183,8 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map(),
   const isCriticWave = (w) =>
     w.waveId === `${o.runId}-c1` || (!!o.critic && (w.models || []).includes(o.critic));
   const bench = { unit: 'bench', waveId: `${o.runId}-s1r1`, retryOfWaveId: `${o.runId}-s1`,
+    models: [], seats: [], firstFailures: [], srcWaves: [], srcLegs: [] };
+  const held = { unit: 'held', heldFor: 'OUTPUT_LENGTH', waveId: null, retryOfWaveId: null,
     models: [], seats: [], firstFailures: [], srcWaves: [], srcLegs: [] };
   const lensUnits = new Map(); // lensIndex (number, or null for unmappable) -> unit
   // Seeded exactly like `models`, and gated on the same `o.critic` so the two
@@ -234,6 +243,7 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map(),
     }
   }
   for (const leg of deadLegs) {
+    if (isOutputLengthLoss(leg)) { held.srcLegs.push(leg); continue; } // D-06; named mutant "LENGTHRETRIED": delete this line
     const seat = leg.modelInput || leg.model;
     const pf = promotedFacts(leg);
     const ff = { seat, class: 'leg', status: leg.status, reason: leg.error || null,
@@ -263,6 +273,8 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map(),
   // an unmappable loss is not "lens index 0"; it should not perturb the
   // ascending order of the real, well-indexed lens retries.
   out.push(...[...lensUnits.values()].sort((a, b) => (a.lensIndex ?? Infinity) - (b.lensIndex ?? Infinity)));
+  // D-06: emitted LAST, never launched. Named mutant "HELDDROPPED" (delete the line below): the held loss vanishes.
+  if (held.srcLegs.length > 0) { out.push(held); }
   return out;
 }
 

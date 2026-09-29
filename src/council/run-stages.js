@@ -30,6 +30,7 @@ const { bindStage1Waves, orphanLegNote, missingSeatDeadWave } = require('./stage
 const { skippedWaveNote, truncatedReviewNote, reasoningOnlyClause, promotedFacts, MAX_LEG_ERROR_CHARS } = require('./run-retry-notes'); // #257 R-X38 fix 1: ONE cap, defined there
 const { isPromotedLeg } = require('./promoted'); // direct from the leaf: run-retry-notes re-exports only the two clause builders above.
 const { collapseExcerpt } = require('../utils/text-sanitize'); // #257 R-X38: the house sanitizer `run-stage2-notes.js :: judgeDeadNote` already binds ITS leg error with.
+const { outputLengthSkipClause } = require('./run-retry-gate'); // D-06: a held OUTPUT_LENGTH leg says why no retry ran; '' for every other skipped leg
 // slug lives in ./seats (v4.8 PR1) so that module can stay require-free;
 // re-exported below — run-stages.test.js imports it from here.
 const { slug } = require('./seats');
@@ -124,7 +125,7 @@ async function runStage1(ctx) {
       // judgeDeadNote`, #219). `data.reason` stays VERBATIM: machine surface, not a sentence.
       // The cap bounds provider NOISE, never an amicus-minted reason — the ruling and the
       // measurements are at `run-retry-notes.js :: MAX_LEG_ERROR_CHARS`. Mutant "DEADLEGPROSERAW".
-      why: `the leg ended '${leg.status}'${leg.error ? `: ${collapseExcerpt(leg.error, MAX_LEG_ERROR_CHARS)}` : ''} with no usable output${reasoningOnlyClause(pf)}`,
+      why: `the leg ended '${leg.status}'${leg.error ? `: ${collapseExcerpt(leg.error, MAX_LEG_ERROR_CHARS)}` : ''} with no usable output${reasoningOnlyClause(pf)}${outputLengthSkipClause(leg)}`,
       effect: `${firstPass.length} of ${legs.length + missingSeats.length} seats reviewed; `
         + 'the run continues with the bench that did and will exit degraded (2)',
       data: { seat: leg.modelInput || leg.model, status: leg.status, reason: leg.error || null, ...(pf ? { promoted: pf } : {}) }, // #257 R-X14: the machine surface, emit-when-promoted

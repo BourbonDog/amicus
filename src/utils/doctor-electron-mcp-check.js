@@ -20,6 +20,10 @@ const HINTS = require('./remediation-hints');
 
 const plural = (n, one, many) => (n === 1 ? one : many);
 
+/** Why a self-heal is UNVERIFIED, in the one set of words both Electron checks print. */
+const UNVERIFIED_WHY = '(no published sha256 covered the artifact, or its sha256 contradicted'
+  + ' the published one and the hatch accepted it)';
+
 /** One-line detail for a broken copy, distinguishing the two states (#76). */
 const describeBroken = (i) => (i.state === 'binary-missing'
   ? `${i.pkgDir} (binary missing; electron dir: ${i.electronDir})`
@@ -142,9 +146,7 @@ async function evaluateElectronMcp(d) {
     // NOTHING. A repair that no published digest could vouch for is exactly the
     // thing a `doctor --fix` report exists to say out loud.
     const unverified = results.filter((r) => r.repaired && r.unverified).length;
-    const mark = unverified > 0
-      ? `, ${unverified} UNVERIFIED (no published sha256 covered the artifact, or its sha256`
-        + ' contradicted the published one and the hatch accepted it)' : '';
+    const mark = unverified > 0 ? `, ${unverified} UNVERIFIED ${UNVERIFIED_WHY}` : '';
     return {
       ...after,
       message: `${after.message} (self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')}${mark})`,
@@ -152,8 +154,13 @@ async function evaluateElectronMcp(d) {
       fixDetail: `self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')}${mark}`,
     };
   }
-  const failed = results.filter((r) => !r.repaired)
-    .map((r) => `${r.electronDir}${r.reason ? ` — ${r.reason}` : ''}`).join('; ');
+  const failures = results.filter((r) => !r.repaired);
+  const failed = failures.map((r) => `${r.electronDir}${r.reason ? ` — ${r.reason}` : ''}`).join('; ');
+  // D-02 (I2): when EVERY failed repair was refused as `unlisted`, each reason already names
+  // its fix, and HINTS.doctorFix would point back at the command that just refused. Mixed
+  // failures keep the generic hint and let each reason speak for its own copy.
+  const hint = failures.length > 0 && failures.every((r) => r.integrity === 'unlisted')
+    ? HINTS.mcpCopyDoctorFix : after.hint;
   // Partial credit: some copies healed even though the check overall is still
   // not 'ok' — flag it ONLY when >=1 repair actually succeeded (#84-style rule).
   const healed = results.filter((r) => r.repaired).length;
@@ -161,7 +168,7 @@ async function evaluateElectronMcp(d) {
     ? { fixed: true, fixDetail: `self-healed ${healed} npx-cache ${plural(healed, 'copy', 'copies')}` }
     : {};
   return failed
-    ? { ...after, message: `${after.message}; self-heal incomplete: ${failed}`, ...fixFields }
+    ? { ...after, hint, message: `${after.message}; self-heal incomplete: ${failed}`, ...fixFields }
     : { ...after, ...fixFields };
 }
 
@@ -192,9 +199,11 @@ async function evaluateElectronInteractive(d, { fixTimeoutMs }) {
     }
     res = res || {};
     if (res.repaired) {
+      // M3 (owner ruling Q2, "loudly marked unverified"): the mark the MCP check prints, here too.
+      const mark = res.unverified ? `, UNVERIFIED ${UNVERIFIED_WHY}` : '';
       return {
-        id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed (self-healed)', hint: null,
-        fixed: true, fixDetail: 'provisioned the Electron binary in place',
+        id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: `installed (self-healed${mark})`, hint: null,
+        fixed: true, fixDetail: `provisioned the Electron binary in place${mark}`,
       };
     }
     const why = res.reason ? ` — ${res.reason}` : '';
@@ -208,7 +217,10 @@ async function evaluateElectronInteractive(d, { fixTimeoutMs }) {
         : res.contended
           ? `repair already in progress${why}`
           : `not provisioned${why}`;
-    return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `${detail} — headless still works`, hint: HINTS.doctorFix };
+    // A3 (D-02): an `unlisted` refusal already names its fix (no build for this platform, or
+    // reinstall amicus), and doctor --fix would only refuse again, so it gets no hint.
+    const hint = res.integrity === 'unlisted' ? null : HINTS.doctorFix;
+    return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `${detail} — headless still works`, hint };
   }
   return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: 'not installed — headless still works', hint: HINTS.doctorFix };
 }

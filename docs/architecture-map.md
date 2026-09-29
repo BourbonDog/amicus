@@ -52,6 +52,7 @@ src/
 │   ├── run-finalize.js
 │   ├── run-finish.js
 │   ├── run-launch.js
+│   ├── run-retry-gate.js  # The once-only Stage-1 retry's death-class gate (D-06): an OUTPUT_LENGTH death is held, never relaunched.
 │   ├── run-retry-group.js
 │   ├── run-retry-keys.js
 │   ├── run-retry-launch.js
@@ -579,6 +580,7 @@ evals/
 | `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
 | `council/run-finish.js` |  | `finishRun()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
+| `council/run-retry-gate.js` | The once-only Stage-1 retry's death-class gate (D-06): an OUTPUT_LENGTH death is held, never relaunched. | `isOutputLengthLoss()`, `outputLengthSkipClause()`, `OUTPUT_LENGTH_SKIP_CLAUSE()` |
 | `council/run-retry-group.js` |  | `lensIndexOf()`, `recordFailure()`, `groupStage1Losses()`, `planStillDeadSources()`, `seatKey()` |
 | `council/run-retry-keys.js` |  | `seatKey()`, `twinAliases()`, `legLossKey()`, `srcLegClaimer()` |
 | `council/run-retry-launch.js` |  | `briefingFor()`, `bindRetryWave()` |
@@ -640,7 +642,7 @@ evals/
 | `sidecar/electron-custody.js` | CUSTODY of the Electron artifact: one open, one read, one Buffer. | `readArtifactBytes()`, `isSafeArtifactName()`, `MAX_ARTIFACT_BYTES()`, `READ_CHUNK()` |
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
 | `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant. | `isRepoPlantedName()`, `withScrubbedRepoEnv()`, `REPO_ENV_PREFIXES()` |
-| `sidecar/electron-exe-rel.js` | WHICH exe a package resolves through, and whether a `dist/` HOLDS one. | `platformExe()`, `writePathTxt()`, `heldExeRel()`, `distHeldExe()` |
+| `sidecar/electron-exe-rel.js` | WHICH exe a package resolves through, and whether a `dist/` HOLDS one. | `platformExe()`, `writePathTxt()`, `heldExeRel()`, `distHeldExe()`, `containedExe()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `promoteDist()`, `extractBytesToDist()`, `sweepPromoteLitter()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |

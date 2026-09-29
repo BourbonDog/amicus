@@ -11,13 +11,13 @@
  * `'PKzip'` body those suites write. This is that anchor, in ONE place, rather
  * than a hand-copied checksums.json in each fixture.
  *
- * WHY `SELF_ANCHOR_OFF` EXISTS. `resolveAnchor`'s highest rung prefers the
- * RUNNING amicus's own `node_modules/electron/checksums.json` whenever that
- * package's version equals the requested one — the rung that stops `doctor --fix`
- * from reading an anchor out of the same scanned, untrusted directory the bytes
- * came from. This repo really does have electron 43.1.1 installed, and the
- * suites really do ask for '43.1.1', so in-process that rung resolves to the
- * REAL published digests, which no 5-byte fixture can ever match. Spreading
+ * WHY `SELF_ANCHOR_OFF` EXISTS. `resolveAnchor`'s highest rung is the RUNNING
+ * amicus's own `node_modules/electron/checksums.json`, whenever that file holds a
+ * usable table and whatever version is requested (a version test there was the
+ * ANCHORVERSIONFROMTARGET hole). This repo really does have an electron installed,
+ * so in-process that rung resolves to the REAL published digests, which no 5-byte
+ * fixture can ever match; and since D-02 a fixture version or platform that table
+ * does not list is REFUSED as `unlisted` before any cache is read. Spreading
  * `SELF_ANCHOR_OFF` into a test's `deps` pins the anchor to the fixture dir.
  * Production callers pass nothing and keep the real rung.
  */
