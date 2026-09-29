@@ -18,25 +18,47 @@
  * The only sound check is DECLARATION, which is what this asserts.
  *
  * ── NAMED MUTANTS ─────────────────────────────────────────────────────────
- * Applied and reverted by byte copy, MEASURED 2026-09-28.
+ * Applied and reverted by byte copy, MEASURED 2026-09-28, and every one re-run
+ * in council round 3, when the sweep began reading the shipped scripts.
  *
  * NORECURSE  no-phantom-dependencies.test.js :: collectExternalRequires —
  *   never descend into a subdirectory, so only top-level src/, bin/ and
  *   electron/ files are scanned.
  *   RED: "no file under src/, bin/ or electron/ requires extract-zip", on its
- *   yauzl positive control (:126).
+ *   yauzl positive control (:162).
  * POSTINSTALLREQUIRE  scripts/postinstall.js — add `require('extract-zip')`
  *   to the shipped, production-executed postinstall. It survived every test
  *   here until the scripts/ pin existed.
  *   RED: "no file under scripts/ requires extract-zip either (the shipped
- *   postinstall runs in production)" (:136).
+ *   postinstall runs in production)" (:172). Since round 3 also the phantom
+ *   sweep (:136) and "no file under src/, bin/ or electron/ requires
+ *   extract-zip" (:163), whose `required` now holds the shipped scripts.
  * TIKTOKENPOSTINSTALL scripts/postinstall.js — add `require('tiktoken')`.
  *   It survived every test here until the tiktoken scan covered scripts/.
  *   RED: "no file under src/, bin/, electron/ or scripts/ requires tiktoken"
- *   (:147).
+ *   (:183), and since round 3 the phantom sweep (:136).
  * TIKTOKENREQUIRE src/sidecar/unzip.js — add `require('tiktoken')`.
- *   RED: the same test (:146), and the phantom sweep "declares every external
- *   package that src/, bin/ and electron/ require" (:100).
+ *   RED: the same test (:183), and the phantom sweep "declares every
+ *   external package that src/, bin/, electron/ and the shipped scripts
+ *   require" (:136).
+ * POSTINSTALLPHANTOM scripts/postinstall.js — add `require('left-pad')`: an
+ *   undeclared package under ANY name, in the shipped postinstall. It
+ *   survived every test here until the sweep read the shipped scripts
+ *   (council round 3, A1).
+ *   RED: the phantom sweep (:136).
+ * SETUPHOOKSPHANTOM scripts/setup-hooks.js — the same, in the OTHER shipped
+ *   script, which the postinstall runs on every install.
+ *   RED: the phantom sweep (:136).
+ * SHIPPEDEMPTY no-phantom-dependencies.test.js — SHIPPED_SCRIPTS matches
+ *   `.cjs` instead of `.js`, so the sweep's reading of the shipped scripts
+ *   becomes a silent no-op.
+ *   RED: "finds requires to check (the scan itself is not silently empty)"
+ *   (:128).
+ * PUPPETEERPROD package.json — declare puppeteer in `dependencies`, which
+ *   ships @puppeteer/browsers -> extract-zip to every install. It survived
+ *   every test here once the robustExtract suite was deleted (round 3, A2).
+ *   RED: "puppeteer stays out of what an install pulls in (it would bring
+ *   extract-zip back)" (:192).
  * ──────────────────────────────────────────────────────────────────────────
  */
 

@@ -30,29 +30,50 @@
  * Re-derive the strings before touching the regexes.
  *
  * ── NAMED MUTANTS ─────────────────────────────────────────────────────────
- * Applied and reverted by byte copy, MEASURED 2026-09-28 against this file.
+ * Applied and reverted by byte copy, MEASURED 2026-09-28 against this file, and
+ * every one re-run in council round 3, when NAME_REFUSAL began to be BUILT FROM
+ * UNSAFE_PATTERNS: a drift in the list is a drift in the live classifier now.
  *
  * REFUSALSTRINGDRIFT  src/sidecar/unzip.js — stand in for an upstream reword:
  *   `/^invalid relative path: /` -> `/^invalid relative pathname: /`.
  *   RED: "each UNSAFE_PATTERN matches at least one message a real source
- *   produced" (:95).
+ *   produced" (:116) and, since round 3, "NAME_REFUSAL recognises every
+ *   refusal real yauzl raises" (:164). Outside this file it is RED through the
+ *   live classifier in tests/electron-custody.test.js (three tests) and
+ *   tests/electron-native-rescue.test.js (one), and in
+ *   tests/sidecar/zip-name-scan.test.js.
  * STALLTERMINAL       src/sidecar/unzip.js — add `/^stalled: /`, widening the
  *   patterns the way F4 must NOT.
  *   RED: "each UNSAFE_PATTERN matches at least one message a real source
- *   produced" (:95) and "nothing else yauzl or an ordinary extract failure
- *   says is classified as a refusal" (:116, on the two 'stalled: …' literals).
- * NAMEREFUSALDRIFT    zip-from-buffer.js :: NAME_REFUSAL — the LIVE copy drifts
- *   off real yauzl: `invalid relative path` -> `invalid relative pathname`.
- *   RED: "NAME_REFUSAL recognises every refusal real yauzl raises" (:143).
- *   Outside this file it is also RED in tests/electron-custody.test.js and
- *   tests/electron-native-rescue.test.js.
- * NAMEREFUSALWIDE     zip-from-buffer.js :: NAME_REFUSAL — the LIVE copy also
- *   matches yauzl's benign `compressed/uncompressed size mismatch for stored
- *   file` walk error, so a clean but broken archive turns terminal and the
- *   native rescue never runs.
+ *   produced" (:116) and "nothing else yauzl or an ordinary extract failure
+ *   says is classified as a refusal" (:137, on the two 'stalled: …' literals).
+ * NAMEREFUSALDRIFT    zip-from-buffer.js :: NAME_REFUSAL — REDEFINED in round 3,
+ *   because the literal it edited is gone: the LIVE classifier is re-forked into
+ *   a private literal of the four patterns, with `invalid relative path` ->
+ *   `invalid relative pathname`.
+ *   RED: "NAME_REFUSAL recognises every refusal real yauzl raises" (:164) and
+ *   "NAME_REFUSAL classifies exactly what UNSAFE_PATTERNS does" (:181).
+ *   Outside this file it is also RED in tests/electron-custody.test.js (three
+ *   tests) and tests/electron-native-rescue.test.js (one).
+ * NAMEREFUSALWIDE     zip-from-buffer.js :: NAME_REFUSAL — REDEFINED in round 3
+ *   the same way: a private re-fork that also matches yauzl's benign
+ *   `compressed/uncompressed size mismatch for stored file` walk error, so a
+ *   clean but broken archive turns terminal and the native rescue never runs.
  *   RED: "NAME_REFUSAL recognises nothing benign, so a clean but broken
- *   archive stays rescuable" (:158); also three tests in
- *   tests/electron-native-rescue.test.js.
+ *   archive stays rescuable" (:196) and the one-list test (:181); also three
+ *   tests in tests/electron-native-rescue.test.js.
+ * NAMEREFUSALFORK     zip-from-buffer.js :: NAME_REFUSAL — the pre-round-3
+ *   shape: a private copy of yauzl's three prefixes instead of the list.
+ *   RED only on "NAME_REFUSAL classifies exactly what UNSAFE_PATTERNS does: one
+ *   list, not two" (:181), on outOfBound's wording; every other test here and
+ *   in tests/electron-custody.test.js and tests/electron-native-rescue.test.js
+ *   passes with it (council round 3, B1/D3).
+ * NAMEREFUSALNOCHARS  src/sidecar/unzip.js — drop `/^invalid characters in
+ *   fileName: /` from the list.
+ *   RED: "each UNSAFE_PATTERN matches at least one message a real source
+ *   produced", on its length check (:120), and "NAME_REFUSAL recognises every
+ *   refusal real yauzl raises" (:164); outside this file, the strict-names
+ *   test in tests/electron-custody.test.js, that wording's one live producer.
  * ──────────────────────────────────────────────────────────────────────────
  */
 

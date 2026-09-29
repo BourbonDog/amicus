@@ -53,6 +53,16 @@
  *   artifact the offer tells the user to re-run against (equivalently: drop
  *   `rescue.offered = true` in electron-native-rescue.js :: withNativeRescue).
  *   RED: "the offered rescue still has something to act on".
+ * RAWOFFER             electron-rescue-notice.js :: offerNativeRescue — quote
+ *   the failure's reason RAW (drop its collapseExcerpt).
+ *   RED: "the OFFER quotes the failure on one clean line (RAWOFFER)" (:530,
+ *   whose expectQuotedSafely fails at :518). It survived every test here and in
+ *   tests/electron-refusal-sanitize.test.js until council round 3 (D1),
+ *   MEASURED 2026-09-28.
+ * RAWANNOUNCE          electron-rescue-notice.js :: announceNativeRescue — the
+ *   same, on the armed rescue's announcement.
+ *   RED: "the ANNOUNCEMENT quotes the failure on one clean line (RAWANNOUNCE)"
+ *   (:541, the same assertion at :518). It survived the same way until then.
  * ──────────────────────────────────────────────────────────────────────────
  */
 

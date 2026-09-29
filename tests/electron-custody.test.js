@@ -142,14 +142,29 @@
  *   `strictFileNames: true`, so it stops rewriting `\` to `/` before it
  *   validates a name.
  *   RED: "a backslash TRAVERSAL name is rewritten, then refused terminally, and
- *   writes nothing outside" (:421, now refused as `invalid characters`); "a
+ *   writes nothing outside" (:436, now refused as `invalid characters`); "a
  *   backslash in an entry name lands as a "/" separator, yauzl's default
- *   rewrite" (:407, refused outright); and "a real, DEFLATED archive
- *   round-trips byte-for-byte" (:369; Compress-Archive writes `sub\b.txt`).
+ *   rewrite" (:422, refused outright); and "a real, DEFLATED archive
+ *   round-trips byte-for-byte" (:384; Compress-Archive writes `sub\b.txt`).
  *   Also RED on "an EMBEDDED backslash dot-segment is refused the same way, by
- *   yauzl, before any write" (:433). NAMEREFUSALDRIFT (recorded in
- *   tests/sidecar/unzip-refusal-strings.test.js) is RED on both backslash
- *   traversal tests too, at their code assertions (:420, :432).
+ *   yauzl, before any write" (:448). NAMEREFUSALDRIFT and, since round 3,
+ *   REFUSALSTRINGDRIFT (both recorded in
+ *   tests/sidecar/unzip-refusal-strings.test.js) are RED on both backslash
+ *   traversal tests too, at their code assertions (:435, :447), and on "a
+ *   name yauzl refuses is TERMINAL, in the words UNSAFE_PATTERNS classifies"
+ *   (:410).
+ * CHARSLIVE       zip-from-buffer.js :: extractZipBuffer — the live 'error'
+ *   handler stops treating yauzl's `invalid characters in fileName` refusal as
+ *   terminal, while NAME_REFUSAL itself still matches it (council round 3, D2).
+ *   RED only on "with strictFileNames ON a backslash name is refused
+ *   TERMINALLY, as `invalid characters`" (:469): the direct pin in
+ *   tests/sidecar/unzip-refusal-strings.test.js never passes through the handler.
+ * CAPDRIFT        src/sidecar/unzip.js — move the one cap, `MAX_MS = 300_000`.
+ *   Before round 3 the in-memory bound read its own 240 s literal in
+ *   zip-stall-bound.js, so this edit could not reach it (B2).
+ *   RED: "the default bounds are the numbers unzip.js used, so the electron
+ *   path is bounded again" (:707). Nothing in
+ *   tests/electron-native-rescue.test.js pins the rescue's spawn timeout.
  * ──────────────────────────────────────────────────────────────────────────
  */
 
