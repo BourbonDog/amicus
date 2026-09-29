@@ -45,25 +45,42 @@ const HAS_ELECTRON = (() => {
 
 const describeE2E = (HAS_API_KEY && HAS_ELECTRON) ? describe : describe.skip;
 
+// One Xvfb for the whole file, shared by both describe blocks (B-CI-32, rail
+// run 36583172019). Each block used to start its own Xvfb on :99 and kill it
+// in afterAll without waiting for it to exit. The second block's Xvfb then
+// started while the first still held :99, and that block's Electron found no
+// X server ("Missing X server or $DISPLAY") while the first block passed.
+// The file-level afterAll below stops the shared server once, after both
+// blocks.
+let sharedXvfb = null;
+
 function ensureDisplay() {
   if (process.platform !== 'linux' || process.env.DISPLAY) {
     return { display: process.env.DISPLAY, cleanup: () => {} };
   }
   const display = ':99';
-  let xvfbProcess;
-  try {
-    xvfbProcess = spawn('Xvfb', [display, '-screen', '0', '1280x720x24', '-nolisten', 'tcp'], {
-      stdio: 'ignore', detached: true,
-    });
-    xvfbProcess.unref();
-  } catch (err) {
-    throw new Error(`Xvfb not found. Install with: apt-get install xvfb. Error: ${err.message}`);
+  if (!sharedXvfb) {
+    try {
+      sharedXvfb = spawn('Xvfb', [display, '-screen', '0', '1280x720x24', '-nolisten', 'tcp'], {
+        stdio: 'ignore', detached: true,
+      });
+      sharedXvfb.unref();
+    } catch (err) {
+      throw new Error(`Xvfb not found. Install with: apt-get install xvfb. Error: ${err.message}`);
+    }
   }
-  return {
-    display,
-    cleanup: () => { try { xvfbProcess.kill(); } catch { /* already dead */ } }
-  };
+  // A block's cleanup leaves the shared server running for the next block.
+  return { display, cleanup: () => {} };
 }
+
+function stopSharedXvfb() {
+  if (sharedXvfb) {
+    try { sharedXvfb.kill(); } catch { /* already dead */ }
+    sharedXvfb = null;
+  }
+}
+
+afterAll(stopSharedXvfb);
 
 /**
  * Start a real OpenCode server in a child process to avoid ESM import issues
