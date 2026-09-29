@@ -2225,9 +2225,7 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
     expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(2);
     expect(ctx.launchers.launchWave.mock.calls[1][0].models).toEqual(['deepseek']);   // one slot
     // Both orphaned legs are announced, the retried twin heals, and the held twin is a dead leg
-    // with the D-06 clause: that, and NOTHING else. Named mutant "HELDALARM" (drop the held
-    // exemption in run-stage1-superseded.js :: supersededRows): an `internal` "a superseded row for
-    // seat deepseek was refused" note joins them, and this line reds.
+    // with the D-06 clause: that, and NOTHING else.
     const CHANNELS = ['seat-unbound', 'seat-unbound', 'stage1-retry', 'dead-leg'];
     expect(notes.map((n) => n.channel)).toEqual(CHANNELS);
     expect(degrades.map((d) => d.channel)).toEqual(CHANNELS);                  // run.json agrees
@@ -2236,7 +2234,10 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
       .toBe(`the leg ended 'error': ${MINTED} with no usable output${CLAUSE}`);
     // The rows, exactly as the fix-round-1 probe measured them: the retried twin's first leg is
     // superseded, and the held twin's OWN first leg is its primary 'seat' error row. Neither
-    // carries a seat, because neither was bound.
+    // carries a seat, because neither was bound. Named mutant "HELDALARM" (drop the held skip that
+    // opens run-stage1-superseded.js :: supersededRows' loop): the held leg reaches the join, where
+    // `willTakeItsOwnLeg` (which skips held legs) says no, so it is written a superseded row that
+    // nothing superseded, silently, and this line reds (MEASURED, council fix round 2).
     expect(r.extraRows).toEqual([twinRow('superseded', { usage: cost(0.02) }),
       twinRow('seat', { usage: cost(0.03) })]);
     // Billing: each billed leg exactly once. The healed retry leg is the one review, and its row
@@ -2319,10 +2320,12 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
       : deadLeg('deepseek', 'timed-out', null, 'abc123-s1r1', 1)];
     const { r, said } = await heldTwinRun(legs, retryLegs, retry === 'over-max-cost' ? () => true : undefined);
     // Named mutant "HELDROWBYKEY" (key a held leg by `rowKeyOf` again in
-    // run-stage1-rows.js :: pushDeadSeatRows): the held twin borrows or collapses onto its twin's
-    // row, and this line reds on every cell but the order control. Named mutant "HELDLENTTOTWIN"
-    // (drop `&& !isHeld(l)` from that function's never-retried fallback): the held twin is lent to
-    // the cost-skipped twin's row, and this line reds on the "held before" over-max-cost cell.
+    // run-stage1-rows.js :: pushDeadSeatRows): the fallback skips held legs, so the held twin
+    // collapses onto its twin's row or loses its own leg, and this line reds on every cell
+    // (MEASURED, council fix round 2; it spared the order control before the fallback skipped held
+    // legs). Named mutant "HELDLENTTOTWIN" (drop `&& !isHeld(l)` from that function's never-retried
+    // fallback): the held twin is lent to the cost-skipped twin's row, and this line reds on the
+    // "held before" over-max-cost cell.
     expect(r.extraRows).toEqual(rows);
     const cents = (usages) => usages.reduce((sum, u) => sum + Math.round(((u && u.cost && u.cost.amount) || 0) * 100), 0);
     const billed = cents([...legs, ...(retryLegs || [])].map((l) => l.usage));
