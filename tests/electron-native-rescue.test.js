@@ -55,14 +55,24 @@
  *   RED: "the offered rescue still has something to act on".
  * RAWOFFER             electron-rescue-notice.js :: offerNativeRescue — quote
  *   the failure's reason RAW (drop its collapseExcerpt).
- *   RED: "the OFFER quotes the failure on one clean line (RAWOFFER)" (:530,
- *   whose expectQuotedSafely fails at :518). It survived every test here and in
+ *   RED: "the OFFER quotes the failure on one clean line (RAWOFFER)" (:558,
+ *   whose expectQuotedSafely fails at :546). It survived every test here and in
  *   tests/electron-refusal-sanitize.test.js until council round 3 (D1),
- *   MEASURED 2026-09-28.
+ *   MEASURED 2026-09-28; re-run in round 4.
  * RAWANNOUNCE          electron-rescue-notice.js :: announceNativeRescue — the
  *   same, on the armed rescue's announcement.
  *   RED: "the ANNOUNCEMENT quotes the failure on one clean line (RAWANNOUNCE)"
- *   (:541, the same assertion at :518). It survived the same way until then.
+ *   (:569, the same assertion at :546). It survived the same way until then.
+ * RESCUETIMEOUTDEFAULT electron-native-rescue.js :: withNativeRescue —
+ *   default `maxMs` to 60_000 instead of unzip.js :: MAX_MS.
+ *   RED: "the rescue's spawn is capped at unzip.js :: MAX_MS by default"
+ *   (:523). At 2b11e9b2 it passed every test here and in
+ *   tests/electron-install.test.js, tests/electron-artifact-custody.test.js,
+ *   tests/electron-trust-wiring.test.js and tests/electron-custody.test.js
+ *   (council round 4, A2/B1).
+ * RESCUETIMEOUTDROPPED electron-native-plan.js :: runNativePlan — drop
+ *   `timeout: maxMs` from the spawn options, so the child is unbounded.
+ *   RED: the same test (:523). It survived the same five files at 2b11e9b2.
  * ──────────────────────────────────────────────────────────────────────────
  */
 

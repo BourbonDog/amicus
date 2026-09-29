@@ -163,8 +163,8 @@
  *   Before round 3 the in-memory bound read its own 240 s literal in
  *   zip-stall-bound.js, so this edit could not reach it (B2).
  *   RED: "the default bounds are the numbers unzip.js used, so the electron
- *   path is bounded again" (:707). Nothing in
- *   tests/electron-native-rescue.test.js pins the rescue's spawn timeout.
+ *   path is bounded again" (:707). GREEN in the native-rescue file by design:
+ *   its spawn-cap test pins the WIRING against the imported MAX_MS (round 4).
  * ──────────────────────────────────────────────────────────────────────────
  */
 
