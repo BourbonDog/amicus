@@ -98,6 +98,67 @@
  *   construction: it drives no `--limit`, so it never sees a second trailing
  *   line, which is why the `--limit` fixture had to be its own test.
  * ⚠️ RE-RUN, NEVER RENUMBER: a recorded red set asserts the set still fails.
+ *
+ * ── D-08 RE-RUN, 2026-09-28, at 6335210 ──────────────────────────────────────────
+ * These counts SUPERSEDE the round-3 ones above, which stay as history. Same five files, each
+ * run ALONE through the lane's one-file jest config and summed: **5 suites / 77 tests** (76 →
+ * 77: D-08 added "--json --limit: stderr keeps the human order — the cap first, then the
+ * failure (D-08)"). Each mutant was applied ALONE and the source restored by byte copy,
+ * SHA-256-verified and then checked with `git diff --quiet HEAD`, never by `git checkout`.
+ * Moved: NOCOUNCILROWS 24 → 27, SILENTCATCH 3 → 6. Since D-08 the two B1 `--json` pins assert
+ * the note ON stderr, so a mutant that silences the merge kills them, as it kills the new
+ * `--json --limit` order pin. Held: the other 6. Killed by:
+ *   `NOCOUNCILROWS` (27 of 77): "a project whose ONLY work is a council run no longer reports
+ *     an empty list" · "the MODEL cell renders council(<stage>), mirroring wave(N legs)" · "the
+ *     widest RUNNING stage name still leaves the column a space" · "a TERMINAL run has no
+ *     running stage, so the cell is a bare council" · "the STATUS, TAG, AGE and BRIEFING cells
+ *     all render for a council row" · "the CLI re-truncates the 80-char preview to its OWN 30
+ *     (each surface owns its width)" · "council and session rows share ONE newest-first order"
+ *     · "an exact createdAt tie keeps the session row first (the sort is stable)" · "--status
+ *     filters them exactly as it filters sessions" · "--limit counts them, and the elision
+ *     notice names the real merged total" · "--search reaches a council row through its own
+ *     on-disk material" · "--json emits council rows as structured documents beside the
+ *     sessions" · "--all stamps the council rows with the project they were read from" · "--all
+ *     prints the disclosure exactly once, as the last line under the table" · "WITHOUT --all
+ *     the human output is byte-identical to the pre-note listing" · "--json --all keeps its
+ *     shape — the note is on neither stdout nor stderr" · "the human listing NAMES the failure
+ *     instead of degrading in silence" · "an EMPTY listing carries it too — that is where the
+ *     vanished rows hid best" · "the message is SANITIZED and capped — one line, no control
+ *     bytes" · "--json stdout is untouched — the note goes to stderr, where the truncation
+ *     notice goes (D-08)" · "…including the EMPTY --json listing, the one line both modes
+ *     share" · "--json --limit: stderr keeps the human order — the cap first, then the failure
+ *     (D-08)" · "the truncation notice prints BEFORE the scope note, which is still last" ·
+ *     "--json --limit keeps the notice on stderr and the note off both streams" · "it keeps its
+ *     concatenation slot, and the same input prints the same list every time" · "and the AGE
+ *     cell says so out loud (a control on today's behavior, not an endorsement)" · "the exact
+ *     spelling returns both kinds".
+ *   `UNCAPPEDSTAGE` (1 of 77): "the widest RUNNING stage name still leaves the column a space".
+ *   `NORESORT` (6 of 77): "council and session rows share ONE newest-first order" · "--limit
+ *     counts them, and the elision notice names the real merged total" · "--json emits council
+ *     rows as structured documents beside the sessions" · "WITHOUT --all the human output is
+ *     byte-identical to the pre-note listing" · "--json --limit keeps the notice on stderr and
+ *     the note off both streams" · "the exact spelling returns both kinds".
+ *   `NOSCOPENOTE` (5 of 77): "--all prints the disclosure exactly once, as the last line under
+ *     the table" · "the note does not wait for a council row — the OMISSION is what it
+ *     discloses" · "an EMPTY --all listing carries it too — that is where the silence was
+ *     loudest" · "the message is SANITIZED and capped — one line, no control bytes" · "the
+ *     truncation notice prints BEFORE the scope note, which is still last".
+ *   `NOTEALWAYS` (7 of 77): "council and session rows share ONE newest-first order" · "an exact
+ *     createdAt tie keeps the session row first (the sort is stable)" · "--status filters them
+ *     exactly as it filters sessions" · "--search reaches a council row through its own on-disk
+ *     material" · "WITHOUT --all the human output is byte-identical to the pre-note listing" ·
+ *     "it keeps its concatenation slot, and the same input prints the same list every time" ·
+ *     "the exact spelling returns both kinds".
+ *   `NOTEINJSON` (1 of 77): "…but the empty listing under --json is untouched (that path prints
+ *     in both modes)".
+ *   `SILENTCATCH` (6 of 77): "the human listing NAMES the failure instead of degrading in
+ *     silence" · "an EMPTY listing carries it too — that is where the vanished rows hid best" ·
+ *     "the message is SANITIZED and capped — one line, no control bytes" · "--json stdout is
+ *     untouched — the note goes to stderr, where the truncation notice goes (D-08)" ·
+ *     "…including the EMPTY --json listing, the one line both modes share" · "--json --limit:
+ *     stderr keeps the human order — the cap first, then the failure (D-08)".
+ *   `NOTEORDER` (1 of 77): "the truncation notice prints BEFORE the scope note, which is still
+ *     last".
  */
 
 const fs = require('fs');
@@ -392,20 +453,17 @@ describe('amicus list --all — the scope limit speaks (round 2, A1)', () => {
  * OPTIONAL `opts.onUnavailable` sink leaves the array return byte-identical,
  * pushes at the moment of failure, and keeps no state a later call inherits.
  *
- * HUMAN BRANCH ONLY, mirroring `NOTEINJSON`: `--json` is a shape contract, and
- * this note is prose. The `--json` controls below are what hold that line.
+ * BOTH MODES since D-08 (the owner's decision, 2026-09-28). The human listing
+ * prints the note; `--json` prints it on STDERR, where the truncation notice
+ * already goes, so stdout stays exactly the document (or the empty listing's
+ * one line). `--json` is a shape contract and stdout is its channel: the
+ * `--json` pins below hold stdout unchanged AND the note on stderr.
  *
- * ⚠️ THE RESIDUAL THAT LEAVES, stated rather than absorbed: a `--json` consumer
- * still gets no signal that the council rows were dropped — it reads a
- * well-formed document that is silently short. That is a NARROWER silence than
- * the one B1 closes (the terminal, where the omission was total and unremarked)
- * but it is the same KIND, and it is not fixed here. It is also not the scope
- * note's situation: that note reports a limit no flag can lift, while this one
- * reports a FAILURE a caller could act on, which is the argument for eventually
- * putting it on stderr the way the truncation notice goes. Deliberately out of
- * scope for round 3 — moving it would change what a `--json` run writes to a
- * stream some caller may already be reading — and recorded here so the next
- * round decides it on purpose rather than inheriting it by omission.
+ * The residual round 3 recorded here, a `--json` consumer reading a well-formed
+ * document that was silently short, is what D-08 decided: this note reports a
+ * FAILURE a caller can act on, unlike the scope note's limit that no flag lifts,
+ * so it is said, on the stream a script does not parse. The scope note stays off
+ * both streams under `--json`; A1's rule is unchanged.
  *
  * ── NAMED MUTANT `SILENTCATCH` ────────────────────────────────────────────
  * MUTATION: in src/sidecar/list-council.js :: mergeCouncilRows, restore the
@@ -422,6 +480,15 @@ describe('amicus list --all — the scope limit speaks (round 2, A1)', () => {
  * note's ABSENCE, which a merge that never speaks satisfies. That is why the
  * three positives are the detector and these three are not.
  * ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
+ * ⚠️ D-08 RE-RUN (2026-09-28, at 6335210): RED SET 6 of 77. The paragraph above is round 3's:
+ * since D-08 both `--json` pins below assert the note ON stderr, so a silent catch kills them
+ * too, and the new `--json --limit` order pin as well; only the intact-degrade pin is still a
+ * control. Killed by: "the human listing NAMES the failure instead of degrading in silence" ·
+ * "an EMPTY listing carries it too — that is where the vanished rows hid best" · "the message
+ * is SANITIZED and capped — one line, no control bytes" · "--json stdout is untouched — the
+ * note goes to stderr, where the truncation notice goes (D-08)" · "…including the EMPTY --json
+ * listing, the one line both modes share" · "--json --limit: stderr keeps the human order — the
+ * cap first, then the failure (D-08)".
  */
 describe('amicus list — an unavailable merge is DISCLOSED (round 3, B1)', () => {
   const SCOPE = 'council runs: current project only (no cross-project index).';
@@ -482,19 +549,33 @@ describe('amicus list — an unavailable merge is DISCLOSED (round 3, B1)', () =
     expect(lines()[lines().length - 1]).toBe(SCOPE);
   });
 
-  it('--json stdout is untouched — the note is prose, and prose is not the contract', async () => {
+  it('--json stdout is untouched — the note goes to stderr, where the truncation notice goes (D-08)', async () => {
     breakCouncil('boom');
     seedSession('sesb1004', { createdAt: '2026-07-19T01:00:00.000Z' });
     await listSidecars({ project, json: true });
     expect(JSON.parse(stdout()).map(r => r.id)).toEqual(['sesb1004']);
     expect(stdout()).not.toContain('council runs:');
-    expect(errSpy.mock.calls.map(c => String(c[0])).join('\n')).not.toContain('council runs:');
+    expect(errSpy.mock.calls.map(c => String(c[0])).join('\n')).toContain('council runs: unavailable (boom)');
   });
 
   it('…including the EMPTY --json listing, the one line both modes share', async () => {
     breakCouncil('boom');
     await listSidecars({ project, json: true });
     expect(stdout()).toBe('No amicus sessions found.');
+    // D-08: stdout is the one shared line, so the note takes stderr, alone.
+    expect(errSpy.mock.calls.map(c => String(c[0])).join('\n')).toBe('council runs: unavailable (boom)');
+  });
+
+  it('--json --limit: stderr keeps the human order — the cap first, then the failure (D-08)', async () => {
+    breakCouncil('boom');
+    seedSession('sesb1005', { createdAt: '2026-07-19T01:00:00.000Z' });
+    seedSession('sesb1006', { createdAt: '2026-07-19T02:00:00.000Z' });
+    await listSidecars({ project, limit: 1, json: true });
+    expect(JSON.parse(stdout()).map(r => r.id)).toEqual(['sesb1006']);
+    expect(errSpy.mock.calls.map(c => String(c[0]))).toEqual([
+      'Showing 1 of 2 sessions (--limit 1). Use --limit 0 for all.',
+      'council runs: unavailable (boom)',
+    ]);
   });
 });
 
@@ -528,6 +609,8 @@ describe('amicus list — an unavailable merge is DISCLOSED (round 3, B1)', () =
  * than an assertion bolted onto that one. The `--json --limit` control below
  * stays green too, and honestly: this mutant never touches the JSON branch.
  * ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
+ * D-08 RE-RUN (2026-09-28, at 6335210): RED SET 1 of 77, killed by "the truncation notice
+ * prints BEFORE the scope note, which is still last": unchanged.
  */
 describe('amicus list --all --limit — the scope note still ends it (round 3, B4)', () => {
   const NOTE = 'council runs: current project only (no cross-project index).';

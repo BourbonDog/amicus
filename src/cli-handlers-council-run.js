@@ -214,8 +214,8 @@ async function handleCouncilRun(args, depsOverride = {}) {
   const runDir = args['out-dir']
     ? path.resolve(project, String(args['out-dir']))
     : path.resolve(project, `council-${runId}`);
-  // Spec 2026-09-11 §4 + the v4.7 PR6 fence: --tools/--agent shape and --out-dir placement — ./cli-council-run-tools.
-  const tf = require('./cli-council-run-tools').checkCouncilRunTools({ args, explicitKeys, runDir, project });
+  // Spec 2026-09-11 §4 + the v4.7 PR6 fence + D-04: --tools/--agent shape, --out-dir placement and an --out-dir in use — ./cli-council-run-tools.
+  const tf = require('./cli-council-run-tools').checkCouncilRunTools({ args, explicitKeys, runDir, project, runId });
   if (tf.error) { return failJson(useJson, tf.error); }
   // A1/D2: e.g. the --tools bash Notice, printed either way (JSON still uses stderr for it).
   for (const n of tf.notices || []) { process.stderr.write(n + '\n'); }
