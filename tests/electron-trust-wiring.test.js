@@ -401,7 +401,7 @@ describe('C2 — the anchor cannot be demoted by DATA (ANCHORVERSIONFROMTARGET)'
 });
 
 describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERED)', () => {
-  // unzip.js classifies extract-zip's path-traversal refusals as terminal. That
+  // unzip.js classified extract-zip's path-traversal refusals as terminal. That
   // held only inside unzip.js: both catch blocks in repairElectron swallowed the
   // refusal without reading err.code and laundered it back into the retry the
   // control forbids. MEASURED before the fix — network path: runInstaller spawned

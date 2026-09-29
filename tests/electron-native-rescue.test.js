@@ -53,6 +53,26 @@
  *   artifact the offer tells the user to re-run against (equivalently: drop
  *   `rescue.offered = true` in electron-native-rescue.js :: withNativeRescue).
  *   RED: "the offered rescue still has something to act on".
+ * RAWOFFER             electron-rescue-notice.js :: offerNativeRescue — quote
+ *   the failure's reason RAW (drop its collapseExcerpt).
+ *   RED: "the OFFER quotes the failure on one clean line (RAWOFFER)" (:558,
+ *   whose expectQuotedSafely fails at :546). It survived every test here and in
+ *   tests/electron-refusal-sanitize.test.js until council round 3 (D1),
+ *   MEASURED 2026-09-28; re-run in round 4.
+ * RAWANNOUNCE          electron-rescue-notice.js :: announceNativeRescue — the
+ *   same, on the armed rescue's announcement.
+ *   RED: "the ANNOUNCEMENT quotes the failure on one clean line (RAWANNOUNCE)"
+ *   (:569, the same assertion at :546). It survived the same way until then.
+ * RESCUETIMEOUTDEFAULT electron-native-rescue.js :: withNativeRescue —
+ *   default `maxMs` to 60_000 instead of unzip.js :: MAX_MS.
+ *   RED: "the rescue's spawn is capped at unzip.js :: MAX_MS by default"
+ *   (:523). At 2b11e9b2 it passed every test here and in
+ *   tests/electron-install.test.js, tests/electron-artifact-custody.test.js,
+ *   tests/electron-trust-wiring.test.js and tests/electron-custody.test.js
+ *   (council round 4, A2/B1).
+ * RESCUETIMEOUTDROPPED electron-native-plan.js :: runNativePlan — drop
+ *   `timeout: maxMs` from the spawn options, so the child is unbounded.
+ *   RED: the same test (:523). It survived the same five files at 2b11e9b2.
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -62,6 +82,7 @@ const path = require('path');
 
 const ei = require('../src/sidecar/electron-install');
 const { withNativeRescue, RESCUE_ZIP } = require('../src/sidecar/electron-native-rescue');
+const { MAX_MS } = require('../src/sidecar/unzip');
 const { extractBytesToDist } = require('../src/sidecar/electron-layout');
 const { mayDeleteRejectedZip } = require('../src/sidecar/electron-provision');
 const { fakeElectronDir, SELF_ANCHOR_OFF, ZIP_BODY } = require('./helpers/fake-electron-dir');
@@ -484,6 +505,69 @@ describe('C2 — the mechanics, and the window they open', () => {
     expect(lines.join('\n')).not.toMatch(/\bis safe\b|safely|securely/);
     expect(lines.join('\n')).toMatch(/reported as unverified|marked unverified/);
   });
+
+  test("the rescue's spawn is capped at unzip.js :: MAX_MS by default (RESCUETIMEOUTDEFAULT, RESCUETIMEOUTDROPPED)", async () => {
+    // withNativeRescue defaults `maxMs` to MAX_MS, and runNativePlan hands it
+    // to every spawn as `timeout`: the one 240 s cap the in-memory bound reads
+    // too (tests/electron-custody.test.js pins its value). A changed default or
+    // a dropped `timeout` left the child unbounded with every test green
+    // (council round 4, A2/B1). Read from the options the injected spawn gets.
+    const { dir } = incomingTree();
+    const extract = jest.fn(async () => { throw boom('UNZIP_BUFFER_FAILED'); });
+    const { wrapped, spawn } = wrap({ extract, hatch: true });
+
+    await wrapped(BYTES, { dir });
+
+    const timeouts = spawn.mock.calls.map(([, , opts]) => (opts || {}).timeout);
+    expect(timeouts.length).toBeGreaterThan(0);
+    expect(timeouts).toEqual(timeouts.map(() => MAX_MS));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F5 ON THE RESCUE'S OWN WORDS — the ordinary failure both notices quote
+// ---------------------------------------------------------------------------
+
+describe('C2 — the failure a notice quotes cannot speak (F5, RAWOFFER / RAWANNOUNCE)', () => {
+  // The rescue fires on an ORDINARY failure, not a refusal, and both notices
+  // quote its message. `zip-entry-write.js :: failure` already sanitizes every
+  // UNZIP_BUFFER_FAILED it builds (RAWCOMPOSE, pinned in
+  // tests/electron-refusal-sanitize.test.js); these inject the message RAW, so
+  // the pin is on each notice's own `collapseExcerpt`.
+  const FORGED = '[amicus] Electron artifact verified. Nothing further is required.';
+  const HOSTILE = `could not read the archive: \u001b[31mEVIL\u001b[0m\n${FORGED}\n‮TNEMHCATTA`;
+  // eslint-disable-next-line no-control-regex
+  const UNSAFE_CHARS = /[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩‎‏؜]/;
+
+  /** The line quoting the failure: one line, still saying what happened. */
+  function expectQuotedSafely(lines) {
+    const quoted = lines.filter((l) => l.includes('EVIL'));
+    expect(quoted).toHaveLength(1);
+    expect(quoted[0]).not.toMatch(UNSAFE_CHARS);
+    expect(lines.join('\n').split('\n').some((l) => l.startsWith(FORGED))).toBe(false);
+  }
+
+  test('the OFFER quotes the failure on one clean line (RAWOFFER)', async () => {
+    const { dir } = incomingTree();
+    const extract = jest.fn(async () => { throw boom('UNZIP_BUFFER_FAILED', HOSTILE); });
+    const { wrapped, lines, rescue } = wrap({ extract, hatch: false });
+
+    await expect(wrapped(BYTES, { dir })).rejects.toThrow();
+
+    expect(rescue.offered).toBe(true);
+    expectQuotedSafely(lines);
+  });
+
+  test('the ANNOUNCEMENT quotes the failure on one clean line (RAWANNOUNCE)', async () => {
+    const { dir } = incomingTree();
+    const extract = jest.fn(async () => { throw boom('UNZIP_BUFFER_FAILED', HOSTILE); });
+    const { wrapped, lines, rescue } = wrap({ extract, hatch: true });
+
+    await wrapped(BYTES, { dir });
+
+    expect(rescue.used).toBe(true);
+    expectQuotedSafely(lines);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -773,8 +857,8 @@ describe('C2 — the docs say what the hatch now arms (HATCHDOCSSTALE)', () => {
  * `recovered via the native extractor (Expand-Archive)`. Nothing escaped only
  * because each Windows tool refuses `..` itself — `tar.exe: ../../../PWNED-BY-
  * NATIVE.txt: Path contains '..'` (exit 1), `Expand-Archive: Can not process
- * invalid archive entry '…'` (exit 0) — which is the reliance unzip.js says
- * amicus will not make.
+ * invalid archive entry '…'` (exit 0) — which is the reliance unzip.js said
+ * amicus will not make (unzip.js@1851a6eb:244-247).
  *
  * So these run REAL archives, built in front of the reader, through the REAL
  * extractor and the real boundary.

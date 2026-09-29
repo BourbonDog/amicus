@@ -16,7 +16,7 @@
  * says exactly that on stderr before the first spawn, and the caller marks the
  * result unverified. It is the trade the hatch buys, not a safe operation.
  *
- * NEAR-LEAF: `./unzip` (the plan and the cap, byte-for-byte unchanged),
+ * NEAR-LEAF: `./unzip` (the plan),
  * `./electron-rescue-notice`, `./electron-refuse` and `../utils/text-sanitize`.
  * Nothing requires it back.
  *
@@ -27,8 +27,6 @@
 
 const path = require('path');
 
-// The plan and the cap come from `unzip.js`, which is byte-for-byte unchanged:
-// this is a re-wiring of a caller, not a change to that module.
 const { nativeUnzipPlan } = require('./unzip');
 const { PATH_EXCERPT_CHARS } = require('./electron-refuse');
 const { announceNativeRescue } = require('./electron-rescue-notice');
@@ -52,7 +50,7 @@ const INCOMING_PREFIX = '.amicus-incoming-';
 
 /** The name the rescue writes the verified buffer under, inside that tree. */
 const RESCUE_ZIP = 'rescue-artifact.zip';
-/** True if `dir` exists and holds at least one entry (unzip.js's layer 3). */
+/** True if `dir` exists and holds at least one entry. */
 function dirNonEmpty(fs, dir) {
   try {
     return fs.readdirSync(dir).length > 0;
@@ -66,8 +64,7 @@ function dirNonEmpty(fs, dir) {
  *
  * LOAD-BEARING, not tidiness: the extractor that just failed may have left a
  * PARTIAL tree there, and `dirNonEmpty` would then read those leftovers as a
- * successful rescue and promote them into `dist/`. unzip.js cleans for the same
- * reason before its own native strategies.
+ * successful rescue and promote them into `dist/`.
  */
 function cleanDir(fs, dir) {
   try {
@@ -86,16 +83,14 @@ function cleanDir(fs, dir) {
  * It costs one line and adds no decision surface, and it converts a hypothetical
  * cwd-relative write from "the user's own repo, under npx, forever" into "the
  * incoming tree, which `extractBytesToDist`'s `finally` deletes unconditionally
- * and `sweepPromoteLitter` takes if a kill skipped that". `unzip.js ::
- * robustExtract`'s native loop deliberately does NOT get the same treatment: its
- * `dir` is not inside a tree amicus deletes unconditionally, so binding a cwd
- * there would point a child's working directory at the user's install.
+ * and `sweepPromoteLitter` takes if a kill skipped that".
  *
- * The verdicts are unzip.js's, because they were right there: a spawn error or
- * an external signal-kill (`status: null` — SIGKILL, an OOM) is a FAILURE even
- * if files landed, a non-zero exit is a failure, and a clean exit that produced
- * nothing is a failure. Every failure cleans up after itself so the next
- * strategy starts from an empty directory.
+ * The verdicts (HISTORY: carried over from the native fallback of unzip.js's
+ * since-removed `robustExtract`): a spawn error or an external signal-kill
+ * (`status: null` — SIGKILL, an OOM) is a FAILURE even if files landed, a
+ * non-zero exit is a failure, and a clean exit that produced nothing is a
+ * failure. Every failure cleans up after itself so the next strategy starts
+ * from an empty directory.
  * @returns {string|null} the strategy name that worked, or null
  */
 function runNativePlan({ zip, dir, cwd, platform, fs, spawn, maxMs, log }) {

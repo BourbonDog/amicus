@@ -98,7 +98,7 @@
  *   hard-cap timers, restoring the unbounded promise the electron path had.
  *   RED: "an extract that makes no progress rejects on the IDLE bound", "an
  *   extract that never ends rejects on the HARD cap", and "the default bounds
- *   are unzip.js's own numbers".
+ *   are the numbers unzip.js used".
  * IDLEONENTRIES   zip-from-buffer.js :: extractZipBuffer — arm the idle watchdog
  *   against ENTRY COMPLETION instead of bytes written (drop the
  *   `written !== atBytes` term), which is what the first cut of the bound did.
@@ -138,6 +138,33 @@
  *   endpoint `destroy` emits nothing, so `pipeline` never settles).
  *   RED: "the bound SETTLES even when the aborted write can NEVER come apart",
  *   and both fake-timer bound tests, which now fire with an entry in flight.
+ * STRICTNAMES     zip-from-buffer.js :: extractZipBuffer — pass yauzl
+ *   `strictFileNames: true`, so it stops rewriting `\` to `/` before it
+ *   validates a name.
+ *   RED: "a backslash TRAVERSAL name is rewritten, then refused terminally, and
+ *   writes nothing outside" (:436, now refused as `invalid characters`); "a
+ *   backslash in an entry name lands as a "/" separator, yauzl's default
+ *   rewrite" (:422, refused outright); and "a real, DEFLATED archive
+ *   round-trips byte-for-byte" (:384; Compress-Archive writes `sub\b.txt`).
+ *   Also RED on "an EMBEDDED backslash dot-segment is refused the same way, by
+ *   yauzl, before any write" (:448). NAMEREFUSALDRIFT and, since round 3,
+ *   REFUSALSTRINGDRIFT (both recorded in
+ *   tests/sidecar/unzip-refusal-strings.test.js) are RED on both backslash
+ *   traversal tests too, at their code assertions (:435, :447), and on "a
+ *   name yauzl refuses is TERMINAL, in the words UNSAFE_PATTERNS classifies"
+ *   (:410).
+ * CHARSLIVE       zip-from-buffer.js :: extractZipBuffer — the live 'error'
+ *   handler stops treating yauzl's `invalid characters in fileName` refusal as
+ *   terminal, while NAME_REFUSAL itself still matches it (council round 3, D2).
+ *   RED only on "with strictFileNames ON a backslash name is refused
+ *   TERMINALLY, as `invalid characters`" (:469): the direct pin in
+ *   tests/sidecar/unzip-refusal-strings.test.js never passes through the handler.
+ * CAPDRIFT        src/sidecar/unzip.js — move the one cap, `MAX_MS = 300_000`.
+ *   Before round 3 the in-memory bound read its own 240 s literal in
+ *   zip-stall-bound.js, so this edit could not reach it (B2).
+ *   RED: "the default bounds are the numbers unzip.js used, so the electron
+ *   path is bounded again" (:707). GREEN in the native-rescue file by design:
+ *   its spawn-cap test pins the WIRING against the imported MAX_MS (round 4).
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -385,6 +412,65 @@ describe('extractZipBuffer — extraction with no filesystem source', () => {
     }
   });
 
+  test('a backslash in an entry name lands as a "/" separator, yauzl\'s default rewrite', async () => {
+    // zip-from-buffer.js leaves yauzl's `strictFileNames` at its default (off),
+    // and in that mode yauzl@2.10.0 rewrites `\` to `/` BEFORE validating the
+    // name (index.js, lines 420-426); `zip-name-scan.js :: nameRefusal` is built
+    // on that rewrite. This pins the default through the real in-memory path: if
+    // it ever flipped, this clean name would be refused instead of extracted.
+    const dir = mkTmp();
+    const res = await extractZipBuffer(buildZip([{ name: 'sub\\file.txt', body: 'x' }]), { dir });
+
+    expect(res.entries).toBe(1);
+    expect(treeOf(dir)).toEqual(['sub/file.txt:1']);
+  });
+
+  test('a backslash TRAVERSAL name is rewritten, then refused terminally, and writes nothing outside', async () => {
+    // The other half of that rewrite: yauzl turns `..\..\evil` into `../../evil`
+    // BEFORE validating it, so the refusal is its relative-path one, and
+    // `zip-from-buffer.js :: NAME_REFUSAL` makes that terminal.
+    const dir = mkTmp();
+    const err = await extractZipBuffer(buildZip([{ name: '..\\..\\evil', body: 'x' }]), { dir }).catch((e) => e);
+
+    expect(err.code).toBe('UNZIP_UNSAFE_ARCHIVE');
+    expect(err.message).toBe('invalid relative path: ../../evil');
+    expect(fs.existsSync(path.join(dir, '..', '..', 'evil'))).toBe(false);
+  });
+
+  test('an EMBEDDED backslash dot-segment is refused the same way, by yauzl, before any write', async () => {
+    // `sub\..\..\evil` becomes `sub/../../evil` in the same rewrite, and yauzl's
+    // own `..` check refuses it before the entry is ever placed: the wording is
+    // yauzl's, not the realpath bound's `Out of bound path`.
+    const dir = mkTmp();
+    const err = await extractZipBuffer(buildZip([{ name: 'sub\\..\\..\\evil', body: 'x' }]), { dir }).catch((e) => e);
+
+    expect(err.code).toBe('UNZIP_UNSAFE_ARCHIVE');
+    expect(err.message).toBe('invalid relative path: sub/../../evil');
+    expect(fs.existsSync(path.join(dir, '..', 'evil'))).toBe(false);
+  });
+
+  test('with strictFileNames ON a backslash name is refused TERMINALLY, as `invalid characters`', async () => {
+    // `sub\file.txt` is a BENIGN name, and this refusal of it is TERMINAL: that
+    // is exactly why amicus keeps yauzl's strictFileNames OFF, which STRICTNAMES
+    // pins (Compress-Archive writes backslashes, so strict mode would refuse
+    // ordinary Windows-authored archives outright). The option is ON here only
+    // because it is the ONE live producer of NAME_REFUSAL's `invalid characters
+    // in fileName` branch: through `deps.yauzl`, real yauzl drives it through the
+    // real handler, which unzip-refusal-strings' direct pin never passes through.
+    const realYauzl = require('yauzl');
+    const strictYauzl = {
+      fromBuffer: (bytes, opts, cb) => realYauzl.fromBuffer(bytes, { ...opts, strictFileNames: true }, cb),
+    };
+    const dir = mkTmp();
+    const err = await extractZipBuffer(buildZip([{ name: 'sub\\file.txt', body: 'x' }]), {
+      dir, deps: { yauzl: strictYauzl },
+    }).catch((e) => e);
+
+    expect(err.code).toBe('UNZIP_UNSAFE_ARCHIVE');
+    expect(err.message).toBe('invalid characters in fileName: sub\\file.txt');
+    expect(treeOf(dir)).toEqual([]);
+  });
+
   test('an entry that escapes through a pre-planted directory symlink is REFUSED', async () => {
     // extract-zip's own out-of-bound check, kept VERBATIM and re-run per entry:
     // `realpath(destDir)` resolving outside the root is the shape a symlink an
@@ -464,7 +550,7 @@ describe('extractZipBuffer — extraction with no filesystem source', () => {
 });
 
 describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALLUNBOUNDED)', () => {
-  // THE LOSS THIS CLOSES. unzip.js exists for a field bug that was never
+  // THE LOSS THIS CLOSES. unzip.js was built for a field bug that was never
   // root-caused: extract-zip@2.0.1 stalls mid-extract on some Node 24 boxes, its
   // promise never resolving and never rejecting, so the awaiting self-heal let
   // the event loop drain and Node exited 0 with a partial extract and NO
@@ -472,8 +558,7 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
   // what stops the process exiting mid-stall. When the electron artifact moved
   // onto extractZipBuffer that bound went with unzip.js and nothing replaced
   // it — grep for stall/idle/timeout across the new modules and their tests
-  // returned nothing on the subject. It is back, with unzip.js's own numbers,
-  // and unzip.js itself is untouched.
+  // returned nothing on the subject. It is back, with the numbers unzip.js used.
 
   /** Injectable timers: nothing here waits on a real clock. */
   function fakeTimers() {
@@ -601,7 +686,7 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
     expect(timers.pending.size).toBe(0);
   });
 
-  test('the default bounds are unzip.js\'s own numbers, so the electron path is bounded again', async () => {
+  test('the default bounds are the numbers unzip.js used, so the electron path is bounded again', async () => {
     // The production call site (electron-install.js) passes no idleMs/maxMs, so
     // what matters is that the DEFAULTS arm real timers. Measured through the
     // injected clock: two timers, 30 s and 240 s.

@@ -53,13 +53,13 @@ const UNREADABLE_REASON = {
   grew: 'changed size while amicus was reading it',
 };
 
-/** The terminal path-traversal refusal `robustExtract` throws (unzip.js C4). */
+/** The terminal path-traversal refusal (C4): `zip-from-buffer.js :: extractZipBuffer` throws it, and so does `electron-native-rescue.js :: withNativeRescue` (via `hostileName`). */
 function isUnsafeArchive(err) {
   return !!err && err.code === 'UNZIP_UNSAFE_ARCHIVE';
 }
 
 /**
- * C4 AT THE CALL SITE. unzip.js classifies extract-zip's path-traversal refusals
+ * C4 AT THE CALL SITE. unzip.js classified extract-zip's path-traversal refusals
  * as terminal so the same archive is never handed to an OS extractor that has no
  * such check. That invariant held only INSIDE unzip.js: both of repairElectron's
  * catch blocks used to swallow the refusal without reading `err.code` and launder
@@ -72,7 +72,7 @@ function isUnsafeArchive(err) {
  *
  * So the refusal ends here: no retry, no fallback extractor, and no delete. The
  * archive is left where it is, because a refused archive is evidence, and
- * `err.message` already carries the path and extract-zip's own reason.
+ * `err.message` already carries the path and the extractor's own reason.
  * @returns {{repaired:false, integrity:'unsafe-archive', reason:string}}
  */
 function refuseUnsafeArchive({ err, fileName, log = () => {} }) {

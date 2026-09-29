@@ -25,7 +25,7 @@
  * each tool's own check (`tar.exe`: `../../../PWNED.txt: Path contains '..'`,
  * exit 1; `Expand-Archive`: `Can not process invalid archive entry '…'`, exit 0,
  * nothing outside the destination in either case) — precisely the reliance
- * `unzip.js` says amicus will not make: "a tool with no such check".
+ * unzip.js@1851a6eb:244-247 said amicus will not make: "a tool with no such check".
  *
  * ── WHAT THIS CAN AND CANNOT SEE, STATED BEFORE THE CODE ──────────────────
  * The scan reads the CENTRAL DIRECTORY with size validation and string decoding

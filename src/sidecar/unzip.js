@@ -1,62 +1,49 @@
 /**
- * Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24).
+ * Native OS unzip command-planning for the Electron self-heal, and the refusal patterns and 240 s cap the in-memory extractor uses too.
  *
- * FIELD BUG: on some Node 24 boxes `extract-zip@2.0.1` STALLS mid-extract — its
- * promise never resolves AND never rejects. Because the self-heal `await`s it,
- * when the event loop drains Node exits 0 with a partial extract and no
- * electron.exe, so `repairElectron` silently no-ops. extract-zip 2.0.1 is the
- * LATEST published release, so "just bump it" is impossible.
+ * `nativeUnzipPlan()` is the per-platform command list `./electron-native-plan
+ * :: runNativePlan` spawns for the native-extractor RESCUE — the one path that
+ * still shells out to `tar` / `Expand-Archive` / `ditto` / `unzip`. `MAX_MS` is
+ * that rescue's default spawn timeout (`./electron-native-rescue ::
+ * withNativeRescue`) and the in-memory extraction's hard cap
+ * (`./zip-stall-bound`): one 240 s for both.
  *
- * robustExtract() survives that with three independent layers, none of which
- * can report a false success:
- *   1. BOUND extract-zip with an idle timer (reset on each onEntry) + a hard max
- *      timer, so a stall becomes a catchable outcome — and the live timer keeps
- *      the event loop alive so the process can't exit 0 before we fall back.
- *   2. FALL BACK to a native OS unzip (tar / Expand-Archive on Windows,
- *      ditto / unzip on macOS, unzip / tar on Linux) — each confirmed to extract
- *      the exact electron zip the field box choked on.
- *   3. Only report success when files actually landed on disk. The electron
- *      exe-stat verify stays upstream (electron-quarantine.verifyExtractOutcome).
- * Layer 2 has ONE exception: a path-traversal REFUSAL is terminal and is never
- * retried natively (UNSAFE_PATTERNS below).
+ * `UNSAFE_PATTERNS` is what the in-memory extractor classifies refusals with:
+ * `zip-from-buffer.js :: NAME_REFUSAL` is built from it. The wordings are
+ * composed elsewhere — `zip-entry-write.js :: outOfBound` the first, real yauzl
+ * the other three, the rescue's name scan (`zip-name-scan.js :: nameRefusal`)
+ * two of yauzl's — and tests/sidecar/unzip-refusal-strings.test.js,
+ * tests/electron-custody.test.js and tests/sidecar/zip-name-scan.test.js pin
+ * the list against what those sources really say, so an upstream yauzl reword
+ * goes red instead of silently letting a path-traversal refusal (C4) be retried.
  *
- * Everything network/spawn/timer-facing is dependency-INJECTABLE so tests never
- * hit the real clock, spawn a real process, or extract a real binary.
+ * HISTORY: through v4.14.1 this file also owned `robustExtract()`, which ran
+ * the `extract-zip` dependency (bounded by `IDLE_MS`/`MAX_MS`) and fell back to
+ * these same native strategies when it stalled or threw — the Node-24 field
+ * bug the module was built for. Removed (D-01/N-06): it had no production caller
+ * (the self-heal extracts through `zip-from-buffer.js`'s in-memory path
+ * instead), so it — and the one dependency only it required — were dead
+ * weight carrying amicus's one production dependency with an unfixable
+ * advisory. See CHANGELOG.md [Unreleased].
  */
 
 'use strict';
 
 const path = require('path');
-const fsDefault = require('fs');
-const { spawnSync } = require('child_process');
-
-// F5: refusals quote the ARCHIVE'S OWN entry name, so every message built from
-// one is sanitized before it reaches stderr or an Error a caller prints.
-const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /**
  * A SECURITY REFUSAL IS A REFUSAL, NOT A RETRY (M9).
  *
- * Strategy 1 used to collapse a stall, a plain throw, and extract-zip's / yauzl's
- * own path-traversal refusals into ONE branch that cleans the directory and re-runs
- * the IDENTICAL archive through OS extractors amicus does not control — laundering
- * a "this archive tried to escape its directory" into an unsupervised retry.
+ * These four strings are verified against the installed `yauzl`, and against
+ * `zip-entry-write.js :: outOfBound`'s own construction, by
+ * tests/sidecar/unzip-refusal-strings.test.js, which fails both on a reworded
+ * refusal and on a pattern no real message produces.
  *
- * These four strings are verified against the installed versions:
- *   extract-zip@2.0.1 raises `Out of bound path "<dir>" found while processing file <n>`
- *   yauzl@2.10.0 validateFileName returns the other three, raised as new Error(msg).
- * NOTE: with strictFileNames unset (extract-zip's default) yauzl rewrites
- * backslashes before validating, so `invalid characters in fileName: ` is not
- * reachable through extract-zip today. Classified anyway — it costs one line and
- * yauzl's defaults can change.
- *
- * DELIBERATELY NARROW. A stall must still fall back, or the Node-24 workaround
- * this whole module exists for is destroyed.
- *
- * AND THE VERIFICATION NO LONGER DECAYS (v4.9.6 F4). "Verified against the
- * installed versions" had nothing keeping it true; tests/sidecar/unzip-refusal-strings.js
- * now drives the INSTALLED libraries into producing all four for real, and fails
- * both on a reworded refusal and on a pattern no real message produces.
+ * DELIBERATELY NARROW, because the live classifier is built from it
+ * (`zip-from-buffer.js :: NAME_REFUSAL`): an ordinary corrupt-archive error it
+ * matched would be reported as the terminal UNZIP_UNSAFE_ARCHIVE instead of
+ * UNZIP_BUFFER_FAILED, the one code the native-extractor rescue fires on
+ * (`electron-native-rescue.js :: isRescuableFailure`).
  */
 const UNSAFE_PATTERNS = [
   /^Out of bound path /,
@@ -65,11 +52,9 @@ const UNSAFE_PATTERNS = [
   /^invalid characters in fileName: /,
 ];
 
-// No-progress window: if extract-zip reports no new entry for this long AND has
-// not settled, treat it as the silent stall. Reset on every onEntry so a slow-
-// but-progressing extract is never falsely aborted.
-const IDLE_MS = 30_000;
-// Hard cap so a "drips one entry forever" pathology can't run unbounded.
+// Hard cap on one extraction attempt: a native-extractor spawn
+// (`./electron-native-rescue :: withNativeRescue`'s default `maxMs`) and the
+// in-memory extraction (`./zip-stall-bound` requires it), one 240 s for both.
 const MAX_MS = 240_000;
 
 /** PowerShell single-quoted string literal, injection-safe (double any quote). */
@@ -79,9 +64,10 @@ function psQuote(s) {
 
 /**
  * Native OS unzip strategies, tried in order per platform. Each writes the
- * zip's entries at the ROOT of `dir` — the SAME on-disk layout extract-zip
- * produces (electron.exe, resources/, locales/, ...). Confirmed on the field
- * box (Expand-Archive) and locally (tar/bsdtar + Expand-Archive, both <1s).
+ * zip's entries at the ROOT of `dir` — the SAME on-disk layout the in-memory
+ * extractor produces (electron.exe, resources/, locales/, ...). Confirmed on
+ * the field box (Expand-Archive) and locally (tar/bsdtar + Expand-Archive,
+ * both <1s).
  * @returns {Array<{name:string, cmd:string, args:string[]}>}
  */
 function nativeUnzipPlan(zip, dir, platform = process.platform) {
@@ -116,181 +102,4 @@ function nativeUnzipPlan(zip, dir, platform = process.platform) {
   ];
 }
 
-/** True if `dir` exists and holds at least one entry. */
-function dirNonEmpty(fs, dir) {
-  try {
-    return fs.readdirSync(dir).length > 0;
-  } catch {
-    return false;
-  }
-}
-
-/** Remove everything inside `dir` (best-effort) so the next strategy starts clean. */
-function cleanDir(fs, dir) {
-  try {
-    for (const entry of fs.readdirSync(dir)) {
-      fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
-    }
-  } catch {
-    /* best-effort */
-  }
-}
-
-/**
- * Run extract-zip bounded by an idle timer (reset on each onEntry) and a hard
- * max timer. NEVER rejects — resolves {ok:true} on completion, {ok:false,reason}
- * on stall/throw. The timers keep the event loop alive so a stalled extract
- * can't let the process exit 0 before we fall back. NOTE: a stalled extract-zip
- * promise is abandoned (2.0.1 has no cancel API); it holds a fd until the short-
- * lived process exits — acceptable versus a wedged, no-op self-heal.
- */
-function runExtractZipBounded({ zip, dir, onEntry, extractZip, idleMs, maxMs, setTimer, clearTimer }) {
-  return new Promise((resolve) => {
-    let settled = false;
-    let idleTimer = null;
-    let maxTimer = null;
-    const done = (val) => {
-      if (settled) { return; }
-      settled = true;
-      if (idleTimer !== null) { clearTimer(idleTimer); }
-      if (maxTimer !== null) { clearTimer(maxTimer); }
-      resolve(val);
-    };
-    const armIdle = () => {
-      if (idleTimer !== null) { clearTimer(idleTimer); }
-      idleTimer = setTimer(() => done({ ok: false, reason: `stalled: no extract progress for ${idleMs}ms` }), idleMs);
-    };
-    maxTimer = setTimer(() => done({ ok: false, reason: `stalled: exceeded ${maxMs}ms` }), maxMs);
-    armIdle();
-    try {
-      const result = extractZip(zip, {
-        dir,
-        onEntry: (entry, zipfile) => {
-          armIdle(); // progress → restart the idle window
-          if (onEntry) {
-            try { onEntry(entry, zipfile); } catch { /* caller onEntry must not break extraction */ }
-          }
-        },
-      });
-      Promise.resolve(result).then(
-        () => done({ ok: true }),
-        (e) => done({ ok: false, reason: (e && e.message) || 'extract-zip threw' }),
-      );
-    } catch (e) {
-      done({ ok: false, reason: (e && e.message) || 'extract-zip threw synchronously' });
-    }
-  });
-}
-
-/**
- * Extract `zip` into `dir`, surviving a stalled or broken extract-zip.
- *
- * CONTRACT: a returned {strategy} means files LANDED in `dir` — NOT that any
- * specific payload (e.g. electron.exe) is present. Callers needing a usable
- * binary MUST still stat it (electron-quarantine.verifyExtractOutcome does).
- *
- * @param {string} zip absolute path to the .zip
- * @param {object} opts
- * @param {string}   opts.dir destination dir (created if absent)
- * @param {function} [opts.onEntry] forwarded to extract-zip's onEntry
- * @param {string}   [opts.platform] override process.platform (native plan)
- * @param {number}   [opts.idleMs] no-progress window before treating as stalled
- * @param {number}   [opts.maxMs] hard cap for both extract-zip and each spawn
- * @param {object}   [opts.deps] injected { fs, extractZip, spawn, setTimeout, clearTimeout, log }
- * @returns {Promise<{strategy:string, fallback?:boolean, extractZipReason?:string}>}
- * @throws {Error} code 'UNZIP_ALL_FAILED' when no strategy produced files.
- * @throws {Error} code 'UNZIP_UNSAFE_ARCHIVE' when the archive was REFUSED for a
- *   path-traversal attempt — terminal, with no native retry (see UNSAFE_PATTERNS).
- */
-async function robustExtract(zip, opts = {}) {
-  const {
-    dir,
-    onEntry,
-    platform = process.platform,
-    idleMs = IDLE_MS,
-    maxMs = MAX_MS,
-    deps = {},
-  } = opts;
-  const fs = deps.fs || fsDefault;
-  // GUARDED (v4.5.2). This `require` used to be bare, and `extract-zip` was
-  // never declared in dependencies — it resolved in the dev tree only because
-  // `puppeteer` (a devDependency) pulls it transitively, so a published install
-  // threw MODULE_NOT_FOUND here and took the WHOLE function with it: the native
-  // fallback below, the bounded idle/max timers, and `doctor --fix` all became
-  // unreachable. The dependency is now declared, so this should never fire —
-  // but Strategy 1 being unavailable is precisely what the native strategies
-  // exist for, so it must degrade into them rather than out of the function.
-  let extractZip = deps.extractZip;
-  if (!extractZip) {
-    try {
-      extractZip = require('extract-zip');
-    } catch (e) {
-      extractZip = () => { throw new Error(`extract-zip unavailable: ${e.message}`); };
-    }
-  }
-  const spawn = deps.spawn || spawnSync;
-  const setTimer = deps.setTimeout || setTimeout;
-  const clearTimer = deps.clearTimeout || clearTimeout;
-  const log = deps.log || (() => {});
-
-  fs.mkdirSync(dir, { recursive: true });
-
-  // Strategy 1: extract-zip, bounded. Trust it only if it RESOLVED and files landed.
-  const z = await runExtractZipBounded({ zip, dir, onEntry, extractZip, idleMs, maxMs, setTimer, clearTimer });
-  if (z.ok && dirNonEmpty(fs, dir)) {
-    return { strategy: 'extract-zip' };
-  }
-
-  // TERMINAL: the archive was REFUSED for trying to write outside `dir`. Never
-  // cleanDir (the partial output is evidence), never fall back — handing the same
-  // archive to tar/Expand-Archive would ask a tool with no such check to do what
-  // extract-zip just declined to.
-  if (!z.ok && UNSAFE_PATTERNS.some((p) => p.test(z.reason || ''))) {
-    const err = new Error(`refusing to extract ${zip}: ${collapseExcerpt(z.reason)}`);
-    err.code = 'UNZIP_UNSAFE_ARCHIVE';
-    throw err;
-  }
-
-  // extract-zip stalled / threw / produced nothing → clean partial output, go native.
-  const zipReason = z.ok ? 'extract-zip produced no files' : collapseExcerpt(z.reason);
-  cleanDir(fs, dir);
-  log(`[amicus] extract-zip did not complete (${zipReason}); falling back to native unzip.`);
-
-  const failures = [];
-  for (const strat of nativeUnzipPlan(zip, dir, platform)) {
-    let res;
-    try {
-      res = spawn(strat.cmd, strat.args, { stdio: 'ignore', windowsHide: true, timeout: maxMs });
-    } catch (e) {
-      failures.push(`${strat.name}: spawn ${(e && e.code) || (e && e.message) || 'threw'}`);
-      continue;
-    }
-    // A spawn error OR an external signal-kill (status:null, e.g. SIGKILL/OOM,
-    // possibly leaving partial files) is a FAILURE — never trust dirNonEmpty here.
-    if (res && (res.error || res.signal)) {
-      failures.push(`${strat.name}: ${res.error ? (res.error.code || res.error.message) : `killed by ${res.signal}`}`);
-      cleanDir(fs, dir);
-      continue;
-    }
-    if (res && typeof res.status === 'number' && res.status !== 0) {
-      failures.push(`${strat.name}: exit ${res.status}`);
-      cleanDir(fs, dir);
-      continue;
-    }
-    if (dirNonEmpty(fs, dir)) {
-      log(`[amicus] recovered via native unzip (${strat.name}).`);
-      return { strategy: strat.name, fallback: true, extractZipReason: zipReason };
-    }
-    failures.push(`${strat.name}: produced no files`);
-    cleanDir(fs, dir);
-  }
-
-  const err = new Error(
-    `unzip failed for ${zip} (extract-zip: ${zipReason}; native: ${failures.join('; ') || 'no native strategy available'})`,
-  );
-  err.code = 'UNZIP_ALL_FAILED';
-  throw err;
-}
-
-// UNSAFE_PATTERNS is exported for the F4 upstream-drift probe (see its docblock).
-module.exports = { robustExtract, nativeUnzipPlan, IDLE_MS, MAX_MS, UNSAFE_PATTERNS };
+module.exports = { nativeUnzipPlan, MAX_MS, UNSAFE_PATTERNS };

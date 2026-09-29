@@ -64,6 +64,25 @@ All notable changes to Amicus are documented here. Format follows
   relative links against its own directory rather than the project root, and refusing a relative
   link that resolves outside the repository.
 
+### Removed
+
+- **`robustExtract` and the `extract-zip` dependency it was the only caller of.** The Electron
+  self-heal has extracted through the in-memory buffer path (`src/sidecar/zip-from-buffer.js`)
+  since v4.9.6, with the opt-in native-extractor rescue as its only other path;
+  `robustExtract` (`src/sidecar/unzip.js`), which bounded and ran `extract-zip` with a native-unzip
+  fallback for a Node-24 stall, had no production caller left. `extract-zip` was amicus's one
+  production dependency with an unfixable advisory (GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3, both
+  high severity, no fixed version at 2.0.1) — `npm audit --omit=dev` no longer reports it.
+  `nativeUnzipPlan`, `UNSAFE_PATTERNS` and the `yauzl` dependency are unchanged: the native-extractor
+  rescue (`electron-native-plan.js`) still uses the first, and `UNSAFE_PATTERNS` is still what
+  `tests/sidecar/unzip-refusal-strings.test.js` checks `yauzl`'s and `zip-entry-write.js ::
+  outOfBound`'s wording against. It is now also what the in-memory extractor classifies with:
+  `zip-from-buffer.js :: NAME_REFUSAL` is built from it instead of repeating three of its wordings,
+  so the list the tests check is the list that runs.
+- **The unused `tiktoken` dependency.** Declared for future exact tokenization but never required
+  anywhere in `src/` — token sizing has always used a length/4 heuristic (`src/context.js`,
+  `src/context-compression.js`).
+
 ### Fixed
 
 - **`council run` no longer merges a second run into a folder that already holds one.** Started

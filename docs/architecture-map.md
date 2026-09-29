@@ -180,7 +180,7 @@ src/
 │   ├── start-metadata.js
 │   ├── start.js  # Sidecar Start Operations - Handles starting new sidecar sessions
 │   ├── tool-part.js
-│   ├── unzip.js  # Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24).
+│   ├── unzip.js  # Native OS unzip command-planning for the Electron self-heal, and the refusal patterns and 240 s cap the in-memory extractor uses too.
 │   ├── wave-progress.js
 │   ├── workspace-auto-open.js  # Workspace Auto-Open Decision Helper
 │   ├── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
@@ -692,12 +692,12 @@ evals/
 | `sidecar/start-metadata.js` |  | `createSessionMetadata()` |
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
 | `sidecar/tool-part.js` |  | `TERMINAL_TOOL_STATUSES()`, `LIVE_TOOL_STATUSES()`, `isToolPart()`, `toolPartName()`, `toolPartInput()` |
-| `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()`, `UNSAFE_PATTERNS()` |
+| `sidecar/unzip.js` | Native OS unzip command-planning for the Electron self-heal, and the refusal patterns and 240 s cap the in-memory extractor uses too. | `nativeUnzipPlan()`, `MAX_MS()`, `UNSAFE_PATTERNS()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
 | `sidecar/workspace-auto-open.js` | Workspace Auto-Open Decision Helper | `shouldAutoOpenWorkspace()` |
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()`, `launchWorkspaceWindowDetached()` |
 | `sidecar/zip-entry-write.js` | ONE ENTRY of an in-memory archive, and the classified failures every caller | `failure()`, `badArchive()`, `badDestination()`, `outOfBound()`, `extractorUnavailable()` |
-| `sidecar/zip-from-buffer.js` | Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED. | `extractZipBuffer()` |
+| `sidecar/zip-from-buffer.js` | Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED. | `extractZipBuffer()`, `NAME_REFUSAL()` |
 | `sidecar/zip-local-name-scan.js` | THE OTHER TABLE AN ARCHIVE DECLARES ITS NAMES IN — the local file headers. | `scanLocalNames()`, `declaredCentralOffset()` |
 | `sidecar/zip-name-scan.js` | WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central | `scanEntryNames()`, `nameRefusal()`, `SCAN_MS()`, `MAX_ENTRIES()` |
 | `sidecar/zip-stall-bound.js` | WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work. | `IDLE_MS()`, `MAX_MS()`, `UNWIND_MS()`, `stalled()`, `awaitUnwind()` |
