@@ -72,6 +72,7 @@ const path = require('path');
 
 const ei = require('../src/sidecar/electron-install');
 const { withNativeRescue, RESCUE_ZIP } = require('../src/sidecar/electron-native-rescue');
+const { MAX_MS } = require('../src/sidecar/unzip');
 const { extractBytesToDist } = require('../src/sidecar/electron-layout');
 const { mayDeleteRejectedZip } = require('../src/sidecar/electron-provision');
 const { fakeElectronDir, SELF_ANCHOR_OFF, ZIP_BODY } = require('./helpers/fake-electron-dir');
@@ -493,6 +494,23 @@ describe('C2 — the mechanics, and the window they open', () => {
     // And it never dresses the trade up as a safe one.
     expect(lines.join('\n')).not.toMatch(/\bis safe\b|safely|securely/);
     expect(lines.join('\n')).toMatch(/reported as unverified|marked unverified/);
+  });
+
+  test("the rescue's spawn is capped at unzip.js :: MAX_MS by default (RESCUETIMEOUTDEFAULT, RESCUETIMEOUTDROPPED)", async () => {
+    // withNativeRescue defaults `maxMs` to MAX_MS, and runNativePlan hands it
+    // to every spawn as `timeout`: the one 240 s cap the in-memory bound reads
+    // too (tests/electron-custody.test.js pins its value). A changed default or
+    // a dropped `timeout` left the child unbounded with every test green
+    // (council round 4, A2/B1). Read from the options the injected spawn gets.
+    const { dir } = incomingTree();
+    const extract = jest.fn(async () => { throw boom('UNZIP_BUFFER_FAILED'); });
+    const { wrapped, spawn } = wrap({ extract, hatch: true });
+
+    await wrapped(BYTES, { dir });
+
+    const timeouts = spawn.mock.calls.map(([, , opts]) => (opts || {}).timeout);
+    expect(timeouts.length).toBeGreaterThan(0);
+    expect(timeouts).toEqual(timeouts.map(() => MAX_MS));
   });
 });
 

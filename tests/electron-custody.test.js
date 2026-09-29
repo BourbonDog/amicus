@@ -450,13 +450,13 @@ describe('extractZipBuffer — extraction with no filesystem source', () => {
   });
 
   test('with strictFileNames ON a backslash name is refused TERMINALLY, as `invalid characters`', async () => {
-    // NAME_REFUSAL's `invalid characters in fileName` branch has ONE live
-    // producer: yauzl with strictFileNames on. amicus leaves it off, so the
-    // rewrite above removes every backslash first and the branch cannot fire in
-    // production. Real yauzl with the option ON, through the `deps.yauzl` seam,
-    // drives the branch through the real in-memory path — the zipfile 'error',
-    // NAME_REFUSAL, `failure` — which the direct `validateFileName` pin in
-    // tests/sidecar/unzip-refusal-strings.test.js never passes through.
+    // `sub\file.txt` is a BENIGN name, and this refusal of it is TERMINAL: that
+    // is exactly why amicus keeps yauzl's strictFileNames OFF, which STRICTNAMES
+    // pins (Compress-Archive writes backslashes, so strict mode would refuse
+    // ordinary Windows-authored archives outright). The option is ON here only
+    // because it is the ONE live producer of NAME_REFUSAL's `invalid characters
+    // in fileName` branch: through `deps.yauzl`, real yauzl drives it through the
+    // real handler, which unzip-refusal-strings' direct pin never passes through.
     const realYauzl = require('yauzl');
     const strictYauzl = {
       fromBuffer: (bytes, opts, cb) => realYauzl.fromBuffer(bytes, { ...opts, strictFileNames: true }, cb),

@@ -17,6 +17,12 @@
  * A dev tree cannot detect this by resolving the module — it always succeeds.
  * The only sound check is DECLARATION, which is what this asserts.
  *
+ * A SECOND SHAPE OF THE SAME BUG (council round 4, A3): a removed EXPORT. A
+ * destructured import of a name a module no longer exports is `undefined`, not
+ * an error, so nothing fails until the stale importer calls it. The
+ * robustExtract / IDLE_MS guard below reads the same files through the same
+ * walker.
+ *
  * ── NAMED MUTANTS ─────────────────────────────────────────────────────────
  * Applied and reverted by byte copy, MEASURED 2026-09-28, and every one re-run
  * in council round 3, when the sweep began reading the shipped scripts.
@@ -91,17 +97,28 @@ function recordExternalRequires(file, acc) {
   }
 }
 
-/** Every external top-level package required under `dir`, mapped to its files. */
-function collectExternalRequires(dir, acc = new Map()) {
+/** Hand every `.js` file under `dir` (node_modules excepted) to `onFile`. */
+function walkJs(dir, onFile) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name !== 'node_modules') { collectExternalRequires(full, acc); }
+      if (entry.name !== 'node_modules') { walkJs(full, onFile); }
       continue;
     }
-    if (entry.name.endsWith('.js')) { recordExternalRequires(full, acc); }
+    if (entry.name.endsWith('.js')) { onFile(full); }
   }
+}
+
+/** Every external top-level package required under `dir`, mapped to its files. */
+function collectExternalRequires(dir, acc = new Map()) {
+  walkJs(dir, (file) => recordExternalRequires(file, acc));
   return acc;
+}
+
+/** The scripts package.json `files` ships by name: `.js`, `.cjs` or `.mjs`, at
+ *  any depth under scripts/ (council round 4, A4/D4). */
+function shippedScripts(files) {
+  return (files || []).filter((f) => /^scripts\/.+\.[cm]?js$/.test(f));
 }
 
 describe('no phantom dependencies in shipped code', () => {
@@ -118,7 +135,7 @@ describe('no phantom dependencies in shipped code', () => {
   // both (`postinstall` is scripts/postinstall.js, which runs setup-hooks.js):
   // an undeclared require in either is the v4.5.2 failure class, so the sweep
   // reads them too. The rest of scripts/ is dev tooling that never ships.
-  const SHIPPED_SCRIPTS = (pkg.files || []).filter((f) => /^scripts\/.+\.js$/.test(f));
+  const SHIPPED_SCRIPTS = shippedScripts(pkg.files);
   for (const f of SHIPPED_SCRIPTS) { recordExternalRequires(path.join(ROOT, f), required); }
 
   it('finds requires to check (the scan itself is not silently empty)', () => {
@@ -127,6 +144,10 @@ describe('no phantom dependencies in shipped code', () => {
     // every name in it is a file (readIfPresent skips a missing one silently).
     expect(SHIPPED_SCRIPTS).toContain('scripts/postinstall.js');
     expect(SHIPPED_SCRIPTS.filter((f) => !fs.existsSync(path.join(ROOT, f)))).toEqual([]);
+    // The filter takes every script extension node runs, nested or not; none
+    // but .js ships today, so a synthetic list is what proves it.
+    expect(shippedScripts(['scripts/a.js', 'scripts/b.cjs', 'scripts/c.mjs', 'scripts/sub/d.js', 'scripts/', 'scripts/e.sh', 'src/x.js']))
+      .toEqual(['scripts/a.js', 'scripts/b.cjs', 'scripts/c.mjs', 'scripts/sub/d.js']);
   });
 
   it('declares every external package that src/, bin/, electron/ and the shipped scripts require', () => {
@@ -191,6 +212,67 @@ describe('no phantom dependencies in shipped code', () => {
     // require anywhere in amicus for the sweep above to see.
     expect(declared.has('puppeteer')).toBe(false);
     expect((pkg.peerDependencies || {}).puppeteer).toBeUndefined();
+  });
+});
+
+/**
+ * What `file` takes from each module it requires, with a relative specifier
+ * resolved against the file: `const { a, b: c } = require(spec)`,
+ * `require(spec).a`, and `x.a` after `const x = require(spec)`.
+ * @returns {Array<{from: string, name: string}>}
+ */
+function importedNames(file, src) {
+  const resolve = (spec) => (spec.startsWith('.') ? path.resolve(path.dirname(file), spec) : spec);
+  const out = [];
+  for (const m of src.matchAll(/\{([^{}]*)\}\s*=\s*require\((['"])([^'"]+)\2\)/g)) {
+    for (const part of m[1].split(',')) {
+      const name = part.split(':')[0].trim();
+      if (name) { out.push({ from: resolve(m[3]), name }); }
+    }
+  }
+  for (const m of src.matchAll(/require\((['"])([^'"]+)\1\)\s*\.\s*([A-Za-z_$][\w$]*)/g)) {
+    out.push({ from: resolve(m[2]), name: m[3] });
+  }
+  for (const m of src.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\((['"])([^'"]+)\2\)/g)) {
+    for (const use of src.matchAll(new RegExp(`\\b${m[1].replace(/\$/g, '\\$')}\\s*\\.\\s*([A-Za-z_$][\\w$]*)`, 'g'))) {
+      out.push({ from: resolve(m[3]), name: use[1] });
+    }
+  }
+  return out;
+}
+
+describe('no stale importer of what unzip.js no longer exports (council round 4, A3)', () => {
+  // `robustExtract` and unzip.js's `IDLE_MS` went with the removal, and a
+  // destructured import of a missing export is `undefined`, not an error: a
+  // stale importer stays silent until the day it calls it. The legitimate
+  // IDLE_MS is zip-stall-bound.js's own, which zip-from-buffer.js imports.
+  const UNZIP = path.join(ROOT, 'src', 'sidecar', 'unzip');
+  const taken = [];
+  for (const d of [...SHIPPED_DIRS, 'scripts']) {
+    walkJs(path.join(ROOT, d), (file) => {
+      const src = readIfPresent(file);
+      if (src === null) { return; }
+      for (const t of importedNames(file, src)) {
+        taken.push({ ...t, file: path.relative(ROOT, file).split(path.sep).join('/') });
+      }
+    });
+  }
+  const fromUnzip = (t) => t.from === UNZIP || t.from === `${UNZIP}.js`;
+  const said = (t) => `${t.file} takes ${t.name}`;
+
+  it('sees what the live importers take from unzip.js (the scan is not blind)', () => {
+    expect(taken.filter(fromUnzip).map(said)).toEqual(expect.arrayContaining([
+      'src/sidecar/electron-native-rescue.js takes MAX_MS',
+      'src/sidecar/zip-from-buffer.js takes UNSAFE_PATTERNS',
+    ]));
+    // ...and the legitimate IDLE_MS, which comes from zip-stall-bound.js.
+    const idle = taken.filter((t) => t.name === 'IDLE_MS').map((t) => `${said(t)} from ${path.relative(ROOT, t.from).split(path.sep).join('/')}`);
+    expect(idle).toContain('src/sidecar/zip-from-buffer.js takes IDLE_MS from src/sidecar/zip-stall-bound');
+  });
+
+  it('no file under src/, bin/, electron/ or scripts/ imports robustExtract, or IDLE_MS from unzip.js', () => {
+    const stale = taken.filter((t) => t.name === 'robustExtract' || (t.name === 'IDLE_MS' && fromUnzip(t)));
+    expect(stale.map(said)).toEqual([]);
   });
 });
 
