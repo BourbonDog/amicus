@@ -183,11 +183,16 @@ describeE2E('MCP Headless E2E: real LLM via amicus_start', () => {
   });
 
   it('start -> poll status -> read summary (full lifecycle)', async () => {
-    // Step 1: Start a headless sidecar with a trivial prompt
+    // Step 1: Start a headless sidecar with a trivial prompt.
+    // "Do not use any tools" (B-CI-32, measured 2026-09-29): CI's `gemini` pin
+    // (gemini-3.8-flash) runs with the Build agent and full tools. Given a bare
+    // harness token, it explores the harness, and on both 2026-09-29 rail runs
+    // one grep or glob call stalled past this session's 2-minute timeout. This
+    // suite tests the session lifecycle, not tool use.
     const startResult = await client.request('tools/call', {
       name: 'amicus_start',
       arguments: {
-        prompt: 'Reply with exactly this text and nothing else: SIDECAR_E2E_OK',
+        prompt: 'Do not use any tools. Reply with exactly this text and nothing else: SIDECAR_E2E_OK',
         model: 'gemini',
         noUi: true,
         timeout: 2,

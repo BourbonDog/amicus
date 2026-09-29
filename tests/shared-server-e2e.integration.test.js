@@ -266,13 +266,19 @@ describeE2E('Shared Server E2E: round-robin concurrent sessions with memory moni
     // Step 1: Fire N concurrent amicus_start calls
     process.stderr.write(`\n  [e2e] Starting ${SESSION_COUNT} concurrent sessions...\n`);
 
+    // "Do not use any tools" (B-CI-32, 2026-09-29): with tools, CI's `gemini`
+    // pin explores the harness. mcp-headless-e2e's session measurably stalled
+    // in grep or glob past its 2-minute timeout. This suite lost 1 of 3
+    // sessions on one rail run and 2 of 3 on the other, each still running at
+    // the cap; its poll prints no tool name. It tests a shared server, not
+    // tool use.
     const startPromises = [];
     for (let i = 0; i < SESSION_COUNT; i++) {
       startPromises.push(
         client.request('tools/call', {
           name: 'amicus_start',
           arguments: {
-            prompt: `Reply with exactly: SESSION_${i}_OK. Nothing else.`,
+            prompt: `Do not use any tools. Reply with exactly: SESSION_${i}_OK. Nothing else.`,
             model: 'gemini',
             noUi: true,
             timeout: 2,

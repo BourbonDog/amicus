@@ -22,6 +22,8 @@ const ELECTRON_BIN = (() => { try { return require('electron'); } catch { return
 const ELECTRON_MAIN = path.join(__dirname, '..', 'electron', 'main.js');
 const SERVER_HELPER = path.join(__dirname, 'helpers', 'start-server.js');
 const CDP_PORT = 9224;
+// spawnElectron's per-child launch record (stdout/stderr tails and the exit), read by connectToolbar.
+const launchRecords = new WeakMap();
 
 const HAS_API_KEY = !!(
   process.env.OPENROUTER_API_KEY ||
@@ -43,25 +45,42 @@ const HAS_ELECTRON = (() => {
 
 const describeE2E = (HAS_API_KEY && HAS_ELECTRON) ? describe : describe.skip;
 
+// One Xvfb for the whole file, shared by both describe blocks (B-CI-32, rail
+// run 36583172019). Each block used to start its own Xvfb on :99 and kill it
+// in afterAll without waiting for it to exit. The second block's Xvfb then
+// started while the first still held :99, and that block's Electron found no
+// X server ("Missing X server or $DISPLAY") while the first block passed.
+// The file-level afterAll below stops the shared server once, after both
+// blocks.
+let sharedXvfb = null;
+
 function ensureDisplay() {
   if (process.platform !== 'linux' || process.env.DISPLAY) {
     return { display: process.env.DISPLAY, cleanup: () => {} };
   }
   const display = ':99';
-  let xvfbProcess;
-  try {
-    xvfbProcess = spawn('Xvfb', [display, '-screen', '0', '1280x720x24', '-nolisten', 'tcp'], {
-      stdio: 'ignore', detached: true,
-    });
-    xvfbProcess.unref();
-  } catch (err) {
-    throw new Error(`Xvfb not found. Install with: apt-get install xvfb. Error: ${err.message}`);
+  if (!sharedXvfb) {
+    try {
+      sharedXvfb = spawn('Xvfb', [display, '-screen', '0', '1280x720x24', '-nolisten', 'tcp'], {
+        stdio: 'ignore', detached: true,
+      });
+      sharedXvfb.unref();
+    } catch (err) {
+      throw new Error(`Xvfb not found. Install with: apt-get install xvfb. Error: ${err.message}`);
+    }
   }
-  return {
-    display,
-    cleanup: () => { try { xvfbProcess.kill(); } catch { /* already dead */ } }
-  };
+  // A block's cleanup leaves the shared server running for the next block.
+  return { display, cleanup: () => {} };
 }
+
+function stopSharedXvfb() {
+  if (sharedXvfb) {
+    try { sharedXvfb.kill(); } catch { /* already dead */ }
+    sharedXvfb = null;
+  }
+}
+
+afterAll(stopSharedXvfb);
 
 /**
  * Start a real OpenCode server in a child process to avoid ESM import issues
@@ -132,10 +151,41 @@ function spawnElectron(options) {
   };
   if (display) { env.DISPLAY = display; }
 
-  return spawn(ELECTRON_BIN, [
+  const child = spawn(ELECTRON_BIN, [
     `--remote-debugging-port=${CDP_PORT}`,
     ELECTRON_MAIN
   ], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+
+  // B-CI-32 (measured 2026-09-29): both pipes used to go unread, and the child
+  // had no 'exit' or 'error' listener. An Electron that died at launch (the
+  // ubuntu-24.04 setuid-sandbox abort, SIGTRAP within 1.5 s) therefore read
+  // exactly like "Toolbar target not found". Keep the tail of each stream and
+  // the exit for connectToolbar's error. Reading stdout also keeps a chatty
+  // child from blocking on a full, unread pipe.
+  const record = { stdout: '', stderr: '', exit: null };
+  const keepTail = (key) => (chunk) => { record[key] = (record[key] + chunk.toString()).slice(-4000); };
+  child.stdout.on('data', keepTail('stdout'));
+  child.stderr.on('data', keepTail('stderr'));
+  child.on('exit', (code, signal) => { record.exit = { code, signal }; });
+  child.on('error', (err) => { record.exit = { spawnError: err.message }; });
+  launchRecords.set(child, record);
+  return child;
+}
+
+/**
+ * CdpClient.toolbar, but its error carries Electron's exit status and stderr
+ * tail, so a launch that failed names its own cause.
+ * @param {import('child_process').ChildProcess} electronProcess - from spawnElectron
+ * @returns {Promise<CdpClient>}
+ */
+async function connectToolbar(electronProcess) {
+  try {
+    return await CdpClient.toolbar(CDP_PORT, 20000);
+  } catch (err) {
+    const { exit, stderr } = launchRecords.get(electronProcess);
+    const status = exit ? JSON.stringify(exit) : 'still running';
+    throw new Error(`${err.message}. Electron exit: ${status}. Electron stderr (tail):\n${stderr.trim() || '(empty)'}`);
+  }
 }
 
 describeE2E('Electron Toolbar E2E (CDP)', () => {
@@ -154,7 +204,7 @@ describeE2E('Electron Toolbar E2E (CDP)', () => {
       taskId,
       display: displayInfo.display,
     });
-    cdp = await CdpClient.toolbar(CDP_PORT, 20000);
+    cdp = await connectToolbar(electronProcess);
   }, 30000);
 
   afterAll(async () => {
@@ -248,7 +298,7 @@ describeE2E('Electron Toolbar E2E: Update Banner (CDP)', () => {
       display: displayInfo.display,
       extraEnv: { AMICUS_MOCK_UPDATE: 'available' },
     });
-    cdp = await CdpClient.toolbar(CDP_PORT, 20000);
+    cdp = await connectToolbar(electronProcess);
   }, 30000);
 
   afterAll(async () => {
