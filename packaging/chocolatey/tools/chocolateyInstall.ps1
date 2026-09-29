@@ -96,3 +96,24 @@ Write-Host '    amicus init      # registers the MCP server + skills for YOUR ac
 Write-Host '    amicus setup     # add a model API key (OpenRouter recommended)'
 Write-Host '    amicus doctor    # confirm everything is green'
 Write-Host ''
+
+# Name the account and the folder this install actually used, so a wrong-account install is
+# visible rather than silent: npm's global prefix is per-account (see the KEY RISK note), and a
+# different admin account cannot be detected from here. The folder comes from npm itself, not
+# an assumed %APPDATA%\npm, because a user can configure another prefix.
+$installAccount = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$npmPrefix = $null
+$ErrorActionPreference = 'Continue'
+try {
+  $npmPrefix = & npm prefix --global 2>$null | Select-Object -Last 1
+} finally {
+  $ErrorActionPreference = 'Stop'
+}
+if ($npmPrefix) { $npmPrefix = "$npmPrefix".Trim() }
+if (-not $npmPrefix) { $npmPrefix = '(npm did not report its global prefix)' }
+Write-Host "Installed for the Windows account $installAccount, into $npmPrefix"
+Write-Host '(npm''s global prefix, which holds the amicus and am shims). If that is not the account you'
+Write-Host 'will run amicus from, run choco uninstall amicus here, then either install again from an'
+Write-Host 'elevated prompt of that account, or skip Chocolatey and run npm install -g amicus there'
+Write-Host '(no elevation needed).'
+Write-Host ''
