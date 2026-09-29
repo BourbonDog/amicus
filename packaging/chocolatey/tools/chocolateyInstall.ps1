@@ -102,12 +102,14 @@ Write-Host ''
 # Name the account and the folder this install actually used, so a wrong-account install is
 # visible rather than silent: npm's global prefix is per-account (see the KEY RISK note), and a
 # different admin account cannot be detected from here. The folder comes from npm itself, not
-# an assumed %APPDATA%\npm, because a user can configure another prefix.
+# an assumed %APPDATA%\npm, because a user can configure another prefix. A nonzero exit from
+# npm counts as no answer, whatever it printed first.
 $installAccount = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $npmPrefix = $null
 $ErrorActionPreference = 'Continue'
 try {
   $npmPrefix = & npm prefix --global 2>$null | Select-Object -Last 1
+  if ($LASTEXITCODE -ne 0) { $npmPrefix = $null }
 } finally {
   $ErrorActionPreference = 'Stop'
 }
@@ -115,7 +117,7 @@ if ($npmPrefix) { $npmPrefix = "$npmPrefix".Trim() }
 if (-not $npmPrefix) { $npmPrefix = '(npm did not report its global prefix)' }
 Write-Host "Installed for the Windows account $installAccount, into $npmPrefix"
 Write-Host '(npm''s global prefix, which holds the amicus and am shims). If that is not the account you'
-Write-Host 'will run amicus from, run choco uninstall amicus here, then either install again from an'
-Write-Host 'elevated prompt of that account, or skip Chocolatey and run npm install -g amicus there'
-Write-Host '(no elevation needed).'
+Write-Host 'will run amicus from, run choco uninstall amicus from an elevated prompt of this account'
+Write-Host '(the one named above), then either install again from an elevated prompt of that account,'
+Write-Host 'or skip Chocolatey and run npm install -g amicus there (no elevation needed).'
 Write-Host ''
