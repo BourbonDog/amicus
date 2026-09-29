@@ -839,37 +839,148 @@ describe('#218 PR 3: a review cut at its output reservation is announced, not lo
     expect(res.degraded).toBe(false);
   });
 
-  // #257 R-X38 fix round 1: retitled. The `why` bounds PROVIDER noise, but an AMICUS-MINTED
-  // reason must arrive whole (owner ruling, round 3) — so this is now an EXACT pin on the
-  // real formatter's output, not a `.*` regex that would tolerate the remedy being cut.
-  // Minted here rather than pasted: a copied literal is how a cap and a format drift apart.
-  test('an OUTPUT_LENGTH death is a dead leg whose note carries an amicus-minted reason verbatim (provider noise is bounded), and gets NO truncation note', async () => {
+  // D-06 replaced the pre-D-06 pin here, which relaunched this seat and read
+  // `retryLegStillDeadNote`'s leg arm: an OUTPUT_LENGTH death is NEVER relaunched now. The
+  // amicus-minted reason still rides the note whole (#257 R-X38's ruling: the prose cap bounds
+  // PROVIDER noise, never a reason amicus minted), and the note now says why no retry ran.
+  // The second mock is a retry that WOULD heal the seat: the gate must not ask.
+  test('an OUTPUT_LENGTH death is a dead leg announced without a relaunch (D-06): its note carries the amicus-minted reason verbatim and says why, and gets NO truncation note', async () => {
     const { formatOutputLengthReason } = require('../../src/utils/output-length');
     const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
       budget: null, reasoningOnly: false, ambientFlag: null });
     const dead = { ...deadLeg('b', 'error', MINTED, 'abc123-s1', 2), finish: 'length' };
-    // Same harness as 'retry also dies': roster (-s1) ['a', 'b'], retry roster (-s1r1) ['b'] alone.
     const ctx = makeCtx({ models: ['a', 'b'] });
     ctx.launchers.launchWave
       .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
         legs: [usableLeg('a', 'abc123-s1', 1), dead] }, exitCode: 0 })
       .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
-        legs: [deadLeg('b', 'timeout', null, 'abc123-s1r1', 1)] }, exitCode: 0 });
-    await runStage1(ctx);
+        legs: [usableLeg('b', 'abc123-s1r1', 1)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    // Named mutant "LENGTHRETRIED" (delete the held arm in run-retry-group.js :: groupStage1Losses): two launches.
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1);
+    expect(ctx._notes.filter((n) => n.channel === 'stage1-retry')).toHaveLength(0);
     // Named mutant "DEADNOTED": iterate `legs` instead of `materialized` in run-stages — a note appears here.
     expect(ctx._notes.filter((n) => n.channel === 'output-truncated')).toHaveLength(0);
     const n = ctx._notes.find((x) => x.channel === 'dead-leg');
     expect(MINTED.length).toBeGreaterThan(200);          // it was truncated under the old cap
-    // The retry dies too, so this is `retryLegStillDeadNote`'s leg arm: first reason in full,
-    // then the retry tail. Exact, so a cap that ate the remedy could not hide behind a `.*`.
     expect(n.why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
-      + "its once-only retry also ended 'timeout'");
-    // The clause the ruling exists for, named so a future cap change reds HERE and not only
+      + 'its once-only retry was skipped: a relaunch reserves the same output budget');
+    // The clause the #257 ruling exists for, named so a future cap change reds HERE and not only
     // in tests/council/run-retry-notes.test.js's minted-reason corpus.
     expect(n.why).toContain('raise outputBudget in config.json (docs/configuration.md, Output budget)');
-    // `data.reason` describes the RETRY leg (null here); the FIRST leg's raw bytes ride
-    // `data.firstFailure` — the machine surface, verbatim, as ever.
-    expect(n.data.firstFailure.reason).toBe(MINTED);
+    expect(n.why).toContain("outputBudget is unset — the engine's 32000 default reservation governs");
+    // Nothing was relaunched, so no retryWaveId and no firstFailure: the machine surface is the
+    // first leg's own reason, verbatim.
+    expect(n.data).toEqual({ seat: 'b', status: 'error', reason: MINTED });
+    expect(r.degraded).toBe(true);
+    expect(r.reviews.map((x) => x.modelInput)).toEqual(['a']);
+    // Its own first leg is its one row: a primary 'seat' error row, never a 'superseded' one.
+    expect(r.extraRows.filter((x) => x.model === 'b').map((x) => [x.role, x.status])).toEqual([['seat', 'error']]);
+  });
+
+  test('D-06: a critic that died OUTPUT_LENGTH is held too — its solo is never relaunched', async () => {
+    const { formatOutputLengthReason } = require('../../src/utils/output-length');
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 64000, output: 0 },
+      budget: 64000, reasoningOnly: true, ambientFlag: null });
+    const deadCrit = deadLeg('crit', 'error', MINTED, 'abc123-c1', 1);
+    const healed = usableLeg('crit', 'abc123-c1r1', 1);
+    const ctx = makeCtx({ models: ['a', 'b'], critic: 'crit' });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1), usableLeg('b', 'abc123-s1', 2)] }, exitCode: 0 });
+    // critic roster (-c1 / -c1r1): a one-seat roster, slot is always 1. The second value is a
+    // retry that WOULD heal: the gate must not ask.
+    ctx.launchers.launchSolo
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-c1', legs: [deadCrit] }, exitCode: 0, leg: deadCrit })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-c1r1', legs: [healed] }, exitCode: 0, leg: healed });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchSolo).toHaveBeenCalledTimes(1); // the -c1 launch only, no -c1r1
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    expect(n.what).toBe('seat crit did not review');
+    expect(n.why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
+      + 'its once-only retry was skipped: a relaunch reserves the same output budget');
+    expect(r.degraded).toBe(true);
+  });
+
+  // D-06 (council round 1, B2/C2, MEASURED): the clause says why no retry ran, and it rides only a
+  // leg the HOLD skipped. Even over max-cost the hold comes first: retryStage1Losses's zero-model
+  // guard skips the `held` unit before its D7 cost arm is ever consulted, so the cost arm never sees
+  // an OUTPUT_LENGTH leg (the spy counts ONE consultation, the bench unit's), and a leg the cost arm
+  // skipped carries no clause. (Before the gate existed, at Task 2, the cost arm did skip this leg.)
+  test('D-06: over max-cost the OUTPUT_LENGTH leg is still skipped by the hold and says why; a leg the cost arm skipped gets no clause', async () => {
+    const { formatOutputLengthReason } = require('../../src/utils/output-length');
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+      budget: 64000, reasoningOnly: true, ambientFlag: null });
+    const dead = { ...deadLeg('b', 'error', MINTED, 'abc123-s1', 2), finish: 'length' };
+    const overBudget = jest.fn(() => true);
+    const ctx = makeCtx({ models: ['a', 'b', 'c'], overBudget });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1), dead, deadLeg('c', 'error', 'boom', 'abc123-s1', 3)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1); // no retry launch
+    expect(overBudget).toHaveBeenCalledTimes(1);               // the bench unit's D7 check, never the held unit's
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg' && x.data.seat === 'b');
+    // Named mutant "CLAUSEDROPPED" (run-stages.js stops appending
+    // run-retry-gate.js :: outputLengthSkipClause): the note loses its clause, and this line reds.
+    expect(n.why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
+      + 'its once-only retry was skipped: a relaunch reserves the same output budget');
+    expect(n.why).toContain('outputBudget is 64000'); // the budget in force, named by the minted reason
+    // No retryWaveId: nothing was relaunched (live-dead-seats.js :: deadSeats reads it alone).
+    expect(n.data).toEqual({ seat: 'b', status: 'error', reason: MINTED });
+    // Named mutant "CLAUSEEVERYLEG" (run-retry-gate.js :: outputLengthSkipClause returns the clause
+    // for every leg): the leg the cost arm skipped carries it too, and this line reds.
+    expect(ctx._notes.find((x) => x.channel === 'dead-leg' && x.data.seat === 'c').why)
+      .toBe("the leg ended 'error': boom with no usable output");
+    expect(r.degraded).toBe(true);
+  });
+
+  // D-06 on a TWIN bench (Task 3 review, Important). `run-stage1-rows.js :: pushDeadSeatRows`
+  // records this area's bug class: two dead twins used to collapse into ONE dead-seat row, and one
+  // twin's first leg could be handed to the other as its "final" leg. The held arm moves ONE twin
+  // out of the bench unit, so a held twin and a retried twin run here through the real runStage1.
+  // Engine-shaped taskIds, so bindSeats binds each first leg to its own seat. The held twin sits at
+  // slot 2 and each first leg carries its own usage, so a row built from the other twin's leg
+  // would read 0.02, not 0.03. Minted with the real formatter, never pasted.
+  test('D-06: a held OUTPUT_LENGTH twin keeps its own row beside a retried twin — two notes, two rows, never one', async () => {
+    const { formatOutputLengthReason } = require('../../src/utils/output-length');
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+      budget: null, reasoningOnly: false, ambientFlag: null });
+    const cost = (amount) => ({ cost: { amount, source: 'reported' } });
+    // roster (-s1): ['deepseek', 'deepseek'] -> #1=slot1, #2=slot2. #1 dies an ordinary death and
+    // #2 dies OUTPUT_LENGTH, so the retry roster (-s1r1) is #1 alone, at slot 1, and it heals.
+    const boom = { ...deadLeg('deepseek', 'error', 'boom', 'abc123-s1', 1), usage: cost(0.02) };
+    const held = { ...deadLeg('deepseek', 'error', MINTED, 'abc123-s1', 2), finish: 'length', usage: cost(0.03) };
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1', legs: [boom, held] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [usableLeg('deepseek', 'abc123-s1r1', 1)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    // ONE retry launch, for ONE slot. Named mutant "HELDBYALIAS" (the held arm in
+    // run-retry-group.js :: groupStage1Losses tests the ALIAS, holding every dead leg whose alias
+    // has an OUTPUT_LENGTH death, instead of the leg): #1 is held too, and this line reds.
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(2);
+    expect(ctx.launchers.launchWave.mock.calls[1][0].models).toEqual(['deepseek']);
+    // Two notes, one per twin, and nothing else (no `internal` refusal from
+    // run-stage1-superseded.js :: supersededRows): #1's heal names its own seat, and #2's
+    // dead-leg note carries the D-06 clause.
+    expect(ctx._notes.map((n) => n.channel)).toEqual(['stage1-retry', 'dead-leg']);
+    expect(ctx._notes[0].data.firstFailure.seatId).toBe('deepseek#1');
+    expect(ctx._notes[1].why).toBe(`the leg ended 'error': ${MINTED} with no usable output; `
+      + 'its once-only retry was skipped: a relaunch reserves the same output budget');
+    expect(ctx._notes[1].data).toEqual({ seat: 'deepseek', status: 'error', reason: MINTED });
+    // #1's retry leg is its review, bound to #1 (run-assemble.js :: buildTallyInput builds its row
+    // from `reviews`, so extraRows below holds only #1's superseded half).
+    expect(r.reviews.map((x) => [x.seat && x.seat.id, x.leg.waveId])).toEqual([['deepseek#1', 'abc123-s1r1']]);
+    // Two rows, one per twin FIRST leg, never collapsed: #1's is superseded by its healed retry,
+    // and #2's own first leg is its primary 'seat' error row, stamped with #2's seat id and
+    // carrying #2's own usage.
+    const row = (role, extra) => ({ model: 'deepseek', role, wasChair: false, conformance: 'none',
+      waveId: 'abc123-s1', resolvedModel: 'deepseek', status: 'error', durationMs: 1000, ...extra });
+    expect(r.extraRows).toEqual([
+      row('superseded', { usage: cost(0.02) }),
+      row('seat', { seat: 'deepseek#2', usage: cost(0.03) }),
+    ]);
+    expect(r.degraded).toBe(true);
   });
 
   test('legs with no finish produce no output-truncated note', async () => {
@@ -2064,6 +2175,188 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
     expect(skipped.filter(r => r.role === 'superseded')).toEqual([]);
     expect(skipped.map(r => r.usage)).toEqual([usageA, usageB]);
     expect(notes).toEqual([]);                        // no correct shape says anything
+  });
+
+  // ---- D-06 (Task 3 fix round 2): a HELD twin is not a split ----
+  // `run-retry-gate.js :: isOutputLengthLoss` names the one death the retry holds back, and
+  // `run-retry-group.js :: groupStage1Losses` puts that leg in a zero-model `held` unit that is
+  // never launched. So on UNBOUND twins a held leg IS skipped while its sibling is retried: the
+  // shape both invariants forbid for every other death. It was never relaunched, so no superseded
+  // row was ever its due, and there is nothing to refuse aloud. These drive the real runStage1
+  // through the REAL sink (`run-degrade.js :: createDegradeSink`), so run.json's `degrades` and the
+  // stderr text are read as well as the notes. Reasons are minted with the real formatter.
+  // ⚠️ SCOPE: on R2's taskId-less floor too, a held twin keeps its OWN row, gets no superseded row,
+  // and is never lent to a twin's row (council rounds 1 and 2). The floor test.each below pins six
+  // floor cells: a held twin before and after a healed twin, after a twin whose retry died, before
+  // and after a twin the cost arm skipped, and both twins held. It does NOT pin two NON-held
+  // taskId-less twins collapsing onto one row: that is R2's pre-existing floor, identical on main.
+  const { formatOutputLengthReason } = require('../../src/utils/output-length');
+  const cost = (amount) => ({ cost: { amount, source: 'reported' } });
+  const CLAUSE = '; its once-only retry was skipped: a relaunch reserves the same output budget';
+  const heldTwinRun = async (firstLegs, retryLegs, overBudget) => {
+    const { createDegradeSink } = require('../../src/council/run-degrade');
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'], ...(overBudget ? { overBudget } : {}) });
+    const said = [];
+    ctx.degrade = createDegradeSink({ runDir: ctx.o.runDir, degraded: { value: false },
+      write: (s) => said.push(s) });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1', legs: firstLegs }, exitCode: 0 });
+    if (retryLegs) {
+      ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1', legs: retryLegs }, exitCode: 0 });
+    }
+    const r = await runStage1(ctx);
+    const { degrades } = JSON.parse(fs.readFileSync(path.join(ctx.o.runDir, 'run.json'), 'utf8'));
+    return { ctx, r, notes: ctx.degrade.all(), degrades, said: said.join('') };
+  };
+  const twinRow = (role, extra) => ({ model: 'deepseek', role, wasChair: false, conformance: 'none',
+    waveId: 'abc123-s1', resolvedModel: 'deepseek', status: 'error', durationMs: 1000, ...extra });
+
+  test('D-06: an UNBOUND held OUTPUT_LENGTH twin beside a retried twin is not a split — no T-A5 notice; rows and billing exact', async () => {
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+      budget: null, reasoningOnly: false, ambientFlag: null });
+    // Non-conforming taskIds, as in the T2.2 tests above: bindSeats attributes NEITHER first leg,
+    // so both key by the bare alias in the superseded join. The twin at slot 1 dies 'boom' and its
+    // one-slot retry heals; the twin at slot 2 dies OUTPUT_LENGTH and is held.
+    const boom = { ...deadLeg('deepseek', 'error', 'boom', 'abc123-s1', 1), taskId: 'orphan-boom',
+      usage: cost(0.02) };
+    const held = { ...deadLeg('deepseek', 'error', MINTED, 'abc123-s1', 2), taskId: 'orphan-held',
+      finish: 'length', usage: cost(0.03) };
+    const retryLeg = usableLeg('deepseek', 'abc123-s1r1', 1);
+    const { ctx, r, notes, degrades, said } = await heldTwinRun([boom, held], [retryLeg]);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(2);
+    expect(ctx.launchers.launchWave.mock.calls[1][0].models).toEqual(['deepseek']);   // one slot
+    // Both orphaned legs are announced, the retried twin heals, and the held twin is a dead leg
+    // with the D-06 clause: that, and NOTHING else.
+    const CHANNELS = ['seat-unbound', 'seat-unbound', 'stage1-retry', 'dead-leg'];
+    expect(notes.map((n) => n.channel)).toEqual(CHANNELS);
+    expect(degrades.map((d) => d.channel)).toEqual(CHANNELS);                  // run.json agrees
+    expect(said).not.toContain('a superseded row for seat');                    // …and so does stderr
+    expect(notes.find((n) => n.channel === 'dead-leg').why)
+      .toBe(`the leg ended 'error': ${MINTED} with no usable output${CLAUSE}`);
+    // The rows, exactly as the fix-round-1 probe measured them: the retried twin's first leg is
+    // superseded, and the held twin's OWN first leg is its primary 'seat' error row. Neither
+    // carries a seat, because neither was bound. Named mutant "HELDALARM" (drop the held skip that
+    // opens run-stage1-superseded.js :: supersededRows' loop): the held leg reaches the join, where
+    // `willTakeItsOwnLeg` (which skips held legs) says no, so it is written a superseded row that
+    // nothing superseded, silently, and this line reds (MEASURED, council fix round 2).
+    expect(r.extraRows).toEqual([twinRow('superseded', { usage: cost(0.02) }),
+      twinRow('seat', { usage: cost(0.03) })]);
+    // Billing: each billed leg exactly once. The healed retry leg is the one review, and its row
+    // is built from `reviews` downstream (run-assemble.js :: buildTallyInput).
+    expect(r.reviews.map((x) => x.leg)).toEqual([retryLeg]);
+    expect([...r.extraRows, ...r.reviews.map((x) => x.leg)].map((x) => x.usage))
+      .toEqual([cost(0.02), cost(0.03), cost(0.01)]);
+    expect(r.degraded).toBe(true);
+  });
+
+  test.each([
+    ['bound', (slot) => `abc123-s1-${slot}`, (slot) => ({ seat: `deepseek#${slot}` })],
+    ['unbound', (slot) => `orphan-${slot}`, () => ({})],
+  ])('D-06: BOTH twins die OUTPUT_LENGTH (%s): both held and never relaunched; both are announced with the clause, and each keeps its own row', async (shape, taskIdFor, seatOf) => {
+    // Two DIFFERENT minted reasons, so each note is seen to carry its own leg's reason.
+    const MINTED = [
+      formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 }, budget: null,
+        reasoningOnly: false, ambientFlag: null }),
+      formatOutputLengthReason({ tokens: { reasoning: 64000, output: 0 }, budget: 64000,
+        reasoningOnly: true, ambientFlag: null }),
+    ];
+    const legs = [1, 2].map((slot) => ({ ...deadLeg('deepseek', 'error', MINTED[slot - 1], 'abc123-s1', slot),
+      taskId: taskIdFor(slot), finish: 'length', usage: cost(slot === 1 ? 0.02 : 0.03) }));
+    const { ctx, r, notes, degrades, said } = await heldTwinRun(legs, null);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1);                 // no retry launched
+    // Named mutant "HELDDEDUPALIAS" (the held arm in run-retry-group.js :: groupStage1Losses dedupes
+    // its srcLegs by modelInput): the second held twin vanishes, and this line reds.
+    expect(notes.filter((n) => n.channel === 'dead-leg').map((n) => n.why))
+      .toEqual(MINTED.map((m) => `the leg ended 'error': ${m} with no usable output${CLAUSE}`));
+    expect(notes.map((n) => n.channel)).toEqual(shape === 'unbound'
+      ? ['seat-unbound', 'seat-unbound', 'dead-leg', 'dead-leg'] : ['dead-leg', 'dead-leg']);
+    // Nothing was relaunched, so nothing is superseded and the T-A5 guard is never reached here:
+    // these two lines are a tripwire, not the pin (test (a) above pins the guard's silence).
+    expect(degrades.filter((d) => d.channel === 'internal')).toEqual([]);
+    expect(said).not.toContain('a superseded row for seat');
+    // Two rows, each twin's OWN first leg, and nothing superseded: no twin was relaunched.
+    expect(r.extraRows).toEqual([1, 2].map((slot) => twinRow('seat',
+      { ...seatOf(slot), usage: cost(slot === 1 ? 0.02 : 0.03) })));
+    expect(r.reviews).toEqual([]);
+    expect(r.degraded).toBe(true);
+  });
+
+  // D-06 on R2's taskId-less floor (council round 1: A1, B1, C1, C4, D1). With no taskId, `rowKeyOf`
+  // cannot mint, so twins share one row key. MEASURED before this change (scratch matrix, the real
+  // runStage1): a held twin after a healed one was written a superseded row that nothing
+  // superseded and borrowed its twin's first leg (recorded 8 against 6 billed, silently); after a
+  // twin whose retry died it sat on a superseded row beside ONE collapsed primary row; and two held
+  // twins collapsed onto ONE row (2 of 5, a billed leg lost). A held leg now gets no superseded row,
+  // and its dead-seat row is its OWN first leg, keyed by the leg itself
+  // (run-stage1-rows.js :: pushDeadSeatRows). Council round 2 found one more: over max-cost, a held
+  // twin AHEAD of a twin the cost arm skipped was LENT to that twin's row, because the never-retried
+  // fallback's `deadLegs0.find` matched it on the shared key (4 recorded against 5 billed, silently).
+  // The fallback now skips held legs. No fanout leg lacks a taskId (`leg-ids.js :: deriveLegIds`);
+  // the floor is pinned so that it is right even so.
+  const floorRow = (role, cents) => twinRow(role, { usage: cost(cents / 100) });
+  const BORROWED = { model: 'deepseek', role: 'seat', wasChair: false, conformance: 'none',
+    status: 'error', durationMs: null, usage: cost(0.01) };   // a still-dead twin's leg-less row, billing only
+  test.each([
+    ['held after a healed twin', ['boom', 'held'], 'healed', [floorRow('superseded', 2), floorRow('seat', 3)]],
+    ['held before a healed twin', ['held', 'boom'], 'healed', [floorRow('superseded', 3), floorRow('seat', 2)]],
+    ['held after a twin whose retry died', ['boom', 'held'], 'dead',
+      [floorRow('superseded', 2), floorRow('seat', 3), BORROWED]],
+    ['both twins held', ['held', 'held'], null, [floorRow('seat', 2), floorRow('seat', 3)]],
+    // Over max-cost: the cost arm skips the twin's unit, so nothing is retried and `attemptedSeats`
+    // stays empty. Both orders, because the defect was order-dependent.
+    ['held before a twin the cost arm skipped', ['held', 'boom'], 'over-max-cost',
+      [floorRow('seat', 3), floorRow('seat', 2)]],
+    ['held after a twin the cost arm skipped', ['boom', 'held'], 'over-max-cost',
+      [floorRow('seat', 2), floorRow('seat', 3)]],
+  ])('D-06: on R2\'s taskId-less floor a held twin keeps its OWN row and no superseded row (%s); recorded equals billed', async (_label, kinds, retry, rows) => {
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+      budget: null, reasoningOnly: false, ambientFlag: null });
+    const bare = (leg) => Object.fromEntries(Object.entries(leg).filter(([k]) => k !== 'taskId'));
+    const legs = kinds.map((kind, i) => bare({
+      ...deadLeg('deepseek', 'error', kind === 'held' ? MINTED : 'boom', 'abc123-s1', i + 1),
+      ...(kind === 'held' ? { finish: 'length' } : {}), usage: cost(i === 0 ? 0.02 : 0.03) }));
+    expect(legs.some((l) => 'taskId' in l)).toBe(false);                      // non-vacuity: the floor
+    const noRetry = retry === null || retry === 'over-max-cost';
+    const retryLegs = noRetry ? null : [retry === 'healed' ? usableLeg('deepseek', 'abc123-s1r1', 1)
+      : deadLeg('deepseek', 'timed-out', null, 'abc123-s1r1', 1)];
+    const { r, said } = await heldTwinRun(legs, retryLegs, retry === 'over-max-cost' ? () => true : undefined);
+    // Named mutant "HELDROWBYKEY" (key a held leg by `rowKeyOf` again in
+    // run-stage1-rows.js :: pushDeadSeatRows): the fallback skips held legs, so the held twin
+    // collapses onto its twin's row or loses its own leg, and this line reds on every cell
+    // (MEASURED, council fix round 2; it spared the order control before the fallback skipped held
+    // legs). Named mutant "HELDLENTTOTWIN" (drop `&& !isHeld(l)` from that function's never-retried
+    // fallback): the held twin is lent to the cost-skipped twin's row, and this line reds on the
+    // "held before" over-max-cost cell.
+    expect(r.extraRows).toEqual(rows);
+    const cents = (usages) => usages.reduce((sum, u) => sum + Math.round(((u && u.cost && u.cost.amount) || 0) * 100), 0);
+    const billed = cents([...legs, ...(retryLegs || [])].map((l) => l.usage));
+    expect(cents([...r.extraRows.map((x) => x.usage), ...r.reviews.map((x) => x.leg.usage)])).toBe(billed);
+    expect(said).not.toContain('a superseded row for seat');                    // and nothing to refuse
+  });
+
+  test('D-06 lockstep: behind a held twin, a skipped NON-held twin still takes its OWN leg, and its refusal is announced', () => {
+    // Council round 2. pushDeadSeatRows' never-retried fallback skips held legs, so
+    // `willTakeItsOwnLeg` in run-stage1-superseded.js :: supersededRows must skip them too, or the
+    // two disagree about which leg that fallback returns. This is the broken-invariant state the
+    // fixtures above hand in (a NON-held twin skipped while its alias key is superseded), on R2's
+    // taskId-less floor, with a held twin FIRST in deadLegs0. The refusal is right here: this split
+    // is real, so it is announced.
+    const bareLeg = (usage, extra = {}) => ({ model: 'deepseek', modelInput: 'deepseek', status: 'error',
+      summary: '', durationMs: null, usage, ...extra });
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+      budget: null, reasoningOnly: false, ambientFlag: null });
+    const held = bareLeg(usageA, { error: MINTED, finish: 'length' });
+    const skippedTwin = bareLeg(usageB);
+    const notes = [];
+    const extraRows = [];
+    pushDeadSeatRows({ o: { seats: SEATS }, deadLegs0: [held, skippedTwin], stillDeadLegs: [held, skippedTwin],
+      stillDeadWaves: [], seatOf: new Map(), roleFor, extraRows, degrade: { note: (r) => notes.push(r) },
+      retry: { recoveredLegs: [bareLeg(null)], stillDeadLegs: [], stillDeadRetryLegs: [],
+        skippedDeadLegs: [held, skippedTwin], attemptedSeats: new Set() } });
+    // Named mutants "HELDLENTTOTWIN" (drop `&& !isHeld(l)` from pushDeadSeatRows' never-retried
+    // fallback) and "HELDLENTTOTWIN-SUPERSEDED" (drop it from `willTakeItsOwnLeg`): one leg lands on
+    // two rows, and this line reds.
+    expect(extraRows.map((x) => [x.role, x.usage])).toEqual([['seat', usageA], ['seat', usageB]]);
+    expect(notes.map((n) => [n.channel, n.data.seat])).toEqual([['internal', 'deepseek']]);
   });
 });
 

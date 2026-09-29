@@ -65,12 +65,12 @@
  *   and drop the `platformExe` arm, turning the union into a replacement, so a
  *   TRUNCATED path.txt over a good tree reads as empty.
  *   RED: same test - the `electr` row.
- * DISTHOLDSDOTPREFIX electron-exe-rel.js :: distHeldExe - widen the containment
+ * DISTHOLDSDOTPREFIX electron-exe-rel.js :: containedExe - widen the containment
  *   test to `inside.startsWith('..')`, dropping the `path.sep`, so a legal
  *   filename beginning with `..` reads as escaping dist/. Note DISTHOLDSNOBOUND
  *   stays GREEN on this form, which is why it needs its own mutant.
  *   RED: "a dist/ entry whose name begins with .. still protects the tree".
- * DISTHOLDSNOBOUND electron-exe-rel.js :: distHeldExe - delete the
+ * DISTHOLDSNOBOUND electron-exe-rel.js :: containedExe - delete the
  *   `path.relative` containment test, so a name that escapes dist/ can vouch
  *   for it and every promote refuses forever.
  * DISTHOLDSDIRISEXE electron-exe-rel.js :: distHeldExe - use `fs.existsSync`

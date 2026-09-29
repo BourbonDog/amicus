@@ -63,6 +63,13 @@ function ensureElectron({ deps = {}, repairOptions = {} } = {}) {
   if (_ensurePromise) { return _ensurePromise; }
 
   _ensurePromise = (async () => {
+    // D-03 (B-SEC-6): resolve() is null ONLY for a path.txt that points outside its own
+    // directory (electron-exe-rel.js :: containedExe). Say so; the repair's promote rewrites
+    // path.txt (electron-layout.js :: promoteDist).
+    if (resolve() === null) {
+      logProgress("[amicus] NOTE: Electron's path.txt points outside its own directory, so amicus will not launch");
+      logProgress('[amicus]   what it names. Re-provisioning Electron below; a repair that succeeds rewrites path.txt.');
+    }
     logProgress('[amicus] Provisioning the Electron GUI binary (first GUI use, ~170MB). This runs once...');
     let result;
     try {

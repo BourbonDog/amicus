@@ -55,8 +55,8 @@
 // ── ADDED BY THE REVIEW REPAIR (measured 2026-09-07, same method) ───────────
 // ANCHORVERSIONFROMTARGET  electron-trust.js :: resolveAnchor — condition the
 //   self rung on the version read out of <electronDir>/package.json again.
-//   RED: "a planted package.json version cannot make the scanned tree its own
-//   anchor" (res.unverified undefined — the poison came back VERIFIED).
+//   RED: "a planted package.json version is REFUSED against the trusted table,
+//   never extracted" (extract called — the poison came back VERIFIED).
 // SCRUBCASESENSITIVE       electron-trust.js :: isRepoPlantedName — drop the
 //   `.toLowerCase()`.
 //   RED: tests/sidecar/electron-trust.test.js "removes the UPPER-case spellings
@@ -240,12 +240,19 @@ describe('C2 — the cached zip is hashed BEFORE it is extracted', () => {
     expect(res.unverified).toBe(true);
   });
 
-  test('an anchor with no entry for THIS artifact is the same "no anchor" case', async () => {
+  test('an anchor with no entry for THIS artifact REFUSES it before the cache is read (D-02)', async () => {
+    // Until D-02 this was "the same 'no anchor' case": extracted and marked. A table
+    // that EXISTS and is silent about the requested file is not the legacy package
+    // with no table at all; it is refused before the lock, the cache and the network.
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     seedElectronAnchor(dir, { table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 } });
-    const { res, extract } = await repair({ dir, exeName, distDir, zip: writeZip({ body: POISON }), cacheOnly: true });
-    expect(extract).toHaveBeenCalledTimes(1);
-    expect(res.unverified).toBe(true);
+    const cachedZip = jest.fn(() => writeZip({ body: POISON }));
+    const { res, extract } = await repair({ dir, exeName, distDir, cacheOnly: true, deps: { cachedZip } });
+    expect(cachedZip).not.toHaveBeenCalled();
+    expect(extract).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ repaired: false, integrity: 'unlisted' });
+    expect(res.reason).toMatch(/lists Electron v43\.1\.1 but no win32-x64 build/);
+    expect(stderr.join('')).toMatch(/Electron artifact REFUSED \(no published sha256\): electron-v43\.1\.1-win32-x64\.zip/);
   });
 
   test('AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 downgrades the gate to a warning', async () => {
@@ -352,7 +359,7 @@ describe('C2 — the anchor cannot be demoted by DATA (ANCHORVERSIONFROMTARGET)'
   // POISONED-BYTES, reported by doctor as "(self-healed 1 npx-cache copy)".
   const V99 = 'electron-v99.0.0-win32-x64.zip';
 
-  test('a planted package.json version cannot make the scanned tree its own anchor', async () => {
+  test('a planted package.json version is REFUSED against the trusted table, never extracted (ANCHORVERSIONFROMTARGET, D-02)', async () => {
     const { dir, exeName, distDir } = fakeElectronDir({
       withExe: false, platform: PLATFORM, version: '99.0.0', body: POISON,   // vouches for the POISON
     });
@@ -371,12 +378,15 @@ describe('C2 — the anchor cannot be demoted by DATA (ANCHORVERSIONFROMTARGET)'
         acquireLock: () => ({ release: () => {} }),
       },
     });
-    // The trusted anchor has no row for a version it never shipped, so the bytes
-    // are UNVERIFIED and say so. What must never happen again is the poison being
-    // reported as verified because the directory under audit said so.
-    expect(res.unverified).toBe(true);
-    expect(stderr.join('')).toMatch(/could not be verified/);
-    expect(distDir).toBeDefined();
+    // The trusted anchor has no row for a version it never shipped. Until D-02 the
+    // bytes were extracted and marked UNVERIFIED; now nothing is extracted at all.
+    // What must never happen is the poison being reported as verified because the
+    // directory under audit said so, and that still holds: it is never extracted.
+    expect(extract).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ repaired: false, integrity: 'unlisted' });
+    expect(res.unverified).toBeUndefined();
+    expect(res.reason).toMatch(/covers Electron v43\.1\.1, not v99\.0\.0/);
+    expect(fs.existsSync(path.join(distDir, exeName))).toBe(false);
   });
 
   test('when the version is NOT lied about, the same poison is refused', async () => {

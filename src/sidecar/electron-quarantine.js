@@ -53,7 +53,7 @@ function quarantineReason({ platform, exePath }) {
  *
  * @param {object} opts
  * @param {() => boolean} opts.isElectronUsable bound usability probe.
- * @param {() => string}  opts.resolveExe resolves the on-disk exe path.
+ * @param {() => (string|null)} opts.resolveExe resolves the on-disk exe path (null for a refused path.txt, D-03).
  * @param {string} opts.platform
  */
 function verifyExtractOutcome({ isElectronUsable, resolveExe, platform }) {
