@@ -53,6 +53,22 @@ function topLevel(spec) {
   return spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0];
 }
 
+/** Record, in `acc`, every external top-level package that `file` requires. */
+function recordExternalRequires(file, acc) {
+  // Not fs.readFileSync: a parallel worker's temp file can be named by a
+  // directory listing and unlinked before this read — see helpers/read-if-present.
+  const src = readIfPresent(file);
+  if (src === null) { return; }
+  for (const m of src.matchAll(/require\(['"]([^'"]+)['"]\)/g)) {
+    const spec = m[1];
+    if (spec.startsWith('.') || spec.startsWith('node:')) { continue; }
+    const top = topLevel(spec);
+    if (builtinModules.includes(top)) { continue; }
+    if (!acc.has(top)) { acc.set(top, []); }
+    acc.get(top).push(path.relative(ROOT, file));
+  }
+}
+
 /** Every external top-level package required under `dir`, mapped to its files. */
 function collectExternalRequires(dir, acc = new Map()) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -61,19 +77,7 @@ function collectExternalRequires(dir, acc = new Map()) {
       if (entry.name !== 'node_modules') { collectExternalRequires(full, acc); }
       continue;
     }
-    if (!entry.name.endsWith('.js')) { continue; }
-    // Not fs.readFileSync: a parallel worker's temp file can be named by the
-    // listing above and unlinked before this read — see helpers/read-if-present.
-    const src = readIfPresent(full);
-    if (src === null) { continue; }
-    for (const m of src.matchAll(/require\(['"]([^'"]+)['"]\)/g)) {
-      const spec = m[1];
-      if (spec.startsWith('.') || spec.startsWith('node:')) { continue; }
-      const top = topLevel(spec);
-      if (builtinModules.includes(top)) { continue; }
-      if (!acc.has(top)) { acc.set(top, []); }
-      acc.get(top).push(path.relative(ROOT, full));
-    }
+    if (entry.name.endsWith('.js')) { recordExternalRequires(full, acc); }
   }
   return acc;
 }
@@ -88,12 +92,22 @@ describe('no phantom dependencies in shipped code', () => {
   const required = SHIPPED_DIRS
     .filter(d => fs.existsSync(path.join(ROOT, d)))
     .reduce((acc, d) => collectExternalRequires(path.join(ROOT, d), acc), new Map());
+  // package.json `files` also ships two scripts, and a production install runs
+  // both (`postinstall` is scripts/postinstall.js, which runs setup-hooks.js):
+  // an undeclared require in either is the v4.5.2 failure class, so the sweep
+  // reads them too. The rest of scripts/ is dev tooling that never ships.
+  const SHIPPED_SCRIPTS = (pkg.files || []).filter((f) => /^scripts\/.+\.js$/.test(f));
+  for (const f of SHIPPED_SCRIPTS) { recordExternalRequires(path.join(ROOT, f), required); }
 
   it('finds requires to check (the scan itself is not silently empty)', () => {
     expect(required.size).toBeGreaterThan(0);
+    // ...and the shipped scripts are really read: the list is not empty, and
+    // every name in it is a file (readIfPresent skips a missing one silently).
+    expect(SHIPPED_SCRIPTS).toContain('scripts/postinstall.js');
+    expect(SHIPPED_SCRIPTS.filter((f) => !fs.existsSync(path.join(ROOT, f)))).toEqual([]);
   });
 
-  it('declares every external package that src/, bin/ and electron/ require', () => {
+  it('declares every external package that src/, bin/, electron/ and the shipped scripts require', () => {
     const phantom = [...required.entries()]
       .filter(([name]) => !declared.has(name))
       .map(([name, files]) => `${name} (required by ${files.slice(0, 3).join(', ')})`);
@@ -142,9 +156,19 @@ describe('no phantom dependencies in shipped code', () => {
 
   it('no file under src/, bin/, electron/ or scripts/ requires tiktoken', () => {
     // The phantom sweep above already fails on an undeclared require in the
-    // first three; scripts/, which ships the postinstall, it never scans.
+    // first three and in the two shipped scripts; the rest of scripts/ it
+    // never reads, so this scans all of it.
     expect(required.has('tiktoken')).toBe(false);
     expect(collectExternalRequires(path.join(ROOT, 'scripts')).has('tiktoken')).toBe(false);
+  });
+
+  it('puppeteer stays out of what an install pulls in (it would bring extract-zip back)', () => {
+    // puppeteer is a devDependency, and its @puppeteer/browsers depends on
+    // extract-zip (package-lock.json). Declared anywhere npm installs for a
+    // consumer, it would put that package back into every install with no
+    // require anywhere in amicus for the sweep above to see.
+    expect(declared.has('puppeteer')).toBe(false);
+    expect((pkg.peerDependencies || {}).puppeteer).toBeUndefined();
   });
 });
 

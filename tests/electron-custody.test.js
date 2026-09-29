@@ -434,6 +434,28 @@ describe('extractZipBuffer — extraction with no filesystem source', () => {
     expect(fs.existsSync(path.join(dir, '..', 'evil'))).toBe(false);
   });
 
+  test('with strictFileNames ON a backslash name is refused TERMINALLY, as `invalid characters`', async () => {
+    // NAME_REFUSAL's `invalid characters in fileName` branch has ONE live
+    // producer: yauzl with strictFileNames on. amicus leaves it off, so the
+    // rewrite above removes every backslash first and the branch cannot fire in
+    // production. Real yauzl with the option ON, through the `deps.yauzl` seam,
+    // drives the branch through the real in-memory path — the zipfile 'error',
+    // NAME_REFUSAL, `failure` — which the direct `validateFileName` pin in
+    // tests/sidecar/unzip-refusal-strings.test.js never passes through.
+    const realYauzl = require('yauzl');
+    const strictYauzl = {
+      fromBuffer: (bytes, opts, cb) => realYauzl.fromBuffer(bytes, { ...opts, strictFileNames: true }, cb),
+    };
+    const dir = mkTmp();
+    const err = await extractZipBuffer(buildZip([{ name: 'sub\\file.txt', body: 'x' }]), {
+      dir, deps: { yauzl: strictYauzl },
+    }).catch((e) => e);
+
+    expect(err.code).toBe('UNZIP_UNSAFE_ARCHIVE');
+    expect(err.message).toBe('invalid characters in fileName: sub\\file.txt');
+    expect(treeOf(dir)).toEqual([]);
+  });
+
   test('an entry that escapes through a pre-planted directory symlink is REFUSED', async () => {
     // extract-zip's own out-of-bound check, kept VERBATIM and re-run per entry:
     // `realpath(destDir)` resolving outside the root is the shape a symlink an

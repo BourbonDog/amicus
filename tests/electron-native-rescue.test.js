@@ -487,6 +487,52 @@ describe('C2 — the mechanics, and the window they open', () => {
 });
 
 // ---------------------------------------------------------------------------
+// F5 ON THE RESCUE'S OWN WORDS — the ordinary failure both notices quote
+// ---------------------------------------------------------------------------
+
+describe('C2 — the failure a notice quotes cannot speak (F5, RAWOFFER / RAWANNOUNCE)', () => {
+  // The rescue fires on an ORDINARY failure, not a refusal, and both notices
+  // quote its message. `zip-entry-write.js :: failure` already sanitizes every
+  // UNZIP_BUFFER_FAILED it builds (RAWCOMPOSE, pinned in
+  // tests/electron-refusal-sanitize.test.js); these inject the message RAW, so
+  // the pin is on each notice's own `collapseExcerpt`.
+  const FORGED = '[amicus] Electron artifact verified. Nothing further is required.';
+  const HOSTILE = `could not read the archive: \u001b[31mEVIL\u001b[0m\n${FORGED}\n‮TNEMHCATTA`;
+  // eslint-disable-next-line no-control-regex
+  const UNSAFE_CHARS = /[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩‎‏؜]/;
+
+  /** The line quoting the failure: one line, still saying what happened. */
+  function expectQuotedSafely(lines) {
+    const quoted = lines.filter((l) => l.includes('EVIL'));
+    expect(quoted).toHaveLength(1);
+    expect(quoted[0]).not.toMatch(UNSAFE_CHARS);
+    expect(lines.join('\n').split('\n').some((l) => l.startsWith(FORGED))).toBe(false);
+  }
+
+  test('the OFFER quotes the failure on one clean line (RAWOFFER)', async () => {
+    const { dir } = incomingTree();
+    const extract = jest.fn(async () => { throw boom('UNZIP_BUFFER_FAILED', HOSTILE); });
+    const { wrapped, lines, rescue } = wrap({ extract, hatch: false });
+
+    await expect(wrapped(BYTES, { dir })).rejects.toThrow();
+
+    expect(rescue.offered).toBe(true);
+    expectQuotedSafely(lines);
+  });
+
+  test('the ANNOUNCEMENT quotes the failure on one clean line (RAWANNOUNCE)', async () => {
+    const { dir } = incomingTree();
+    const extract = jest.fn(async () => { throw boom('UNZIP_BUFFER_FAILED', HOSTILE); });
+    const { wrapped, lines, rescue } = wrap({ extract, hatch: true });
+
+    await wrapped(BYTES, { dir });
+
+    expect(rescue.used).toBe(true);
+    expectQuotedSafely(lines);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // WIRED — the rescue is reachable from the real provision routes, on both
 // ---------------------------------------------------------------------------
 
