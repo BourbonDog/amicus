@@ -137,13 +137,16 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   // `exact` says the key names ONE seat; `join` is what the lookups below ask with.
   // D-06: a HELD leg (skipped, and of the class `run-retry-gate.js :: isOutputLengthLoss` names) was
   // never relaunched, so its OWN first leg is its row. It is keyed by the leg itself, never by
-  // `rowKeyOf`, so on R2's taskId-less floor no twin can share its key or lend it a leg.
+  // `rowKeyOf`, so no twin's entry can share its key; and the never-retried fallback below skips
+  // held legs, so no twin's row can borrow one either (council round 2). Scope, disclosed: two
+  // NON-held taskId-less twins can still collapse onto one row, R2's floor, identical on main.
   const skipped = new Set(retry.skippedDeadLegs || []);
+  const isHeld = (l) => skipped.has(l) && isOutputLengthLoss(l);
   const deadSeats = new Map();   // row key -> { seat, alias, exact, join, own }
   for (const l of stillDeadLegs) {
     const seat = seatOf.get(l) || null;
     const alias = l.modelInput || l.model;
-    const own = skipped.has(l) && isOutputLengthLoss(l) ? l : null;
+    const own = isHeld(l) ? l : null;
     const key = own || rowKeyOf(l);
     deadSeats.set(key, { seat, alias, exact: !!seat || !twins.has(alias), join: key, own });
   }
@@ -202,7 +205,7 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
       // own `superseded` row above, so that leg's cost lands in runStats twice.
       finalLeg = retry.attemptedSeats.has(join)
         ? null
-        : (deadLegs0.find(l => rowKeyOf(l) === join) || null);    // never retried
+        : (deadLegs0.find(l => rowKeyOf(l) === join && !isHeld(l)) || null);    // never retried; never a held leg (D-06)
     }
     // Seat-space role (spec §4.5), matching the review push in run-stages.js:
     // the SEAT's own role, NOT roleAt(o.seats, seat.id) — o.seats is absent on

@@ -2185,14 +2185,17 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
   // row was ever its due, and there is nothing to refuse aloud. These drive the real runStage1
   // through the REAL sink (`run-degrade.js :: createDegradeSink`), so run.json's `degrades` and the
   // stderr text are read as well as the notes. Reasons are minted with the real formatter.
-  // ⚠️ SCOPE: on R2's taskId-less floor too, a held twin keeps its OWN row and gets no superseded
-  // row (council round 1). The last test below pins every floor cell.
+  // ⚠️ SCOPE: on R2's taskId-less floor too, a held twin keeps its OWN row, gets no superseded row,
+  // and is never lent to a twin's row (council rounds 1 and 2). The floor test.each below pins six
+  // floor cells: a held twin before and after a healed twin, after a twin whose retry died, before
+  // and after a twin the cost arm skipped, and both twins held. It does NOT pin two NON-held
+  // taskId-less twins collapsing onto one row: that is R2's pre-existing floor, identical on main.
   const { formatOutputLengthReason } = require('../../src/utils/output-length');
   const cost = (amount) => ({ cost: { amount, source: 'reported' } });
   const CLAUSE = '; its once-only retry was skipped: a relaunch reserves the same output budget';
-  const heldTwinRun = async (firstLegs, retryLegs) => {
+  const heldTwinRun = async (firstLegs, retryLegs, overBudget) => {
     const { createDegradeSink } = require('../../src/council/run-degrade');
-    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'], ...(overBudget ? { overBudget } : {}) });
     const said = [];
     ctx.degrade = createDegradeSink({ runDir: ctx.o.runDir, degraded: { value: false },
       write: (s) => said.push(s) });
@@ -2283,8 +2286,11 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
   // twin whose retry died it sat on a superseded row beside ONE collapsed primary row; and two held
   // twins collapsed onto ONE row (2 of 5, a billed leg lost). A held leg now gets no superseded row,
   // and its dead-seat row is its OWN first leg, keyed by the leg itself
-  // (run-stage1-rows.js :: pushDeadSeatRows). No fanout leg lacks a taskId
-  // (`leg-ids.js :: deriveLegIds`); the floor is pinned so that it is right even so.
+  // (run-stage1-rows.js :: pushDeadSeatRows). Council round 2 found one more: over max-cost, a held
+  // twin AHEAD of a twin the cost arm skipped was LENT to that twin's row, because the never-retried
+  // fallback's `deadLegs0.find` matched it on the shared key (4 recorded against 5 billed, silently).
+  // The fallback now skips held legs. No fanout leg lacks a taskId (`leg-ids.js :: deriveLegIds`);
+  // the floor is pinned so that it is right even so.
   const floorRow = (role, cents) => twinRow(role, { usage: cost(cents / 100) });
   const BORROWED = { model: 'deepseek', role: 'seat', wasChair: false, conformance: 'none',
     status: 'error', durationMs: null, usage: cost(0.01) };   // a still-dead twin's leg-less row, billing only
@@ -2294,6 +2300,12 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
     ['held after a twin whose retry died', ['boom', 'held'], 'dead',
       [floorRow('superseded', 2), floorRow('seat', 3), BORROWED]],
     ['both twins held', ['held', 'held'], null, [floorRow('seat', 2), floorRow('seat', 3)]],
+    // Over max-cost: the cost arm skips the twin's unit, so nothing is retried and `attemptedSeats`
+    // stays empty. Both orders, because the defect was order-dependent.
+    ['held before a twin the cost arm skipped', ['held', 'boom'], 'over-max-cost',
+      [floorRow('seat', 3), floorRow('seat', 2)]],
+    ['held after a twin the cost arm skipped', ['boom', 'held'], 'over-max-cost',
+      [floorRow('seat', 2), floorRow('seat', 3)]],
   ])('D-06: on R2\'s taskId-less floor a held twin keeps its OWN row and no superseded row (%s); recorded equals billed', async (_label, kinds, retry, rows) => {
     const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
       budget: null, reasoningOnly: false, ambientFlag: null });
@@ -2302,17 +2314,46 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
       ...deadLeg('deepseek', 'error', kind === 'held' ? MINTED : 'boom', 'abc123-s1', i + 1),
       ...(kind === 'held' ? { finish: 'length' } : {}), usage: cost(i === 0 ? 0.02 : 0.03) }));
     expect(legs.some((l) => 'taskId' in l)).toBe(false);                      // non-vacuity: the floor
-    const retryLegs = retry === null ? null : [retry === 'healed' ? usableLeg('deepseek', 'abc123-s1r1', 1)
+    const noRetry = retry === null || retry === 'over-max-cost';
+    const retryLegs = noRetry ? null : [retry === 'healed' ? usableLeg('deepseek', 'abc123-s1r1', 1)
       : deadLeg('deepseek', 'timed-out', null, 'abc123-s1r1', 1)];
-    const { r, said } = await heldTwinRun(legs, retryLegs);
+    const { r, said } = await heldTwinRun(legs, retryLegs, retry === 'over-max-cost' ? () => true : undefined);
     // Named mutant "HELDROWBYKEY" (key a held leg by `rowKeyOf` again in
     // run-stage1-rows.js :: pushDeadSeatRows): the held twin borrows or collapses onto its twin's
-    // row, and this line reds on every cell but the order control.
+    // row, and this line reds on every cell but the order control. Named mutant "HELDLENTTOTWIN"
+    // (drop `&& !isHeld(l)` from that function's never-retried fallback): the held twin is lent to
+    // the cost-skipped twin's row, and this line reds on the "held before" over-max-cost cell.
     expect(r.extraRows).toEqual(rows);
     const cents = (usages) => usages.reduce((sum, u) => sum + Math.round(((u && u.cost && u.cost.amount) || 0) * 100), 0);
     const billed = cents([...legs, ...(retryLegs || [])].map((l) => l.usage));
     expect(cents([...r.extraRows.map((x) => x.usage), ...r.reviews.map((x) => x.leg.usage)])).toBe(billed);
     expect(said).not.toContain('a superseded row for seat');                    // and nothing to refuse
+  });
+
+  test('D-06 lockstep: behind a held twin, a skipped NON-held twin still takes its OWN leg, and its refusal is announced', () => {
+    // Council round 2. pushDeadSeatRows' never-retried fallback skips held legs, so
+    // `willTakeItsOwnLeg` in run-stage1-superseded.js :: supersededRows must skip them too, or the
+    // two disagree about which leg that fallback returns. This is the broken-invariant state the
+    // fixtures above hand in (a NON-held twin skipped while its alias key is superseded), on R2's
+    // taskId-less floor, with a held twin FIRST in deadLegs0. The refusal is right here: this split
+    // is real, so it is announced.
+    const bareLeg = (usage, extra = {}) => ({ model: 'deepseek', modelInput: 'deepseek', status: 'error',
+      summary: '', durationMs: null, usage, ...extra });
+    const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+      budget: null, reasoningOnly: false, ambientFlag: null });
+    const held = bareLeg(usageA, { error: MINTED, finish: 'length' });
+    const skippedTwin = bareLeg(usageB);
+    const notes = [];
+    const extraRows = [];
+    pushDeadSeatRows({ o: { seats: SEATS }, deadLegs0: [held, skippedTwin], stillDeadLegs: [held, skippedTwin],
+      stillDeadWaves: [], seatOf: new Map(), roleFor, extraRows, degrade: { note: (r) => notes.push(r) },
+      retry: { recoveredLegs: [bareLeg(null)], stillDeadLegs: [], stillDeadRetryLegs: [],
+        skippedDeadLegs: [held, skippedTwin], attemptedSeats: new Set() } });
+    // Named mutants "HELDLENTTOTWIN" (drop `&& !isHeld(l)` from pushDeadSeatRows' never-retried
+    // fallback) and "HELDLENTTOTWIN-SUPERSEDED" (drop it from `willTakeItsOwnLeg`): one leg lands on
+    // two rows, and this line reds.
+    expect(extraRows.map((x) => [x.role, x.usage])).toEqual([['seat', usageA], ['seat', usageB]]);
+    expect(notes.map((n) => [n.channel, n.data.seat])).toEqual([['internal', 'deepseek']]);
   });
 });
 

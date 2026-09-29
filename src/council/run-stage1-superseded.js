@@ -95,10 +95,13 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
   // no superseded row is ever its due, and the loop below skips a held leg (skipped, and of that
   // class) before the join. Its dead-seat row is its OWN first leg, keyed by the leg itself in
   // `run-stage1-rows.js :: pushDeadSeatRows`, so no billed usage can drop, and there is nothing to
-  // refuse or announce. MEASURED on R2's taskId-less floor too (council round 1), where `rowKeyOf`
-  // cannot mint: recorded equals billed in every held cell. Before, the held leg was written a
-  // superseded row and borrowed its twin's first leg (8 against 6 billed, silently), or two held
-  // twins collapsed onto one row (2 of 5).
+  // refuse or announce. MEASURED over 22,083 runStage1 cells (council round 2): every held leg is
+  // on exactly one row, never a superseded one, and no remaining miscount names a held leg's usage.
+  // What still miscounts is among NON-held legs: R2's taskId-less floor collapse (identical on main
+  // where no leg is held) and B-CL-1's stray retry legs. Before, the held leg was written a
+  // superseded row and borrowed its twin's first leg (8 against 6 billed, silently), two held twins
+  // collapsed onto one row (2 of 5), and, over max-cost, a held twin ahead of a twin the cost arm
+  // skipped was lent to that twin's row (4 of 5).
   // ⚠️ v4.8 T-A5 — and the paragraph above is now the DERIVATION, not the safety. Both facts
   // exist to make ONE statement true: no first leg is SKIPPED while its alias key is superseded.
   // `retry.skippedDeadLegs` states that directly, in leg OBJECTS — the very members of
@@ -120,7 +123,8 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
   // THAT LOOP points across the boundary (the other two still point inside). run-stages.js merges `skippedDeadLegs`
   // into the `stillDeadLegs` it hands that caller, so a skipped leg IS a still-dead seat there,
   // and that loop's `deadLegs0.find` fallback runs for exactly the keys `attemptedSeats` does NOT
-  // hold — and returns ONE leg per key.
+  // hold — and returns ONE leg per key, never a held one (D-06, council round 2). The `find` in
+  // `willTakeItsOwnLeg` below skips held legs the same way, so the two cannot disagree.
   // ⚠️ BOTH conjuncts are load-bearing and BOTH were learned by MEASUREMENT, not argument. The
   // first version of this comment argued the second was unreachable; it was wrong, and the guard
   // built on it lost billed spend (T-A5 rounds 1-3).
@@ -149,8 +153,9 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
   // workspace/seat-space.js) gate on dead-leg/dead-wave/seat-unbound first, so it reaches none, and it cannot
   // move the exit code either: run-stages.js notes a `dead-leg` degrade for every skipped leg
   // before this function is called, so the run is already degraded whenever this can fire.
+  const isHeld = (l) => skippedLegs.has(l) && isOutputLengthLoss(l);   // D-06: skipped, and of the class
   const willTakeItsOwnLeg = (dead) => !retry.attemptedSeats.has(rowKeyOf(dead))
-    && deadLegs0.find(l => rowKeyOf(l) === rowKeyOf(dead)) === dead;
+    && deadLegs0.find(l => rowKeyOf(l) === rowKeyOf(dead) && !isHeld(l)) === dead;
   const refuseSupersede = (dead) => {
     const alias = dead.modelInput || dead.model;
     sink.note({ channel: 'internal',
@@ -162,7 +167,7 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
       data: { seat: alias, taskId: dead.taskId || null } });
   };
   for (const dead of deadLegs0) {
-    if (skippedLegs.has(dead) && isOutputLengthLoss(dead)) { continue; } // D-06: HELD, never superseded (above)
+    if (isHeld(dead)) { continue; } // D-06: HELD, never superseded (above)
     if (!supersededKeys.has(keyOf(dead))) { continue; }
     if (skippedLegs.has(dead) && willTakeItsOwnLeg(dead)) { refuseSupersede(dead); continue; }
     rows.push(buildRunStatsEntry({ leg: dead, model: dead.modelInput || dead.model,
