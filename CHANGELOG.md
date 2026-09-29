@@ -14,7 +14,8 @@ All notable changes to Amicus are documented here. Format follows
 
 - `node scripts/generate-docs.js --check`'s cross-link validation now also covers `README.md`
   and every top-level `docs/*.md` file (previously `CLAUDE.md` only), resolving each file's
-  relative links against its own directory rather than the project root.
+  relative links against its own directory rather than the project root, and refusing a relative
+  link that resolves outside the repository.
 
 ### Fixed
 

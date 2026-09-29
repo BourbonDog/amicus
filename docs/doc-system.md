@@ -57,6 +57,8 @@ reference-style links and HTML `<img src>` attributes are not:
 
 - A link's target is resolved relative to the directory of the file that contains it (so a
   `docs/*.md` file's own-directory-relative links resolve against `docs/`, not the project root)
+- A link that resolves outside the repository is refused, even if its target exists there: it
+  would work only on a machine that has that sibling path
 - External URLs (`https://...`) are skipped
 - Anchor-only links (`#section`) are skipped
 - Broken links cause `--check` to exit 1

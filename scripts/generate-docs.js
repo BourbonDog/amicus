@@ -67,13 +67,16 @@ function replaceMarkers(content, markerName, newContent) {
 // ---------------------------------------------------------------------------
 
 /**
- * Validate that markdown cross-links point to existing files.
- * Skips http/https URLs and anchor-only links.
+ * Validate that markdown cross-links point to existing files inside the repository.
+ * Skips http/https URLs and anchor-only links. A relative link that resolves outside
+ * `repoRoot` is refused even when its target exists: it only works on the machine that
+ * happens to have that sibling path, never in a clone or the published package.
  * @param {string} markdown - Markdown content
- * @param {string} rootDir - Project root for resolving relative paths
- * @returns {string[]} Array of error messages for broken links
+ * @param {string} rootDir - Directory relative links resolve against (the linking file's own)
+ * @param {string} [repoRoot=rootDir] - Repository root; a link may not resolve outside it
+ * @returns {string[]} Array of error messages for broken or escaping links
  */
-function validateCrossLinks(markdown, rootDir) {
+function validateCrossLinks(markdown, rootDir, repoRoot = rootDir) {
   const errors = [];
   const linkRe = /\[([^\]]*)\]\(([^)]+)\)/g;
   let match;
@@ -88,6 +91,11 @@ function validateCrossLinks(markdown, rootDir) {
       continue;
     }
     const resolved = path.resolve(rootDir, filePart);
+    const fromRepo = path.relative(repoRoot, resolved);
+    if (fromRepo === '..' || fromRepo.startsWith(`..${path.sep}`) || path.isAbsolute(fromRepo)) {
+      errors.push(`Link escapes the repository: [${match[1]}](${target})`);
+      continue;
+    }
     if (!fs.existsSync(resolved)) {
       errors.push(`Broken link: [${match[1]}](${target}) -> ${filePart} not found`);
     }
@@ -251,7 +259,7 @@ function collectCrossLinkErrors(rootDir) {
       throw new Error(`Cannot read ${rel}`);
     }
     const ownDir = path.dirname(path.join(rootDir, rel));
-    for (const err of validateCrossLinks(content, ownDir)) {
+    for (const err of validateCrossLinks(content, ownDir, rootDir)) {
       errors.push(`${rel}: ${err}`);
     }
   }

@@ -149,3 +149,27 @@ describe('collectCrossLinkErrors reports what it must (R-E20 D3 negative fixture
     ]);
   });
 });
+
+describe('collectCrossLinkErrors refuses links that leave the repository (R-E21 C1)', () => {
+  const os = require('node:os');
+  let base;
+  let repo;
+  beforeEach(() => {
+    base = fs.mkdtempSync(path.join(os.tmpdir(), 'xlink-escape-'));
+    repo = path.join(base, 'repo');
+    fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+    // The target EXISTS, just outside the repository, so only the escape rule can fail it.
+    fs.writeFileSync(path.join(base, 'outside.md'), '# outside the repository\n');
+    fs.writeFileSync(path.join(repo, 'CLAUDE.md'), '# c\n');
+  });
+  afterEach(() => { fs.rmSync(base, { recursive: true, force: true }); });
+
+  it('refuses a relative link that resolves outside the repository, naming the file and link', () => {
+    fs.writeFileSync(path.join(repo, 'README.md'), 'escape [out](../outside.md)\n');
+    fs.writeFileSync(path.join(repo, 'docs', 'a.md'), 'escape [out](../../outside.md)\n');
+    expect(collectCrossLinkErrors(repo)).toEqual([
+      'README.md: Link escapes the repository: [out](../outside.md)',
+      'docs/a.md: Link escapes the repository: [out](../../outside.md)',
+    ]);
+  });
+});
