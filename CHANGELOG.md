@@ -36,6 +36,24 @@ All notable changes to Amicus are documented here. Format follows
   that installs Electron writes such a name (Electron's own installer and amicus each write one of
   three fixed names), so this closes a tampered or corrupted file, not an acquisition path.
 
+### Changed
+
+- **A Stage-1 seat whose leg died at its output reservation is no longer retried.** A leg that
+  ends `error` with an `OUTPUT_LENGTH:` reason (the provider stopped at the `max_tokens`
+  reservation before any answer text) is announced as a dead leg without a relaunch: the
+  once-only retry would run on an engine started from the same config.json (the run's shared
+  engine, or a per-wave one) with the same `outputBudget`, and the quoted reason already names the
+  budget in force and the fix. The notice's reason now ends
+  `its once-only retry was skipped: a relaunch reserves the same output budget`; no retry wave is
+  launched or billed, and the seat keeps its own first leg as its dead-seat row. The run exits
+  degraded (2) as before, or 1 (`COUNCIL_QUORUM`) when fewer than two reviews survive, exactly as
+  it would have had the retry died. Every other Stage-1 loss is retried exactly as before, and a
+  seat whose retry leg dies `OUTPUT_LENGTH` is announced exactly as before. Measured across every
+  CI council run since 4.9.4, both such deaths were retried at the same budget and neither retry
+  delivered a review: on run 34376584500 the retry died the same way and billed $0.2224 a second
+  time, and on run 35514703539 the retry stopped early and its only "heal" was promoted
+  reasoning. (#218)
+
 ### Fixed
 
 - **`council run` no longer merges a second run into a folder that already holds one.** Started

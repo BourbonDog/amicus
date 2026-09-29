@@ -180,6 +180,9 @@ P1, PR 2, PR 3 and PR 4).
   for the leg and the budget in force (or the ambient `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` the
   engine was started with, when no budget is set); it used to end `complete` with an empty summary
   or, when the provider streamed the reasoning, with its *thinking* promoted to the review (L2/L4).
+  A council does not give such a seat its once-only Stage-1 retry (since the next release after
+  4.14.1): a relaunch reserves the same budget, so the seat is announced as a dead leg without a
+  relaunch — this key is the lever.
   A message with reasoning, no text and a finish other than `'length'` (typically `'stop'`, sometimes
   absent) is a different shape — it completes with its reasoning promoted to output, and since
   4.14.0 a council treats that leg as no deliverable (#257): the once-only retry

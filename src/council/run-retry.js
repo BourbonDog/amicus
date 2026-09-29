@@ -3,8 +3,8 @@
 /**
  * @module council/run-retry
  * SL-2 (spec: docs/superpowers/specs/2026-08-03-sl2-stage1-retry-design.md):
- * the Stage-1 once-only retry pass. A sub-wave that died before its legs
- * existed, or a leg that ended with no usable output, is relaunched exactly
+ * the Stage-1 once-only retry pass. A sub-wave that died before its legs existed, or a leg that
+ * ended with no usable output (an OUTPUT_LENGTH death excepted: run-retry-gate.js, D-06), is relaunched exactly
  * once — serially, after every surviving launch settled — and the outcome is
  * announced in the one voice: a `stage1-retry` HEAL per recovered seat; the
  * ordinary dead-wave/dead-leg degrade, noted by the CALLER (run-stages.js),
@@ -69,7 +69,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     // outside the run's actual lens roster (coordinator-review MINOR-7b: a
     // malformed waveId like "...-l99" must not become an out-of-range
     // `o.lenses[98]` access inside run-retry-launch.js's briefingFor), or a unit whose sources
-    // named zero models — is never launched. Its sources fall back to the
+    // named zero models (D-06's `held` unit among them) — is never launched. Its sources fall back to the
     // ordinary skipped-loss path so the caller's normal degrade notes still
     // fire; being unmappable is not an exemption from the record.
     const lensOutOfRange = unit.unit === 'lens' && unit.lensIndex !== null

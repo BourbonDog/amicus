@@ -131,3 +131,44 @@ describe('run-stage1-superseded — extraction pins (v4.8 Phase 2 T-A6)', () => 
     } finally { spy.mockRestore(); }
   });
 });
+
+// D-06 (council round 1, D4): downstream, "held" is "skipped by the retry, AND of the class
+// `run-retry-gate.js :: isOutputLengthLoss` names", never the class alone. Today every leg of the
+// class is skipped (run-retry-group.js :: groupStage1Losses holds them all), so the two readings
+// agree on every production input, and nothing but this test can tell them apart. It hands the row
+// producers a leg of the class that was NOT skipped (retried, still dead), which a routing change
+// such as a retry at a raised budget would produce: that leg must be rowed like any retried leg.
+describe('D-06: "held" is skipped AND of the class, never the class alone (council round 1, D4)', () => {
+  const { formatOutputLengthReason } = require('../../src/utils/output-length');
+  const MINTED = formatOutputLengthReason({ tokens: { reasoning: 32000, output: 0 },
+    budget: null, reasoningOnly: false, ambientFlag: null });
+  const cost = (amount) => ({ cost: { amount, source: 'reported' } });
+  const lengthLeg = () => ({ taskId: 'r1-s1-1', waveId: 'r1-s1', model: 'glm', modelInput: 'glm',
+    status: 'error', error: MINTED, finish: 'length', summary: '', durationMs: 1000, usage: cost(0.03) });
+  const run = (leg, retry) => {
+    const extraRows = [];
+    rows.pushDeadSeatRows({ o: { seats: buildSeats(['glm', 'gpt'], null, null) }, retry,
+      deadLegs0: [leg], stillDeadLegs: [leg], stillDeadWaves: [], seatOf: new Map(),
+      roleFor: () => 'seat', extraRows, degrade: { note: () => {} } });
+    return extraRows.map((r) => [r.role, r.waveId, r.usage]);
+  };
+
+  test('a leg of the class that was RETRIED is rowed like any retried leg: superseded, and its retry leg is its row', () => {
+    const leg = lengthLeg();
+    const retryLeg = { taskId: 'r1-s1r1-1', waveId: 'r1-s1r1', model: 'glm', modelInput: 'glm',
+      status: 'timed-out', summary: '', durationMs: 900, usage: cost(0.01) };
+    // Named mutants "HELDBYCLASS-SUPERSEDED" and "HELDBYCLASS-ROWS" (drop `skippedLegs.has(dead) &&`
+    // in run-stage1-superseded.js :: supersededRows, or `skipped.has(l) &&` in
+    // run-stage1-rows.js :: pushDeadSeatRows): the retried leg is treated as held, and this line reds.
+    expect(run(leg, { recoveredLegs: [], stillDeadLegs: [leg], stillDeadRetryLegs: [retryLeg],
+      skippedDeadLegs: [], attemptedSeats: new Set(['glm']) }))
+      .toEqual([['superseded', 'r1-s1', cost(0.03)], ['seat', 'r1-s1r1', cost(0.01)]]);
+  });
+
+  test('the same leg, SKIPPED, is held: no superseded row, and its own first leg is its row', () => {
+    const leg = lengthLeg();
+    expect(run(leg, { recoveredLegs: [], stillDeadLegs: [], stillDeadRetryLegs: [],
+      skippedDeadLegs: [leg], attemptedSeats: new Set() }))
+      .toEqual([['seat', 'r1-s1', cost(0.03)]]);
+  });
+});

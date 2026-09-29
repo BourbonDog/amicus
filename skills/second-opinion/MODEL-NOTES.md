@@ -137,7 +137,8 @@ peer-consensus≠evidence rule upstreamed)._
   finding counts.** Every lost seat/leg is announced in one voice on stderr and recorded in
   `run.json.degrades[]`, `verdict.json.degrades[]`, the report's **"What was lost"** section, and
   `verdict.seatLoss`, and the run exits degraded (2). A Stage-1 wave or leg that dies is relaunched exactly once (serially, after the
-  surviving launches settle; skipped when the run is already over `--max-cost`): a heal announces
+  surviving launches settle; skipped when the run is already over `--max-cost`, and never for an
+  `OUTPUT_LENGTH` death, whose lever is `outputBudget` — the `Notice:` says so): a heal announces
   as a `Recovered:` line and the run stays exit 0; a seat still dead after its retry is recorded
   with both attempts named in the why. A dead route still doesn't stop a council — it shrinks it —
   but the shrinkage is no longer silent: confirm the bench you paid for from
