@@ -247,7 +247,45 @@ function refuseUnreadableArtifact({ fileName, zip, why, detail = '', log = () =>
   };
 }
 
+/**
+ * D-02 (B-SEC-7) — the checksums.json amicus trusts EXISTS but lists no sha256 for this
+ * artifact. NOT the legacy `no-digest` case (no table at all: extracted, and marked). No
+ * download can add the missing row, so `repairElectron` refuses BEFORE the lock, the cache
+ * and the network, and a retry is free. The table itself tells the two causes apart: no row
+ * for this VERSION is a copy installed with a different Electron (or a planted version), and
+ * the fix is to repair that copy with its own amicus; rows for the version but not this
+ * platform-arch mean Electron publishes no such build. F5: `anchor.source` (a path,
+ * attacker-influenced on rung 2), `fileName` and `version` are all sanitized, so even a
+ * caller that skips `isSafeArtifactName` cannot forge a line; listed versions are digits and dots.
+ * @returns {{repaired:false, integrity:'unlisted', reason:string}}
+ */
+function refuseUnlistedArtifact({ anchor, fileName, version, platform, arch, log = () => {} }) {
+  const keys = Object.keys(anchor.table);
+  const covered = keys.some((k) => k.startsWith(`electron-${version}-`));
+  const listed = [...new Set(keys.map((k) => (/^electron-(v\d+\.\d+\.\d+)-/.exec(k) || [])[1]).filter(Boolean))];
+  const what = covered
+    ? `the checksums.json amicus trusts lists Electron ${collapseExcerpt(version)} but no ${platform}-${arch} build`
+    : `the checksums.json amicus trusts covers Electron ${listed.slice(0, 3).join(', ') || '(none)'}, not ${collapseExcerpt(version)}`;
+  const fix = covered
+    ? 'Electron publishes no build for this platform in that table, so the GUI is unavailable here.'
+    : 'Repair that copy with its own amicus (for the copy the MCP launches: npx -y amicus@latest doctor --fix);'
+      + " if it is this amicus's own Electron, reinstall amicus.";
+  log(`[amicus] Electron artifact REFUSED (no published sha256): ${collapseExcerpt(fileName)}`);
+  log(`[amicus]   ${collapseExcerpt(anchor.source, PATH_EXCERPT_CHARS)}`);
+  log(`[amicus]   ${what}.`);
+  log('[amicus] Nothing was downloaded or extracted: no download can add the missing entry.');
+  if (!covered) { log('[amicus] A copy installed with a different Electron looks like this, and so does a planted version.'); }
+  log(`[amicus] ${fix}`);
+  if (!covered) { log('[amicus] If you accept bytes amicus cannot verify, set AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 BEFORE provisioning again.'); }
+  log('[amicus] Headless runs and the council work without the GUI.');
+  return {
+    repaired: false,
+    integrity: 'unlisted',
+    reason: `Electron artifact ${collapseExcerpt(fileName)} was REFUSED: ${what}, so nothing was downloaded or extracted. ${fix}`,
+  };
+}
+
 module.exports = {
   isUnsafeArchive, refuseUnsafeArchive, rejectCachedZip, rejectDownloadedZip, refuseUnreadableArtifact,
-  PATH_EXCERPT_CHARS,
+  refuseUnlistedArtifact, PATH_EXCERPT_CHARS,
 };

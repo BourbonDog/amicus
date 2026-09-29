@@ -354,7 +354,7 @@ These variables control the polling loop that drives headless sessions. The defa
 | `AMICUS_GUI_LOAD_TIMEOUT_MS` | Maximum wait in milliseconds for the Electron UI to load before the load-failsafe fires. If the OpenCode web UI fails to respond within this window, Amicus shows a load-error page instead of hanging invisibly. | `15000` |
 | `AMICUS_DEBUG_PORT` | Chrome DevTools Protocol port for the Electron window. Increment (e.g. `9223`) to avoid conflicts with a running Chrome or another Amicus window. | `9222` |
 | `AMICUS_MOCK_UPDATE` | Mock the update-notification state for UI development. Values: `available` \| `updating` \| `success` \| `error`. Has no effect outside development. | *(unset)* |
-| `AMICUS_ALLOW_UNVERIFIED_ELECTRON` | Accept an Electron artifact whose sha256 does **not** match the digest Electron publishes for it, with a loud warning on every use instead of a refusal, **and** arm the native-extractor rescue for an archive amicus cannot read (below). On a **cached** artifact it downgrades the refusal to a warning; on a **download** it also drops the published-digest pin, so `@electron/get` falls back to the `SHASUMS256.txt` of whatever mirror you pointed it at — without that, a legitimately rebuilt Electron could never be fetched at all, only accepted if it was already in a cache root. For two cases only: you deliberately run a **rebuilt** Electron whose bytes legitimately differ, or amicus cannot read an archive at all and you have no other copy of it. True for the exact string `1` — `true`, `yes` and ` 1` are all false, because a hatch that fails open on a typo is not a hatch. | *(unset)* |
+| `AMICUS_ALLOW_UNVERIFIED_ELECTRON` | Accept an Electron artifact whose sha256 does **not** match the digest Electron publishes for it, with a loud warning on every use instead of a refusal, **and** arm the native-extractor rescue for an archive amicus cannot read (below). On a **cached** artifact it downgrades the refusal to a warning; on a **download** it also drops the published-digest pin, so `@electron/get` falls back to the `SHASUMS256.txt` of whatever mirror you pointed it at — without that, a legitimately rebuilt Electron could never be fetched at all, only accepted if it was already in a cache root. It also accepts an artifact that the `checksums.json` amicus trusts lists **no** sha256 for (an npx-cache copy installed with a different Electron than the amicus repairing it, say), marked `unverified`; without it, that artifact is refused before anything is downloaded. For three cases only: you deliberately run a **rebuilt** Electron whose bytes legitimately differ, amicus cannot read an archive at all and you have no other copy of it, or the trusted table lists no sha256 for an artifact and repairing that copy with its own amicus is not an option. True for the exact string `1` — `true`, `yes` and ` 1` are all false, because a hatch that fails open on a typo is not a hatch. | *(unset)* |
 
 > **What `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not do.** It arms exactly the two
 > things this page describes — the digest relaxation in the table above, and the
@@ -373,9 +373,11 @@ These variables control the polling loop that drives headless sessions. The defa
 > `ELECTRON_MIRROR` environment variable is honoured exactly as before, set or
 > unset. What it *does* relax, deliberately and on both routes, is the digest:
 > with it set, a cached artifact that contradicts Electron's published sha256 is
-> accepted with a warning, and a download is no longer pinned to that sha256
-> (`@electron/get` then trusts the `SHASUMS256.txt` served alongside the artifact).
-> Leave it unset and the published digest is enforced on both routes.
+> accepted with a warning, an artifact the trusted `checksums.json` lists no
+> sha256 for is accepted (marked `unverified`) instead of refused, and a download
+> is no longer pinned to that sha256 (`@electron/get` then trusts the
+> `SHASUMS256.txt` served alongside the artifact). Leave it unset and the
+> published digest is enforced on both routes.
 
 > **The second thing it arms: the native-extractor rescue, and the window that
 > opens.** Amicus extracts the Electron archive **in memory**, from the buffer it
@@ -472,7 +474,7 @@ These variables control the polling loop that drives headless sessions. The defa
 > mirror planted, the download still goes to the official
 > `github.com/electron/electron/releases/download/…`. But when **no digest is
 > pinned** — either this variable is set, or your Electron package ships no
-> `checksums.json` entry — `@electron/get` fetches a `SHASUMS256.txt` of its own,
+> `checksums.json` at all — `@electron/get` fetches a `SHASUMS256.txt` of its own,
 > *after* the names have been restored, and a planted mirror is read again for
 > that one fetch. It cannot change which bytes you get, because the artifact's
 > URL was already settled: it can only serve a checksum file that disagrees with

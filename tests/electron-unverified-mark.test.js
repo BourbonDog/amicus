@@ -256,6 +256,26 @@ describe('F3 — controlledProvision reports whether it pinned', () => {
     expect(out).toEqual({ pinned: false });
     expect(lines.join('\n')).toMatch(/no published sha256 for electron-v43\.1\.1-win32-x64\.zip/);
     expect(lines.join('\n')).toMatch(/could not be pinned/);
+    expect(lines.join('\n')).toMatch(/this electron package ships no checksums\.json amicus can read/);
+  });
+
+  test("under the hatch, an UNLISTED artifact's NOTE names the silent table, not a missing one (D-02)", async () => {
+    // repairElectron refuses an unlisted artifact unless AMICUS_ALLOW_UNVERIFIED_ELECTRON=1,
+    // so this is the route that prints the NOTE for one: the trusted table EXISTS and has
+    // no entry for this file. "This electron package ships no checksums.json" is false here.
+    const lines = [];
+    const out = await controlledProvision({
+      ...withDir(),
+      anchor: { table: { 'electron-v43.1.1-darwin-arm64.zip': 'a'.repeat(64) }, source: '<test>' },
+      policy: { allowUnverified: true },
+      downloadArtifact: jest.fn(async () => writeZip()),
+      log: (m) => lines.push(m),
+    });
+    expect(out).toEqual({ pinned: false });
+    const text = lines.join('\n');
+    expect(text).toMatch(/no published sha256 for electron-v43\.1\.1-win32-x64\.zip \(the checksums\.json amicus trusts has no entry for it\)/);
+    expect(text).not.toMatch(/ships no/);
+    expect(text).toMatch(/could not be pinned/);
   });
 });
 
@@ -264,12 +284,16 @@ describe('A2/B3 — the mark is READ, not merely written (MARKUNREAD)', () => {
   // both routes but nothing in the changed src/ or scripts/ reads it — it is a
   // write-only field", while docs/troubleshooting.md said the outcome "is marked
   // `unverified`". A flag no code and no human ever sees establishes no
-  // property. There are three readers now, one per surface the user meets.
+  // property. There are four readers now: install time, launch time, and both of
+  // doctor --fix's Electron checks (the interactive one since R-B3's M3).
   //
   // MUTANT MARKUNREAD: delete any one of the three consumers below (the
   // `warnIfUnverified` call in scripts/postinstall.js, the `result.unverified`
   // block in electron-ensure.js, or the `unverified` tally in
   // doctor-electron-mcp-check.js). RED: the matching test here.
+  // NAMED MUTANT INTERACTIVEMARKUNREAD doctor-electron-mcp-check.js ::
+  //   evaluateElectronInteractive -- ignore `res.unverified` (the fourth reader).
+  //   KILLED (R-B3, 2026-09-28): tests/electron-unverified-mark.test.js:382, the UNVERIFIED message toMatch; tests/doctor-fix.test.js stays GREEN under it.
 
   test('INSTALL TIME: postinstall says so on a successful but unverified repair', async () => {
     // eslint-disable-next-line global-require
@@ -343,6 +367,23 @@ describe('A2/B3 — the mark is READ, not merely written (MARKUNREAD)', () => {
 
     expect(out.fixed).toBe(true);
     expect(`${out.message} ${out.fixDetail}`).toMatch(/UNVERIFIED/);
+  });
+
+  test("REPORT TIME: doctor --fix's interactive check names an unverified self-heal too (INTERACTIVEMARKUNREAD)", async () => {
+    // Owner ruling Q2: an artifact the hatch lets through is "loudly marked unverified",
+    // and docs/troubleshooting.md says `amicus doctor --fix` names it in its self-heal line.
+    // eslint-disable-next-line global-require
+    const { evaluateElectronInteractive } = require('../src/utils/doctor-electron-mcp-check');
+    const run = (res) => evaluateElectronInteractive(
+      { getElectronPath: () => null, fix: true, repairElectron: async () => res }, { fixTimeoutMs: 1000 },
+    );
+    const marked = await run({ repaired: true, unverified: true });
+    expect(marked).toMatchObject({ status: 'ok', fixed: true });
+    expect(marked.message).toMatch(/^installed \(self-healed, UNVERIFIED \(no published sha256/);
+    expect(marked.fixDetail).toMatch(/, UNVERIFIED \(no published sha256/);
+    const clean = await run({ repaired: true });
+    expect(clean.message).toBe('installed (self-healed)');   // a VERIFIED repair says nothing extra
+    expect(clean.fixDetail).toBe('provisioned the Electron binary in place');
   });
 });
 

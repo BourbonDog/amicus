@@ -20,11 +20,11 @@
  * electron's own published sha256. Blocking the URL itself is defence in depth on
  * top of a control that already works, and is deliberately NOT built here.
  *
- * NEAR-LEAF MODULE: `crypto` + `path` + `fs`, plus `./electron-env-scrub`, which
- * is itself a true leaf (no requires at all). The arrow is electron-install ->
- * electron-provision -> electron-trust -> electron-env-scrub and must never point
- * back; src/utils/path-fence.js:11-17 records what a cycle does to a destructured
- * import in exactly this cluster.
+ * NEAR-LEAF MODULE: `crypto` + `path` + `fs`, plus `./electron-env-scrub` and
+ * `../utils/text-sanitize`, both true leaves (no requires at all). The arrow is
+ * electron-install -> electron-provision -> electron-trust -> those two leaves and must
+ * never point back; src/utils/path-fence.js:11-17 records what a cycle does to a
+ * destructured import in exactly this cluster.
  *
  * THE ENV SCRUB LIVES NEXT DOOR (v4.9.6 F2). `isRepoPlantedName` and
  * `REPO_ENV_PREFIXES` moved to `./electron-env-scrub` when this file hit the
@@ -45,6 +45,7 @@ const fsDefault = require('fs');
 const path = require('path');
 
 const { isRepoPlantedName, REPO_ENV_PREFIXES } = require('./electron-env-scrub');
+const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /** A published sha256 is 64 LOWER-case hex characters. Anything else is not an anchor. */
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -129,9 +130,9 @@ function readChecksumTable(file, fs) {
  * selector off the surface it exists to distrust is not a rule. No version check
  * is needed to keep a genuine version disagreement honest, because the table is
  * keyed by the FULL artifact filename: a self table for 43.1.1 simply holds no
- * `electron-v99.0.0-…zip` row, `expectedDigest` returns null, and the gate's
- * `no-digest` verdict extracts-and-MARKS exactly as the brief requires — never a
- * refusal, never a re-download loop.
+ * `electron-v99.0.0-…zip` row, `isUnlisted` is true, and `repairElectron` REFUSES
+ * it (D-02, B-SEC-7) before the lock, the cache and the network, so the refusal
+ * can never become a re-download loop. (Until D-02 this was extracted and MARKED.)
  *
  * Rung 2 therefore survives for exactly one case: amicus's own electron package
  * ships no readable checksums.json (an old electron, or the optionalDependency
@@ -160,6 +161,18 @@ function expectedDigest(anchor, fileName) {
   return typeof digest === 'string' && HEX64.test(digest) ? digest : null;
 }
 
+/**
+ * D-02 (B-SEC-7): WHICH of the two null digests this is. `expectedDigest` returns
+ * null both for NO TABLE AT ALL (a package that predates checksums.json: still
+ * extracted, and marked) and for a table SILENT about this file (a copy installed
+ * with a different Electron, or a planted version: refused). An EMPTY table is no table
+ * too, whoever built the anchor (`readChecksumTable` never yields one): the legacy case.
+ * @returns {boolean} true when a usable table exists and names no sha256 for `fileName`
+ */
+function isUnlisted(anchor, fileName) {
+  return !!(anchor && anchor.table) && Object.keys(anchor.table).length > 0 && expectedDigest(anchor, fileName) === null;
+}
+
 /** sha256 of an artifact amicus already holds in its own heap. */
 function sha256Bytes(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
@@ -170,6 +183,7 @@ function sha256Bytes(bytes) {
  *
  * @returns {{verdict:'verified',   allowed:true,  actual:string}
  *         | {verdict:'mismatch',   allowed:boolean, expected:string, actual:string}
+ *         | {verdict:'unlisted',   allowed:boolean, reason?:string}
  *         | {verdict:'no-digest',  allowed:true}}
  *
  * IT TAKES A BUFFER, AND THE PATH FORM IS GONE. `verifyArtifact({zip, ...})` and
@@ -193,18 +207,31 @@ function sha256Bytes(bytes) {
  * would push that machine into a permanent re-download loop for a file no
  * download can improve. THE NOTE BELOW IS THE CACHE ROUTE'S stderr line, the one
  * `docs/troubleshooting.md` promises; the download route prints its own.
+ *
+ * `unlisted` is REFUSED (D-02, B-SEC-7): a table EXISTS and is silent about this
+ * file — a copy installed with a different Electron, or a planted version — and no
+ * download can add the row. `repairElectron` refuses it before either route runs
+ * (electron-refuse.js :: refuseUnlistedArtifact); this branch is the invariant for
+ * any other caller, and the one place AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 accepts it.
  */
 function verifyArtifactBytes({ bytes, anchor, fileName, policy = {}, log = () => {} }) {
   const expected = expectedDigest(anchor, fileName);
+  if (isUnlisted(anchor, fileName)) {
+    const reason = 'the checksums.json amicus trusts lists no sha256 for it';
+    if (!policy.allowUnverified) { return { verdict: 'unlisted', allowed: false, reason }; }
+    log(`[amicus] WARNING: AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${collapseExcerpt(fileName)} although`);
+    log(`[amicus]   ${reason}. Unset that variable to fail closed.`);
+    return { verdict: 'unlisted', allowed: true };
+  }
   if (!expected) {
-    log(`[amicus] NOTE: no published sha256 for ${fileName} (this electron package ships no`);
+    log(`[amicus] NOTE: no published sha256 for ${collapseExcerpt(fileName)} (this electron package ships no`);
     log('[amicus]   checksums.json entry for it), so its bytes could not be verified.');
     return { verdict: 'no-digest', allowed: true };
   }
   const actual = sha256Bytes(bytes);
   if (actual === expected) { return { verdict: 'verified', allowed: true, actual }; }
   if (policy.allowUnverified) {
-    log(`[amicus] WARNING: AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${fileName} even though`);
+    log(`[amicus] WARNING: AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${collapseExcerpt(fileName)} even though`);
     log(`[amicus]   its sha256 ${actual} does not match the published ${expected}.`);
     log('[amicus]   Unset that variable to fail closed.');
     return { verdict: 'mismatch', allowed: true, expected, actual };
@@ -220,6 +247,7 @@ module.exports = {
   sha256Bytes,
   artifactFileName,
   normalizeV,
+  isUnlisted,
   // RE-EXPORTED from ./electron-env-scrub — the same function objects, not copies.
   isRepoPlantedName,
   REPO_ENV_PREFIXES,
