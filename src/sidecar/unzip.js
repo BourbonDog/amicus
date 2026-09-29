@@ -1,22 +1,21 @@
 /**
- * Native OS unzip command-planning for the Electron self-heal, and the shared refusal-wording constant the in-memory extractor is tested against.
+ * Native OS unzip command-planning for the Electron self-heal, and the refusal patterns and 240 s cap the in-memory extractor uses too.
  *
  * `nativeUnzipPlan()` is the per-platform command list `./electron-native-plan
  * :: runNativePlan` spawns for the native-extractor RESCUE — the one path that
  * still shells out to `tar` / `Expand-Archive` / `ditto` / `unzip`. `MAX_MS` is
  * that rescue's default spawn timeout (`./electron-native-rescue ::
- * withNativeRescue`).
+ * withNativeRescue`) and the in-memory extraction's hard cap
+ * (`./zip-stall-bound`): one 240 s for both.
  *
- * `UNSAFE_PATTERNS` is not applied by any code in this file: the in-memory
- * extractor classifies its own refusals (`zip-entry-write.js :: outOfBound`,
- * `zip-from-buffer.js :: NAME_REFUSAL`), and the rescue's name scan builds
- * its own (`zip-name-scan.js :: nameRefusal`). It stays exported as the
- * reference those wordings are tested against
- * (tests/sidecar/unzip-refusal-strings.test.js, tests/electron-custody.test.js,
- * tests/sidecar/zip-name-scan.test.js), and the first of those also pins the
- * live `NAME_REFUSAL` against real yauzl output, so an upstream yauzl reword
- * still goes red instead of silently letting a path-traversal refusal (C4) be
- * retried.
+ * `UNSAFE_PATTERNS` is what the in-memory extractor classifies refusals with:
+ * `zip-from-buffer.js :: NAME_REFUSAL` is built from it. The wordings are
+ * composed elsewhere — `zip-entry-write.js :: outOfBound` the first, real yauzl
+ * the other three, the rescue's name scan (`zip-name-scan.js :: nameRefusal`)
+ * two of yauzl's — and tests/sidecar/unzip-refusal-strings.test.js,
+ * tests/electron-custody.test.js and tests/sidecar/zip-name-scan.test.js pin
+ * the list against what those sources really say, so an upstream yauzl reword
+ * goes red instead of silently letting a path-traversal refusal (C4) be retried.
  *
  * HISTORY: through v4.14.1 this file also owned `robustExtract()`, which ran
  * the `extract-zip` dependency (bounded by `IDLE_MS`/`MAX_MS`) and fell back to
@@ -40,9 +39,8 @@ const path = require('path');
  * tests/sidecar/unzip-refusal-strings.test.js, which fails both on a reworded
  * refusal and on a pattern no real message produces.
  *
- * DELIBERATELY NARROW, though no shipped code applies this list any more. The
- * runtime classifier that has to stay as narrow is
- * `zip-from-buffer.js :: NAME_REFUSAL`: an ordinary corrupt-archive error it
+ * DELIBERATELY NARROW, because the live classifier is built from it
+ * (`zip-from-buffer.js :: NAME_REFUSAL`): an ordinary corrupt-archive error it
  * matched would be reported as the terminal UNZIP_UNSAFE_ARCHIVE instead of
  * UNZIP_BUFFER_FAILED, the one code the native-extractor rescue fires on
  * (`electron-native-rescue.js :: isRescuableFailure`).
@@ -54,8 +52,9 @@ const UNSAFE_PATTERNS = [
   /^invalid characters in fileName: /,
 ];
 
-// Hard cap on one native-extractor spawn (`./electron-native-rescue ::
-// withNativeRescue`'s default `maxMs`).
+// Hard cap on one extraction attempt: a native-extractor spawn
+// (`./electron-native-rescue :: withNativeRescue`'s default `maxMs`) and the
+// in-memory extraction (`./zip-stall-bound` requires it), one 240 s for both.
 const MAX_MS = 240_000;
 
 /** PowerShell single-quoted string literal, injection-safe (double any quote). */

@@ -89,15 +89,21 @@ const {
 const {
   IDLE_MS, MAX_MS, UNWIND_MS, stalled, awaitUnwind,
 } = require('./zip-stall-bound');
+// The list NAME_REFUSAL is built from. unzip.js is a leaf (it requires only
+// `path`), so this adds no require cycle.
+const { UNSAFE_PATTERNS } = require('./unzip');
 
 /**
- * yauzl's own validateFileName refusals — three of unzip.js's UNSAFE_PATTERNS —
- * and the LIVE classifier: it decides between the terminal UNZIP_UNSAFE_ARCHIVE
- * and the UNZIP_BUFFER_FAILED the native rescue fires on, so it has to match
- * every real refusal and nothing benign. Exported only for
- * tests/sidecar/unzip-refusal-strings.test.js, which pins both.
+ * The LIVE classifier, BUILT FROM unzip.js's UNSAFE_PATTERNS rather than kept
+ * beside it, so the wordings the tests pin are the ones applied here. It decides
+ * between the terminal UNZIP_UNSAFE_ARCHIVE and the UNZIP_BUFFER_FAILED the
+ * native rescue fires on, so it has to match every real refusal and nothing
+ * benign. yauzl's own validateFileName raises three of the four; the fourth,
+ * `Out of bound path ` (`zip-entry-write.js :: outOfBound`), is thrown already
+ * classified and never reaches it, and no yauzl message starts with it. Exported
+ * only for tests/sidecar/unzip-refusal-strings.test.js, which pins both.
  */
-const NAME_REFUSAL = /^(absolute path|invalid relative path|invalid characters in fileName): /;
+const NAME_REFUSAL = new RegExp(UNSAFE_PATTERNS.map((p) => p.source).join('|'));
 
 /** yauzl's callback API as a promise, with `fromBuffer`'s options pinned here. */
 function openBuffer(yauzl, bytes) {

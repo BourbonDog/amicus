@@ -15,6 +15,8 @@
 'use strict';
 
 const { failure } = require('./zip-entry-write');
+// The hard cap is the native rescue's spawn cap too: ONE 240 s, defined there.
+const { MAX_MS } = require('./unzip');
 
 /**
  * THE STALL BOUND, and what did and did not come back with it.
@@ -32,7 +34,7 @@ const { failure } = require('./zip-entry-write');
  * forever — and in `scripts/postinstall.js` the loop drained and Node exited 0.
  *
  * LAYER 1 IS BACK, with the numbers unzip.js used (30 s idle, 240 s hard):
- * `IDLE_MS`/`MAX_MS` below.
+ * `IDLE_MS` below, and `MAX_MS`, which is unzip.js's own constant.
  *
  * ── THE FIRST CUT WAS WRONG IN BOTH DIRECTIONS (round 3) ──────────────────
  * Seat A1: "the advertised idle timeout fires during legitimate active writes
@@ -107,9 +109,9 @@ const { failure } = require('./zip-entry-write');
  * `electron-quarantine.verifyExtractOutcome` stats the exe after a non-throwing
  * extract.
  */
-/** No-progress window, then the hard cap: the numbers unzip.js used, to the ms. */
+/** No-progress window: the number unzip.js used, to the ms. The hard cap,
+ *  `MAX_MS`, is unzip.js's own constant, required at the top of this file. */
 const IDLE_MS = 30_000;
-const MAX_MS = 240_000;
 /** How long an ABORTED write is given to come apart before it is abandoned. */
 const UNWIND_MS = 5_000;
 

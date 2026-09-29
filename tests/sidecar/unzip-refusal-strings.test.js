@@ -22,7 +22,7 @@
  * WHAT A FAILURE HERE MEANS: not "the test is stale". It means either yauzl
  * reworded a refusal, or `outOfBound` did, and UNSAFE_PATTERNS has stopped
  * classifying it. A yauzl reword is the one with a runtime effect:
- * `zip-from-buffer.js :: NAME_REFUSAL` carries the same three prefixes, so it
+ * `zip-from-buffer.js :: NAME_REFUSAL` is BUILT FROM UNSAFE_PATTERNS, so it
  * misses the new wording too, and the archive is reported UNZIP_BUFFER_FAILED
  * — evictable and rescuable — instead of the terminal UNZIP_UNSAFE_ARCHIVE
  * (C4). The rescue boundary's pre-scan (`zip-name-scan.js :: nameRefusal`)
@@ -119,11 +119,11 @@ describe('F4 — every pattern is answered by a real message, and only by one', 
 });
 
 describe('F4 — the LIVE classifier, zip-from-buffer.js :: NAME_REFUSAL', () => {
-  // The copy the in-memory extractor applies to every yauzl 'error': a match is
-  // the terminal UNZIP_UNSAFE_ARCHIVE, a miss is the UNZIP_BUFFER_FAILED the
-  // native rescue fires on. The rescue's pre-scan never passes through it (the
-  // boundary builds its own refusal), so what it must recognise is REAL
-  // yauzl's wording, and nothing else.
+  // What the in-memory extractor applies to every yauzl 'error', built from
+  // UNSAFE_PATTERNS: a match is the terminal UNZIP_UNSAFE_ARCHIVE, a miss is the
+  // UNZIP_BUFFER_FAILED the native rescue fires on. The rescue's pre-scan never
+  // passes through it (the boundary builds its own refusal), so what it must
+  // recognise is REAL yauzl's wording, and nothing else.
   const { NAME_REFUSAL } = require('../../src/sidecar/zip-from-buffer');
   const { buildZip, FLAG_ENCRYPTED } = require('../helpers/zip-fixture');
 
@@ -141,6 +141,23 @@ describe('F4 — the LIVE classifier, zip-from-buffer.js :: NAME_REFUSAL', () =>
   test('NAME_REFUSAL recognises every refusal real yauzl raises', () => {
     for (const message of [real.relative, real.absolute, real.drive, real.backslash]) {
       expect({ message, matched: NAME_REFUSAL.test(message) }).toEqual({ message, matched: true });
+    }
+  });
+
+  test('NAME_REFUSAL classifies exactly what UNSAFE_PATTERNS does: one list, not two', () => {
+    // `outOfBound`'s wording never reaches NAME_REFUSAL (it is thrown already
+    // classified), which is why it is here: a private copy of yauzl's three
+    // prefixes, the shape this classifier had before it was built from the
+    // list, passes every other test in this file and drifts from it silently.
+    for (const message of [
+      real.relative, real.absolute, real.drive, real.backslash, real.outOfBound,
+      'end of central directory record signature not found',
+      'compressed/uncompressed size mismatch for stored file: 5 != 4',
+      stalled('no extract progress for 30000ms').message,
+      extractorUnavailable('Cannot find module').message,
+    ]) {
+      const listed = UNSAFE_PATTERNS.some((p) => p.test(message));
+      expect({ message, matched: NAME_REFUSAL.test(message) }).toEqual({ message, matched: listed });
     }
   });
 
