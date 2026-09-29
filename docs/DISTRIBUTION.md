@@ -312,16 +312,22 @@ first on a real Windows account, ideally a second one, elevating as that same
 account (same-account elevation only, above):
 
 1. Run `choco pack` in `packaging/chocolatey/`.
-2. From an elevated prompt in that same directory (`choco install` needs an
+2. Before the real install, run the step-3 install command as SYSTEM, from that
+   same directory (for example through a SYSTEM scheduled task, or PsExec -s),
+   and confirm it exits 1 before npm runs: it prints the "Refusing to install
+   amicus as SYSTEM" message and no "Running: npm" line. Do this first: once
+   amicus is installed, choco reports it as already installed and never runs
+   the script.
+3. From an elevated prompt in that same directory (`choco install` needs an
    admin shell by default), run
    `choco install amicus --source "'.;https://community.chocolatey.org/api/v2/'"`.
    The community feed after the semicolon is what lets the `nodejs-lts`
    dependency resolve.
-3. From the interactive account, in an ordinary (non-elevated) prompt,
+4. From the interactive account, in an ordinary (non-elevated) prompt,
    `where.exe amicus` must resolve before `amicus init` is run (`where.exe`,
    because in PowerShell `where` is an alias for Where-Object). Then confirm
    `amicus init` finds Node on PATH and completes.
-4. After the install, open an ordinary (non-elevated) prompt, run
+5. After the install, open an ordinary (non-elevated) prompt, run
    `amicus doctor`, and confirm it finds the OpenCode engine binary, because
    the package installs through `npm install -g`, npm 11 warns about install
    scripts that are not on its allow-scripts list (a later phase of that
