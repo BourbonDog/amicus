@@ -36,6 +36,21 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      # B-CI-32 (measured 2026-09-29, diagnostic run 36580542921). The
+      # ubuntu-24.04 runner sets kernel.apparmor_restrict_unprivileged_userns=1,
+      # so Chromium falls back to its setuid sandbox helper, and npm ci leaves
+      # that helper owned by runner with mode 0755. Electron then aborts at
+      # launch (SIGTRAP: "The SUID sandbox helper binary was found, but is not
+      # configured correctly") before its CDP port opens, and
+      # electron-toolbar-e2e reads that as "Toolbar target not found".
+      # electron@43 downloads its binary at the first require, so provision it
+      # here, then give the helper to root with the setuid bit. That keeps the
+      # sandbox on, unlike --no-sandbox or lifting the AppArmor restriction.
+      - name: Provision Electron and its setuid sandbox helper
+        run: |
+          node -e "require('electron')"
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
       # The suites self-gate on key presence: with this secret set they run for
       # real, and if the secret is ever missing they SKIP rather than fail, so a
       # misconfigured run is loud in the log but not a false red.

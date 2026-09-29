@@ -92,10 +92,14 @@ describeE2E('CLI Headless E2E: real LLM via sidecar start --no-ui', () => {
   });
 
   it('start --no-ui runs to completion and produces session files', async () => {
-    // Run headless sidecar with a trivial prompt
+    // Run headless sidecar with a trivial prompt. "Do not use any tools"
+    // (B-CI-32, 2026-09-29): this is the same model, agent and prompt shape
+    // that stalled mcp-headless-e2e (measurably in grep or glob) and
+    // shared-server-e2e past the 2-minute timeout. This suite passed only
+    // because it drew no stall. It tests the CLI lifecycle, not tool use.
     const result = await runCli([
       'start',
-      '--prompt', 'Reply with exactly this text and nothing else: CLI_E2E_OK',
+      '--prompt', 'Do not use any tools. Reply with exactly this text and nothing else: CLI_E2E_OK',
       '--model', 'gemini',
       '--no-ui',
       '--timeout', '2',
