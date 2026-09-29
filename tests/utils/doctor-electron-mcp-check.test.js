@@ -2,9 +2,10 @@
 'use strict';
 const path = require('path');
 const {
-  evaluateElectronInstalls, evaluateElectronMcp, scanElectronInstalls,
+  evaluateElectronInstalls, evaluateElectronMcp, evaluateElectronInteractive, scanElectronInstalls,
 } = require('../../src/utils/doctor-electron-mcp-check');
 const HINTS = require('../../src/utils/remediation-hints');
+const { refuseUnlistedArtifact } = require('../../src/sidecar/electron-refuse');
 
 const npxPkg = (hash) => path.join('C:', 'cache', '_npx', hash, 'node_modules', 'amicus');
 const npxEl = (hash) => path.join('C:', 'cache', '_npx', hash, 'node_modules', 'electron');
@@ -226,6 +227,43 @@ describe('evaluateElectronMcp (--fix)', () => {
     expect(r.message).toBe(`electron unavailable in 1/2 npx-cache copies: ${npxPkg('h2')} (not installed)`);
     expect(r.message).not.toMatch(/self-heal incomplete/i); // the bare-fallback branch, not the failed-join branch
   });
+
+  // D-02 (I2): a repair REFUSED as `unlisted` names its own fix: repair that copy with its
+  // own amicus (`npx -y amicus@latest doctor --fix` for the copy the MCP launches). The
+  // generic `→ amicus doctor --fix` hint under it named the command that had just refused,
+  // and its "no reinstall" contradicted the reason's "reinstall amicus" in the same report.
+  //
+  // NAMED MUTANTS
+  //   UNLISTEDHINTGENERIC doctor-electron-mcp-check.js :: evaluateElectronMcp -- keep
+  //     `after.hint` even when every failure is `unlisted`.
+  //     KILLED (R-B3, 2026-09-28): tests/utils/doctor-electron-mcp-check.test.js:252, `expect(r.hint).toContain('npx -y ...')`.
+  //   UNLISTEDHINTANY doctor-electron-mcp-check.js :: evaluateElectronMcp -- `.every` ->
+  //     `.some`, so a MIXED failure loses the generic hint too.
+  //     KILLED (R-B3, 2026-09-28): tests/utils/doctor-electron-mcp-check.test.js:265, `expect(r.hint).toBe(HINTS.doctorFix)`.
+  test('a repair REFUSED as unlisted points the hint at the refusal\'s own command, not back at doctor --fix (UNLISTEDHINTGENERIC)', async () => {
+    const refused = refuseUnlistedArtifact({
+      anchor: { table: { 'electron-v43.1.1-win32-x64.zip': 'a'.repeat(64) }, source: '<test>' },
+      fileName: 'electron-v43.6.0-win32-x64.zip', version: 'v43.6.0', platform: 'win32', arch: 'x64',
+    });
+    const scan = () => ({ installs: [npxCopy('h1', 'binary-missing')], mcpLaunch: 'npx' });
+    const r = await evaluateElectronMcp({ scanElectronInstalls: scan, fix: true, repairElectron: jest.fn(async () => refused) });
+    expect(r.status).toBe('warn');
+    expect(r.message).toContain(refused.reason);                    // the refusal's own words, unabridged
+    expect(r.hint).toContain('npx -y amicus@latest doctor --fix');  // ...and the hint names the SAME command
+    expect(refused.reason).toContain('npx -y amicus@latest doctor --fix');
+    expect(r.hint).toBe(HINTS.mcpCopyDoctorFix);
+    expect(r.hint).not.toMatch(/no reinstall/);
+  });
+
+  test('mixed failures keep the generic hint: each reason speaks for its own copy (UNLISTEDHINTANY)', async () => {
+    const scan = () => ({ installs: [npxCopy('h1', 'binary-missing'), npxCopy('h2', 'binary-missing')], mcpLaunch: 'npx' });
+    const repairElectron = jest.fn(async ({ electronDir }) => (electronDir === npxEl('h1')
+      ? { repaired: false, integrity: 'unlisted', reason: 'Electron artifact electron-v43.6.0-win32-x64.zip was REFUSED' }
+      : { repaired: false, reason: 'antivirus quarantine' }));
+    const r = await evaluateElectronMcp({ scanElectronInstalls: scan, fix: true, repairElectron });
+    expect(r.message).toMatch(/was REFUSED.*antivirus quarantine/);
+    expect(r.hint).toBe(HINTS.doctorFix);
+  });
 });
 
 describe('scanElectronInstalls (default wiring — #69 lesson: exercise the real root computation)', () => {
@@ -267,5 +305,45 @@ describe('scanElectronInstalls (default wiring — #69 lesson: exercise the real
     expect(npx.state).toBe('ok');
     const run = installs.find((i) => i.kind === 'running');
     expect(run.state).toBe('package-missing');
+  });
+});
+
+describe('evaluateElectronInteractive (--fix): an unlisted refusal is not sent back to doctor --fix (A3)', () => {
+  // The running copy's OWN table judges its own Electron, so it refuses as `unlisted` only on
+  // an unpublished host platform, or for a version its own table lacks. Either way the reason
+  // names the real fix ("the GUI is unavailable here", or "reinstall amicus"), and a
+  // `→ amicus doctor --fix` hint would only run the same refusal again.
+  //
+  // NAMED MUTANTS
+  //   INTERACTIVEUNLISTEDHINT doctor-electron-mcp-check.js :: evaluateElectronInteractive --
+  //     keep HINTS.doctorFix for an `unlisted` refusal. KILLED (R-B5, 2026-09-28): tests/utils/doctor-electron-mcp-check.test.js:340.
+  //   INTERACTIVEHINTDROPPED doctor-electron-mcp-check.js :: evaluateElectronInteractive --
+  //     drop the hint for every failure. KILLED (R-B5, 2026-09-28): tests/utils/doctor-electron-mcp-check.test.js:347.
+  const HEX = 'a'.repeat(64);
+  const run = (res) => evaluateElectronInteractive(
+    { getElectronPath: () => null, fix: true, repairElectron: async () => res }, { fixTimeoutMs: 1000 },
+  );
+
+  test('both unlisted branches keep their own fix in the message, and no hint points back at doctor --fix (INTERACTIVEUNLISTEDHINT)', async () => {
+    const platformOnly = refuseUnlistedArtifact({
+      anchor: { table: { 'electron-v43.1.1-darwin-arm64.zip': HEX }, source: '<test>' },
+      fileName: 'electron-v43.1.1-freebsd-x64.zip', version: 'v43.1.1', platform: 'freebsd', arch: 'x64',
+    });
+    const ownVersionMissing = refuseUnlistedArtifact({
+      anchor: { table: { 'electron-v43.1.1-win32-x64.zip': HEX }, source: '<test>' },
+      fileName: 'electron-v43.9.9-win32-x64.zip', version: 'v43.9.9', platform: 'win32', arch: 'x64',
+    });
+    for (const refused of [platformOnly, ownVersionMissing]) {
+      const r = await run(refused);
+      expect(r.status).toBe('warn');
+      expect(r.message).toContain(refused.reason);
+      expect(r.hint).toBeNull();
+    }
+  });
+
+  test('any other failed repair keeps the doctor --fix hint (INTERACTIVEHINTDROPPED)', async () => {
+    const r = await run({ repaired: false, reason: 'offline' });
+    expect(r.message).toMatch(/not provisioned — offline/);
+    expect(r.hint).toBe(HINTS.doctorFix);
   });
 });
