@@ -651,9 +651,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
   //
   // ⚠️ PROBE ONLY — nothing derives from this number. No backstop change, no
   // threshold, no per-model window. W13 ruling R12 is explicitly "probe first,
-  // derive later": the C2 derivation (per-model backstops from evidence) waits
-  // for real field observations, which cannot exist until this ships. Do not
-  // wire it into a decision without that evidence — and read the RESIDUAL
+  // derive later", but no derivation is planned: this is a probe- and
+  // forensics-only measurement. Do not wire it into a decision without
+  // evidence from real field observations — and read the RESIDUAL
   // CENSORING note on the stamp site in the poll loop before you do.
   let ttftMs = null;
   // #251 item 1: the backstop's decision record (spec 2026-09-18 §5.2), written
@@ -1309,8 +1309,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // OpenCode's empty acceptance placeholder — the exact lie the
         // amendment-2 narrowing of `substantiveActivity` removed from the backstop.
         //
-        // ⚠️ RESIDUAL CENSORING — READ THIS BEFORE DERIVING ANYTHING (the C2
-        // derivation must know the bias; PR #203 round 1, B1). With the hoist
+        // ⚠️ RESIDUAL CENSORING — READ THIS BEFORE DERIVING ANYTHING (any derivation,
+        // if ever built, must know the bias; PR #203 round 1, B1). With the hoist
         // above, every leg whose activity is OBSERVED by a poll is measured.
         // What is still unmeasurable, and therefore what an ABSENT ttftMs can
         // mean besides "served nothing":
@@ -1341,8 +1341,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // from suspend, a manual clock set — measures NEGATIVE. Such a reading
         // is DROPPED at the emit gates (`isMeasuredTtft`), never clamped:
         // clamping to `0` would publish "first token inside the first poll",
-        // the most consequential value in the distribution the C2 derivation
-        // will read, for a leg that measured nothing of the kind.
+        // the most consequential value in the TTFT distribution, for a leg that
+        // measured nothing of the kind.
         //
         // The stamp stays one-shot and unguarded ON PURPOSE. Re-arming after a
         // skewed reading would let a LATER poll stamp a delta against the same

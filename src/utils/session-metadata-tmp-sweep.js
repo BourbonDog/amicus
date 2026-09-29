@@ -36,7 +36,8 @@
  * link, never the target — a safe success). Deliberate: this module's
  * never-follow policy applies to the entries it unlinks too. Note the sibling
  * session-index-tmp-sweep.js diverges here — it uses statSync, so a
- * symlink-to-a-file with the matching name IS still swept there.
+ * symlink-to-a-file with the matching name IS still swept there — accepted
+ * under the owner's Option B ruling (v4.7 PR7, 2026-08-08), not a gap.
  */
 
 const fs = require('fs');
