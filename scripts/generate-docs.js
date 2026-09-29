@@ -67,13 +67,16 @@ function replaceMarkers(content, markerName, newContent) {
 // ---------------------------------------------------------------------------
 
 /**
- * Validate that markdown cross-links point to existing files.
- * Skips http/https URLs and anchor-only links.
+ * Validate that markdown cross-links point to existing files inside the repository.
+ * Skips http/https URLs and anchor-only links. A relative link that resolves outside
+ * `repoRoot` is refused even when its target exists: it only works on the machine that
+ * happens to have that sibling path, never in a clone or the published package.
  * @param {string} markdown - Markdown content
- * @param {string} rootDir - Project root for resolving relative paths
- * @returns {string[]} Array of error messages for broken links
+ * @param {string} rootDir - Directory relative links resolve against (the linking file's own)
+ * @param {string} [repoRoot=rootDir] - Repository root; a link may not resolve outside it
+ * @returns {string[]} Array of error messages for broken or escaping links
  */
-function validateCrossLinks(markdown, rootDir) {
+function validateCrossLinks(markdown, rootDir, repoRoot = rootDir) {
   const errors = [];
   const linkRe = /\[([^\]]*)\]\(([^)]+)\)/g;
   let match;
@@ -88,6 +91,11 @@ function validateCrossLinks(markdown, rootDir) {
       continue;
     }
     const resolved = path.resolve(rootDir, filePart);
+    const fromRepo = path.relative(repoRoot, resolved);
+    if (fromRepo === '..' || fromRepo.startsWith(`..${path.sep}`) || path.isAbsolute(fromRepo)) {
+      errors.push(`Link escapes the repository: [${match[1]}](${target})`);
+      continue;
+    }
     if (!fs.existsSync(resolved)) {
       errors.push(`Broken link: [${match[1]}](${target}) -> ${filePart} not found`);
     }
@@ -196,6 +204,68 @@ function main() {
   runWriteMode(rootDir, generated, plans);
 }
 
+/**
+ * Files whose markdown cross-links are validated in --check mode: CLAUDE.md, README.md, and every
+ * top-level docs/*.md (mirrors package.json's shipped `docs/*.md` glob — not recursive, so
+ * docs/superpowers/, docs/plans/, docs/cards/ and docs/probes/ are not included).
+ *
+ * Only a missing docs/ (ENOENT) yields the two-file roster. Any other failure to list docs/, or to
+ * stat one of its *.md entries, throws: swallowing it would empty the docs roster, and --check
+ * would then validate nothing and pass.
+ * @param {string} rootDir - Project root
+ * @returns {string[]} Repo-relative paths to validate
+ * @throws {Error} `Cannot list docs/: ...` or `Cannot stat docs/<name>: ...`
+ */
+function collectCrossLinkTargets(rootDir) {
+  const docsDir = path.join(rootDir, 'docs');
+  let names;
+  try {
+    names = fs.readdirSync(docsDir);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      return ['CLAUDE.md', 'README.md'];
+    }
+    throw new Error(`Cannot list docs/: ${err && err.message}`);
+  }
+  const isFileEntry = (name) => {
+    try {
+      return fs.statSync(path.join(docsDir, name)).isFile();
+    } catch (err) {
+      throw new Error(`Cannot stat docs/${name}: ${err && err.message}`);
+    }
+  };
+  const docFiles = names
+    .filter((name) => name.endsWith('.md') && isFileEntry(name))
+    .sort()
+    .map((name) => `docs/${name}`);
+  return ['CLAUDE.md', 'README.md', ...docFiles];
+}
+
+/**
+ * Validate the markdown cross-links of every collectCrossLinkTargets() file, resolving each
+ * file's links against its own directory (so a docs/*.md link resolves against docs/). Throws
+ * rather than exiting, so tests/scripts/generate-docs-check.test.js can call it in-process.
+ * @param {string} rootDir - Project root
+ * @returns {string[]} Broken-link errors, each prefixed with its file's repo-relative path
+ * @throws {Error} `Cannot read <rel>` if a target file cannot be read
+ */
+function collectCrossLinkErrors(rootDir) {
+  const errors = [];
+  for (const rel of collectCrossLinkTargets(rootDir)) {
+    let content;
+    try {
+      content = fs.readFileSync(path.join(rootDir, rel), 'utf-8');
+    } catch {
+      throw new Error(`Cannot read ${rel}`);
+    }
+    const ownDir = path.dirname(path.join(rootDir, rel));
+    for (const err of validateCrossLinks(content, ownDir, rootDir)) {
+      errors.push(`${rel}: ${err}`);
+    }
+  }
+  return errors;
+}
+
 /** Check mode: validate markers in every target doc and cross-links, exit 1 if stale. */
 function runCheckMode(rootDir, generated) {
   const grouped = groupMarkersByTarget(generated, MARKER_TARGETS);
@@ -214,14 +284,13 @@ function runCheckMode(rootDir, generated) {
     }
   }
 
-  let claudeMd;
+  let linkErrors;
   try {
-    claudeMd = fs.readFileSync(path.join(rootDir, 'CLAUDE.md'), 'utf-8');
-  } catch {
-    console.error('Cannot read CLAUDE.md');
+    linkErrors = collectCrossLinkErrors(rootDir);
+  } catch (err) {
+    console.error(err.message);
     process.exit(1);
   }
-  const linkErrors = validateCrossLinks(claudeMd, rootDir);
 
   if (stale.length > 0) {
     console.error(`Stale markers: ${stale.join(', ')}`);
@@ -319,6 +388,8 @@ module.exports = {
   checkMarkersAreCurrent,
   groupMarkersByTarget,
   applyGeneratedMarkers,
+  collectCrossLinkTargets,
+  collectCrossLinkErrors,
   MARKER_TARGETS,
   extractJSDocDescription,
   extractExports,

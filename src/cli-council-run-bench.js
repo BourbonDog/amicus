@@ -162,7 +162,7 @@ function resolveBench(args, useJson) {
 
 // ⚠️ THIS ORDER IS LOAD-BEARING, and only for the docs (PR #207 round 4, B3).
 // `scripts/generate-docs-helpers.js:107` keeps the FIRST FIVE names in source
-// order for CLAUDE.md's Key Exports column, and this module exports six — so
+// order for docs/architecture-map.md's Key Exports column (46d2694a), and this module exports six — so
 // whichever name sits last is the one the generated table never shows.
 // `CHAIR_DEFAULT` is DEFINED here and merely re-exported by
 // cli-handlers-council-run.js, whose row (3 exports, all inside the cap) always

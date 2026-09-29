@@ -240,7 +240,7 @@ list. Two findings drove it:
   It *was* a live defect: ledger rows keyed by council alias and aliases silently retarget (`gpt-pro` →
   `gpt-5.6-sol-pro`, the `opus` re-pin — both 2026-08-04), so `council stats` conflates distinct
   models under one name. The ledger is append-only, so every run adds rows that will later have to
-  be distrusted, and both GOA-1 and GOA-2 plan to build on this data. Bump `LEDGER_SCHEMA_VERSION`;
+  be distrusted, and both GOA-1 and GOA-2 planned to build on this data (both parked since D-07). Bump `LEDGER_SCHEMA_VERSION`;
   old rows stay readable (absent id ⇒ legacy). Full write-up and schema discipline: `BACKLOG.md`
   GOA-7. *(Recency decay — GOA-7's second half — is NOT in this rev.)*
 - **Session/wave tagging + `--search` + grouped history** (F8) *(S–M)* — **shipped**
@@ -284,17 +284,18 @@ a proposed disposition — v4.5 ride-along / v4.6 / backlog — tabled for rulin
 
 | ID | What | Why not 4.4.1 |
 |---|---|---|
-| **CA-4** | `tally.json`'s `runStats` omits Stage-2 judges, repair solos and failed chair attempts (5 rows for 11 real legs in `wsgate04`) | `M` — a schema question, not a fix |
+| ~~**CA-4**~~ | ~~`tally.json`'s `runStats` omits Stage-2 judges, repair solos and failed chair attempts (5 rows for 11 real legs in `wsgate04`)~~ — ✅ **CLOSED**: shipped in full — the failed-chair third by v4.6.2, the remaining half (Stage-2 judges + repair solos) by v4.7 PR1; see this file's "CA-4 (remaining half)" note above. **Do not re-file.** | — |
 | **CA-5** | `isSubagentToolCall` is still a `name === 'task'` string proxy | `M`, and **reduced** by v4.4.0: it is now only the fallback when the real subtree walk finds nothing |
 | **LC-1** | B53's stall kill is skipped while a tool-settle deferral is active | `S–M` — shipped deliberately; the author wants a second opinion, which needs data from real runs |
 | ~~**LC-5**~~ | ~~A chair fallback leaves no trace in `run.json`~~ — ✅ **CLOSED by v4.6.2**: `chairAttempts[]` records every attempt (`{waveId, model, outcome, reason}`), checkpointed after each; `run-chair.js@v4.6.2:113` cites LC-5 by name. **Do not re-file.** | — |
-| **RN-1** | `sanitizeName` collisions surface as a banner rather than a refusal | `S` + a product decision that was already argued once |
+| ~~**RN-1**~~ | ~~`sanitizeName` collisions surface as a banner rather than a refusal~~ — ✅ **CLOSED**: revote artifacts now ride the disambiguation map end to end (`588b00a9`). **Do not re-file.** | — |
 | **RN-2** | `renderRunList` blind masking is best-effort — only the open run resolves labels | `M` |
-| **RN-5** | A blind-mode flip closes every open prose panel and repaints twice | `S–M` |
-| **RN-11** | `renderSeats` never reorders existing rows | `S`, cosmetic, no consequence yet |
+| ~~**RN-5**~~ | ~~A blind-mode flip closes every open prose panel and repaints twice~~ — ✅ **CLOSED**: a blind flip now keeps open panels and paints once (`73850c73`; refined by `079e761d`). **Do not re-file.** | — |
+| ~~**RN-11**~~ | ~~`renderSeats` never reorders existing rows~~ — ✅ **CLOSED**: `renderSeats` now reorders rows to match the composed doc (`b68ad6e8`). **Do not re-file.** | — |
 | **REL-2** | `mcp-repomix-e2e` skips, so plugin-chain MCP discovery is exercised nowhere | `M` — needs `AMICUS_REPOMIX_E2E_PROJECT` pointed at a real project *and* `repomix` on PATH |
-| **TST-1 / TST-2** | No real `--debate` fixture; the `lens:<slug>` role branch has zero coverage | `M` each, and they want doing together |
-| **TST-3** | Abort confirm→status-flip is proven only against the fake DOM | `M` — needs a real CDP pass |
+| **TST-1** | No real `--debate` fixture | `M` |
+| ~~**TST-2**~~ | ~~The `lens:<slug>` role branch has zero coverage~~ — ✅ **CLOSED**: `tests/observe/council-legs.test.js:253-256` (BACKLOG-ARCHIVE.md L9324: done at `ca1003d2`). **Do not re-file.** | — |
+| ~~**TST-3**~~ | ~~Abort confirm→status-flip is proven only against the fake DOM~~ — ✅ **CLOSED**: abort confirm now drives through the real DOM via CDP (`a724b597`). **Do not re-file.** | — |
 | **TST-7** | Six render functions have no unit coverage | `M` |
 | *(new)* | **Residual integration-suite handle leaks** — a NAMED leak with evidence, filed 2026-07-27 after 4.4.1 fixed ENV-6 and the live rail still warned from *different* suites | `S–M`. Full evidence, including why `--detectOpenHandles` cannot diagnose this class, is in the repo's root `BACKLOG.md` (not in the npm package — read it on GitHub) — start there rather than re-deriving it |
 
@@ -662,6 +663,15 @@ them.** Revisit as a funded track; it earns a version number when that track is 
 > query-aware seat selection, filed 2026-08-05 in `BACKLOG.md`) blends the street-cred ledger into
 > seat choice — that is B4's core idea arriving as a single-user feature rather than an enterprise
 > learning loop. Reconcile before either is scoped; do not build both.
+>
+> **Resolved 2026-09-28 (D-07):** the GoA family (GOA-1 through GOA-8) is parked: not built
+> (beyond GOA-7's shipped ledger prerequisite). Its design is preserved in the GoA paper-review
+> adoption notes (the 2026-08-05 plan doc titled "GoA paper review — adoption notes & design
+> inputs (GOA-1…GOA-8)"), cited by path from each of the nine closed GOA rows in `BACKLOG.md`
+> (GOA-3a/3b, GOA-4a/4b/4c, GOA-5, GOA-6, GOA-7, GOA-8). The notes belong to no release, so they
+> are not pruned at a release cut while the family stays parked. GOA-1 and GOA-2 have no
+> `BACKLOG.md` row: their original entries are in `BACKLOG-ARCHIVE.md`. B4 itself is untouched — the
+> reconciliation above still applies if B4 is ever scoped.
 
 ### Composition / chained waves (F6) *(unscheduled — dropped from v4.7, 2026-08-05)*
 `--input-from <id>` / `--prompt-file -` pipe + per-source digests *(M)*, bringing the `{{input}}`

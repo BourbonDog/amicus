@@ -36,6 +36,11 @@ All notable changes to Amicus are documented here. Format follows
   that installs Electron writes such a name (Electron's own installer and amicus each write one of
   three fixed names), so this closes a tampered or corrupted file, not an acquisition path.
 
+### Added
+
+- A Chocolatey package is drafted at `packaging/chocolatey/` (untested until a local
+  elevated install passes) — not yet published to the community feed.
+
 ### Changed
 
 - **A Stage-1 seat whose leg died at its output reservation is no longer retried.** A leg that
@@ -53,6 +58,11 @@ All notable changes to Amicus are documented here. Format follows
   delivered a review: on run 34376584500 the retry died the same way and billed $0.2224 a second
   time, and on run 35514703539 the retry stopped early and its only "heal" was promoted
   reasoning. (#218)
+
+- `node scripts/generate-docs.js --check`'s cross-link validation now also covers `README.md`
+  and every top-level `docs/*.md` file (previously `CLAUDE.md` only), resolving each file's
+  relative links against its own directory rather than the project root, and refusing a relative
+  link that resolves outside the repository.
 
 ### Fixed
 
@@ -80,6 +90,13 @@ All notable changes to Amicus are documented here. Format follows
   MCP-launch check already added an `UNVERIFIED` mark. Both now print the same mark, so an artifact
   no published sha256 covered, or one `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` let through, is named
   as unverified in the self-heal line, as `docs/troubleshooting.md` says.
+
+- Corrected stale shipped-docs claims. `docs/DISTRIBUTION.md` said the MCP Registry publish was
+  still pending (amicus has been published there since v1.9.1, 2026-07-03) and that the
+  community-marketplace submission was awaiting Anthropic review (it was never listed, and is to
+  be resubmitted). `docs/ROADMAP.md`'s "Deferred out of v4.4.1 into v4.5 (2026-07-27)" table
+  struck through only LC-5 as closed; CA-4, RN-1, RN-5, RN-11 and TST-3 (shipped v4.5-v4.7) and
+  TST-2 (shipped 2026-07-27) now strike through too.
 
 ## [4.14.1] - 2026-09-28
 

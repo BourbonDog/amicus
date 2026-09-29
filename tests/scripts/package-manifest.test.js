@@ -56,6 +56,23 @@ describe('MCP Registry metadata (Phase 9c)', () => {
   });
 });
 
+describe('Chocolatey package version (R-E20 D2)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const ROOT = path.join(__dirname, '..', '..');
+
+  test('packaging/chocolatey/amicus.nuspec <version> stays in lockstep with package.json', () => {
+    // Comments are stripped first, so only the <version> element counts. A Chocolatey package-fix
+    // re-push of the same release appends a fourth, numeric segment (chocolateyInstall.ps1 strips
+    // it for the npm spec), so x.y.z.N is still in lockstep with x.y.z.
+    const nuspec = fs.readFileSync(path.join(ROOT, 'packaging', 'chocolatey', 'amicus.nuspec'), 'utf-8')
+      .replace(/<!--[\s\S]*?-->/g, '');
+    const versions = [...nuspec.matchAll(/<version>([^<]*)<\/version>/g)].map((m) => m[1].trim());
+    expect(versions).toHaveLength(1);
+    expect(versions[0].replace(/^(\d+\.\d+\.\d+)\.\d+$/, '$1')).toBe(pkg.version);
+  });
+});
+
 /**
  * v4.4.1 REL-1. The live rail is the only configuration in the repo that spawns
  * several REAL OpenCode servers at once, so in parallel it flakes on fanout-e2e

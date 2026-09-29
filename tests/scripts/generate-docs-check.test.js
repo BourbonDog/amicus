@@ -22,6 +22,8 @@ const {
   buildModuleIndex,
   checkMarkersAreCurrent,
   validateCrossLinks,
+  collectCrossLinkTargets,
+  collectCrossLinkErrors,
   TREE_DIRS,
 } = require('../../scripts/generate-docs');
 
@@ -60,5 +62,114 @@ describe('generated-doc marker freshness (F-3)', () => {
         `Broken CLAUDE.md cross-link(s):\n${errors.join('\n')}\nRun \`${FIX_COMMAND}\` and fix any remaining broken links by hand.`,
       );
     }
+  });
+
+  it('the cross-link roster is CLAUDE.md, README.md and every top-level docs/*.md file', () => {
+    // Properties, not a count: adding a doc to docs/ must not turn this red.
+    const targets = collectCrossLinkTargets(ROOT);
+    expect(targets[0]).toBe('CLAUDE.md');
+    expect(targets[1]).toBe('README.md');
+    const docs = targets.slice(2);
+    for (const rel of docs) {
+      expect(rel).toMatch(/^docs\/[^/\\]+\.md$/); // '/'-separated on every OS
+    }
+    expect(docs).toEqual([...docs].sort());
+    expect(docs).toContain('docs/usage.md');
+    expect(targets.filter((rel) => /^docs\/.*\//.test(rel))).toEqual([]); // not recursive
+  });
+
+  it('README.md and docs/*.md cross-links all resolve', () => {
+    const errors = collectCrossLinkErrors(ROOT)
+      .filter((err) => !err.startsWith('CLAUDE.md: ')); // CLAUDE.md: 'CLAUDE.md cross-links all resolve' above
+    if (errors.length > 0) {
+      throw new Error(
+        `Broken cross-link(s):\n${errors.join('\n')}\nRun \`${FIX_COMMAND}\` and fix any remaining broken links by hand.`,
+      );
+    }
+  });
+});
+
+describe('collectCrossLinkTargets fails loudly instead of emptying the roster (R-E20 A2/D4)', () => {
+  const os = require('node:os');
+  let tmp;
+  beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'xlink-roster-')); });
+  afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+
+  it('a missing docs/ directory gives the CLAUDE.md + README.md roster', () => {
+    expect(collectCrossLinkTargets(tmp)).toEqual(['CLAUDE.md', 'README.md']);
+  });
+
+  it('a docs/ that cannot be listed (not ENOENT) throws, rather than validating nothing', () => {
+    fs.writeFileSync(path.join(tmp, 'docs'), 'a file where the docs directory should be');
+    expect(() => collectCrossLinkTargets(tmp)).toThrow(/Cannot list docs\//);
+  });
+
+  it('an entry that cannot be stat-ed throws, naming it, rather than dropping every doc', () => {
+    fs.mkdirSync(path.join(tmp, 'docs'));
+    fs.writeFileSync(path.join(tmp, 'docs', 'ok.md'), '# ok\n');
+    fs.writeFileSync(path.join(tmp, 'docs', 'bad.md'), '# bad\n');
+    const realStatSync = fs.statSync;
+    const spy = jest.spyOn(fs, 'statSync').mockImplementation((p, ...rest) => {
+      if (path.basename(String(p)) === 'bad.md') {
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      }
+      return realStatSync(p, ...rest);
+    });
+    try {
+      expect(() => collectCrossLinkTargets(tmp)).toThrow(/Cannot stat docs\/bad\.md/);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('collectCrossLinkErrors reports what it must (R-E20 D3 negative fixtures)', () => {
+  const os = require('node:os');
+  let tmp;
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'xlink-neg-'));
+    fs.mkdirSync(path.join(tmp, 'docs'));
+    fs.writeFileSync(path.join(tmp, 'CLAUDE.md'), '# c\n');
+    fs.writeFileSync(path.join(tmp, 'docs', 'b.md'), '# b\n');
+  });
+  afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+
+  it('reports a link whose target does not exist', () => {
+    fs.writeFileSync(path.join(tmp, 'README.md'), 'see [gone](docs/missing.md)\n');
+    expect(collectCrossLinkErrors(tmp)).toEqual([
+      'README.md: Broken link: [gone](docs/missing.md) -> docs/missing.md not found',
+    ]);
+  });
+
+  it("resolves a docs/*.md file's links against docs/, so a root-relative path there is reported", () => {
+    fs.writeFileSync(path.join(tmp, 'README.md'), 'from the root [b](docs/b.md)\n');
+    fs.writeFileSync(path.join(tmp, 'docs', 'a.md'), 'wrong [b](docs/b.md), right [b](b.md)\n');
+    expect(collectCrossLinkErrors(tmp)).toEqual([
+      'docs/a.md: Broken link: [b](docs/b.md) -> docs/b.md not found',
+    ]);
+  });
+});
+
+describe('collectCrossLinkErrors refuses links that leave the repository (R-E21 C1)', () => {
+  const os = require('node:os');
+  let base;
+  let repo;
+  beforeEach(() => {
+    base = fs.mkdtempSync(path.join(os.tmpdir(), 'xlink-escape-'));
+    repo = path.join(base, 'repo');
+    fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+    // The target EXISTS, just outside the repository, so only the escape rule can fail it.
+    fs.writeFileSync(path.join(base, 'outside.md'), '# outside the repository\n');
+    fs.writeFileSync(path.join(repo, 'CLAUDE.md'), '# c\n');
+  });
+  afterEach(() => { fs.rmSync(base, { recursive: true, force: true }); });
+
+  it('refuses a relative link that resolves outside the repository, naming the file and link', () => {
+    fs.writeFileSync(path.join(repo, 'README.md'), 'escape [out](../outside.md)\n');
+    fs.writeFileSync(path.join(repo, 'docs', 'a.md'), 'escape [out](../../outside.md)\n');
+    expect(collectCrossLinkErrors(repo)).toEqual([
+      'README.md: Link escapes the repository: [out](../outside.md)',
+      'docs/a.md: Link escapes the repository: [out](../../outside.md)',
+    ]);
   });
 });

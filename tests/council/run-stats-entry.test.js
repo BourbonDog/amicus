@@ -40,8 +40,8 @@ describe('run-stats-entry — extraction pins (v4.8 Phase 1 T1.1)', () => {
  * production side for why that shape was chosen over a threaded parameter.
  *
  * PROBE ONLY: nothing in the engine derives a backstop, a threshold, or a
- * routing decision from this number. It exists so the C2 derivation has real
- * observations to work from later (W13 R12: probe first, derive later).
+ * routing decision from this number. It is a probe- and forensics-only
+ * measurement (W13 R12: probe first, derive later; no derivation is planned).
  *
  * Named mutant TTFTDROP — delete the `ttftMs` emit from
  * `src/headless.js`'s poll loop (the `if (ttftMs === null && substantiveActivity)`

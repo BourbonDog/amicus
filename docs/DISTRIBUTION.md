@@ -1,6 +1,6 @@
 # Distribution channels
 
-Amicus ships through three channels. This doc is the runbook for each — what's
+Amicus ships through several channels. This doc is the runbook for each — what's
 live today, what the submission/publish steps are, and what to check before
 pulling the trigger on a release-facing action.
 
@@ -17,13 +17,14 @@ Code / Claude Desktop / Cowork and copies both skills (`sidecar`,
 `second-opinion`) into `~/.claude/skills/`. It does **not** copy
 `commands/council.md` — that only ships via the plugin channel below. This
 is a known, accepted gap for npm/install-script users (slash commands are
-plugin-channel-only by design; see the npm-vs-plugin note at the top of the
-CHANGELOG's Unreleased section).
+plugin-channel-only by design; see the npm-vs-plugin note in CHANGELOG.md's
+`[1.9.0]` entry).
 
 ## 2. Claude Code community marketplace (claude-community)
 
-**Status: submitted 2026-07-01 — awaiting Anthropic review.** (Update this
-line as the process advances: `submitted <date> / approved <date> / listed <date>`.
+**Status: submitted 2026-07-01 — never listed (re-checked 2026-09-28). Owner:
+resubmit through the Console form.** (Update this line as the process advances:
+`submitted <date> / approved <date> / listed <date>`.
 Note: the submission predates the Phase-9 polish on `main` — reviewers pulling
 the repo see the current surface, including `commands/` and a clean
 `claude plugin validate . --strict`.)
@@ -158,12 +159,13 @@ end-to-end against the real submission.)*
 
 ## 3. MCP Registry
 
-**Status: wired, not yet published (Phase 9c).** `server.json` (repo root)
-and the `mcpName` field in `package.json` now exist, and
-`.github/workflows/publish.yml` publishes to the MCP Registry
-(`registry.modelcontextprotocol.io`) as the last three steps before the GitHub
-Release, on every `v*` tag push. This has not fired yet — the first tag
-push after this merge is the first real publish attempt.
+**Status: published.** `server.json` (repo root) and the `mcpName` field in
+`package.json` exist, and `.github/workflows/publish.yml` publishes to the
+MCP Registry (`registry.modelcontextprotocol.io`) as the last three steps
+before the GitHub Release, on every `v*` tag push. Published since v1.9.1
+(2026-07-03; v1.9.0's attempt was rejected — see the 422 caveat below); the
+v4.14.1 entry was confirmed active on 2026-09-28 at its per-version registry
+endpoint.
 
 **Namespace:** `io.github.BourbonDog/amicus` (case-sensitive — the registry
 grants `io.github.<Login>/*` using the exact-case GitHub login/repository
@@ -209,7 +211,9 @@ Release' step does not run on that path. If that trade-off proves unwanted
 in practice, add `continue-on-error: true` to the 'Publish to MCP Registry'
 step.
 
-**First-publish de-risk:** before relying on CI for the first real publish,
+**First-publish de-risk (historical — the first publish, v1.9.1, happened on
+2026-07-03; the manual recovery path below reuses these steps):** before
+relying on CI for the first real publish,
 run once locally: download `mcp-publisher` (Windows: the tarball flow from
 the quickstart docs), `mcp-publisher login github` (device-flow auth as
 BourbonDog), then `mcp-publisher publish` — to fail fast on any
@@ -259,3 +263,104 @@ publish attempt 422'd on a 199-char description (2026-07-03); now pinned by
    `gh release create <tag> --generate-notes --latest`. The "Generate release
    notes with Claude" step is optional polish — skip it or run it manually
    against the API.
+
+## 4. Chocolatey (Windows)
+
+**Status: drafted, not published.** Package id `amicus` confirmed unclaimed on
+`community.chocolatey.org` (checked 2026-09-28). The package wraps a global npm
+install (`npm install -g amicus@<version>`) behind a `nodejs-lts` dependency,
+rather than bundling a Node binary — Chocolatey installs the dependency first.
+That dependency is a floor (`>=22.12.0`, from `package.json`'s `engines`),
+not a cap, so which LTS major Chocolatey installs moves with the `nodejs-lts`
+feed (22.x and 24.x are both on it, checked 2026-09-28). CI tests Node 22 and
+24 (`.github/workflows/ci.yml`); a new LTS major can reach Chocolatey users
+before CI tests it.
+
+**Repo home:** `packaging/chocolatey/amicus.nuspec` and
+`packaging/chocolatey/tools/chocolateyInstall.ps1` /
+`chocolateyUninstall.ps1`. Not part of the npm tarball — `package.json`'s
+`files` field is unrelated to this channel.
+
+**The postinstall-under-elevation risk.** `choco install` commonly runs
+elevated, sometimes under a different admin account or as SYSTEM.
+`scripts/postinstall.js`'s skill/MCP registration resolves
+`os.homedir()`/`%APPDATA%`, which in that case belongs to the elevated
+account, not the interactive user — a silent misplacement, not a visible
+failure (`runCli()`'s wrapper always exits 0). `chocolateyInstall.ps1` sets
+`AMICUS_SKIP_POSTINSTALL=1` before the npm install (the same guard the
+Claude Code plugin channel already relies on) and prints instructions to run
+`amicus init` / `amicus setup` / `amicus doctor` afterward from an ordinary,
+non-elevated prompt.
+
+**Same-account elevation only.** The guard fixes only the
+registration half. The package currently supports same-account elevation
+only: npm's global prefix is per-account (Node's bundled npmrc sets
+`prefix=${APPDATA}\npm`), so under a different admin account or SYSTEM,
+amicus and its `amicus`/`am` shims land in that account's `%APPDATA%\npm`,
+off the interactive user's PATH. `chocolateyInstall.ps1` refuses to run as
+SYSTEM (SID `S-1-5-18`, which is never the interactive user) and exits
+non-zero. A different admin account cannot be told apart from the intended
+user from inside the install, so that case still installs and exits 0; the
+install's closing lines name the account and folder it used, and what to do if
+that is the wrong account. `chocolateyUninstall.ps1` is per-account in the
+same way: it removes amicus from the running account's prefix only, and says
+so. The owner decided this on 2026-09-29 (B-REL-5): same account only, with
+the SYSTEM refusal and the closing disclosure; no machine-wide prefix, and no
+detection of another admin account.
+
+**Before the first submission:** a real elevated local install has not been
+run — this package is untested against a real Chocolatey install. Test it
+first on a real Windows account, ideally a second one, elevating as that same
+account (same-account elevation only, above):
+
+1. Run `choco pack` in `packaging/chocolatey/`.
+2. Before the real install, run the step-3 install command as SYSTEM, from that
+   same directory (for example through a SYSTEM scheduled task, or PsExec -s),
+   and confirm it exits 1 before npm runs: it prints the "Refusing to install
+   amicus as SYSTEM" message and no "Running: npm" line. Do this first: once
+   amicus is installed, choco reports it as already installed and never runs
+   the script.
+3. From an elevated prompt in that same directory (`choco install` needs an
+   admin shell by default), run
+   `choco install amicus --source "'.;https://community.chocolatey.org/api/v2/'"`.
+   The community feed after the semicolon is what lets the `nodejs-lts`
+   dependency resolve.
+4. From the interactive account, in an ordinary (non-elevated) prompt,
+   `where.exe amicus` must resolve before `amicus init` is run (`where.exe`,
+   because in PowerShell `where` is an alias for Where-Object). Then confirm
+   `amicus init` finds Node on PATH and completes.
+5. After the install, open an ordinary (non-elevated) prompt, run
+   `amicus doctor`, and confirm it finds the OpenCode engine binary, because
+   the package installs through `npm install -g`, npm 11 warns about install
+   scripts that are not on its allow-scripts list (a later phase of that
+   policy is to block them), and opencode-ai's install script is what places
+   the engine binary.
+
+Then create a community.chocolatey.org account + API key and `choco push`.
+
+**Version:** `amicus.nuspec`'s `<version>` is a manual pin site, kept in
+lockstep with `package.json`/`server.json`/`.claude-plugin/plugin.json` by
+hand at release time (`docs/publishing.md`'s checklist, steps 6 and 9).
+`tests/scripts/package-manifest.test.js` pins it to `package.json`, as it
+pins `server.json`, so a forgotten bump fails the suite. A Chocolatey
+package-fix re-push for the same amicus release adds a fourth, numeric
+segment (for example `4.14.1.20261001`), which that test accepts;
+`chocolateyInstall.ps1` passes only the first three to npm, so it still
+installs `amicus@4.14.1`.
+
+## 5. Third-party MCP directories
+
+Status as of 2026-09-28:
+
+| Directory | Status | Action needed |
+|---|---|---|
+| Glama | Listed (auto-indexed from the MCP Registry), **unclaimed** | Owner: claim via GitHub OAuth, HTTP, or DNS at glama.ai/mcp/servers/BourbonDog/amicus |
+| PulseMCP | Listed (auto-ingested from the MCP Registry) | None — submissions/changes are globally paused |
+| mcp.so | Not listed | Owner: submit at mcp.so/submit (free reviewed queue, or a paid immediate track) |
+| Smithery | Not listed — **deferred** | None planned. Its current publish flow needs either a hosted Streamable-HTTP endpoint or a pre-built MCPB bundle; amicus's MCP server is stdio-only (`server.json`'s `packages[0].transport.type`) and has neither. Owner-deferred 2026-09-28. |
+| `punkpeye/awesome-mcp-servers` | Not listed | Owner: fork + one-line README PR under "Coding Agents" |
+
+Pattern: the two directories that already carry amicus (Glama, PulseMCP) are the
+two that auto-ingest the official MCP Registry (§3) — amicus has been
+registry-published since 2026-07-03. The other three each need a distinct,
+separate submission regardless of registry status.

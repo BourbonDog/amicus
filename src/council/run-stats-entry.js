@@ -61,10 +61,10 @@
  * `ttftMs` (v4.9 W13 Task A) is time-to-first-token for this row's leg, read off
  * the leg document and emitted only when it is a NON-NEGATIVE INTEGER — the
  * shape council-tally.schema.json declares, and (PR #207 round 3, B3) a stricter
- * test than the bare type check this used to spell. PROBE ONLY — nothing
- * derives a backstop, threshold, or routing decision from it yet (ruling R12:
- * probe first, derive later). Absent means no substantive tick was observed —
- * or that the only reading taken was not an honest measurement — which is
+ * test than the bare type check this used to spell. PROBE ONLY — a probe- and forensics-only
+ * measurement: nothing derives a backstop, threshold, or routing decision from it (ruling
+ * R12: probe first, derive later; no derivation is planned). Absent means no substantive
+ * tick was observed — or that the only reading taken was not an honest measurement — which is
  * neither `0` (a real measurement) nor `null`.
  *
  * `conformance` (#244 residue, 2026-09-27) is the asks-to-parse axis: `clean` (the
@@ -112,8 +112,8 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
     // Emit-when-set, NOT `durationMs`'s null-coercion one line above: this row
-    // is the C2 derivation's future input, and a null there would be read as a
-    // measurement. Absent means "never observed" and must stay absent.
+    // carries ttftMs, a probe- and forensics-only measurement, and a null there
+    // would be read as one. Absent means "never observed" and must stay absent.
     //
     // PR #207 round 3 (B3): emit-when-VALID too. The shared predicate is
     // `src/utils/ttft.js :: isMeasuredTtft`, and it is spelled out by HAND here
