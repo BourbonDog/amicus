@@ -45,8 +45,10 @@ $packageVersion = $env:chocolateyPackageVersion -replace '^(\d+\.\d+\.\d+)\.\d+$
 # amicus/am shims land in that account's %APPDATA%\npm, off the interactive user's PATH.
 # SYSTEM (SID S-1-5-18) is never the interactive user, so the check below refuses it,
 # non-zero. A different admin account cannot be told apart from the intended user from inside
-# this script, so that case still installs and exits 0. A machine-wide prefix is the
-# alternative; choosing it is an owner decision (B-REL-5), deliberately not made in this draft.
+# this script, so that case still installs and exits 0; the closing lines below name the
+# account and folder it used. The owner decided this on 2026-09-29 (B-REL-5): same account
+# only, with this SYSTEM refusal and that closing disclosure; no machine-wide prefix, and no
+# detection of another admin account.
 #
 # Get-AmicusInstallSid is defined only when no function of that name exists yet, so the test
 # harness can stand in a SYSTEM identity without running as SYSTEM; Chocolatey defines none.

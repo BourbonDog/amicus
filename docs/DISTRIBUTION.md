@@ -292,7 +292,7 @@ Claude Code plugin channel already relies on) and prints instructions to run
 `amicus init` / `amicus setup` / `amicus doctor` afterward from an ordinary,
 non-elevated prompt.
 
-**Same-account elevation only, for now.** The guard fixes only the
+**Same-account elevation only.** The guard fixes only the
 registration half. The package currently supports same-account elevation
 only: npm's global prefix is per-account (Node's bundled npmrc sets
 `prefix=${APPDATA}\npm`), so under a different admin account or SYSTEM,
@@ -300,11 +300,13 @@ amicus and its `amicus`/`am` shims land in that account's `%APPDATA%\npm`,
 off the interactive user's PATH. `chocolateyInstall.ps1` refuses to run as
 SYSTEM (SID `S-1-5-18`, which is never the interactive user) and exits
 non-zero. A different admin account cannot be told apart from the intended
-user from inside the install, so that case still installs and exits 0.
-`chocolateyUninstall.ps1` is per-account in the same way: it removes amicus
-from the running account's prefix only, and says so. A machine-wide prefix is
-the alternative; choosing it is an owner decision (B-REL-5), not part of this
-draft.
+user from inside the install, so that case still installs and exits 0; the
+install's closing lines name the account and folder it used, and what to do if
+that is the wrong account. `chocolateyUninstall.ps1` is per-account in the
+same way: it removes amicus from the running account's prefix only, and says
+so. The owner decided this on 2026-09-29 (B-REL-5): same account only, with
+the SYSTEM refusal and the closing disclosure; no machine-wide prefix, and no
+detection of another admin account.
 
 **Before the first submission:** a real elevated local install has not been
 run — this package is untested against a real Chocolatey install. Test it
