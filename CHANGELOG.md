@@ -3,7 +3,7 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
-## [Unreleased]
+## [4.14.2] - 2026-09-29
 
 ### Security
 
@@ -116,6 +116,17 @@ All notable changes to Amicus are documented here. Format follows
   be resubmitted). `docs/ROADMAP.md`'s "Deferred out of v4.4.1 into v4.5 (2026-07-27)" table
   struck through only LC-5 as closed; CA-4, RN-1, RN-5, RN-11 and TST-3 (shipped v4.5-v4.7) and
   TST-2 (shipped 2026-07-27) now strike through too.
+
+- **Three moderate advisories in the repository's locked production tree.** The lockfile held
+  `undici` 7.29.0, which reaches it through `@electron/get` (an optional dependency, `^7.24.4`):
+  GHSA-3wwx-pv8p-q78v (a denial of service through an unhandled error in WebSocket
+  permessage-deflate decompression). It also held `ip-address` 10.4.0, which reaches it through
+  `express-rate-limit` (`^10.2.0`) and `socks` (`^10.0.1`): GHSA-rpw4-54j3-4h4q
+  (`Address6.isLinkLocal()` recognizes `fe80::/64` rather than `fe80::/10`) and GHSA-2vr4-cq9g-pvrc
+  (no classifier recognizes the NAT64 local-use range `64:ff9b:1::/48`). Fixed by moving those two
+  lockfile entries to 7.30.0 and 10.7.2, inside the same ranges (#283). The lockfile is not
+  published: an install resolves both fresh inside those ranges. With `extract-zip` removed (see
+  Removed), `npm audit --omit=dev` now reports no vulnerabilities.
 
 ## [4.14.1] - 2026-09-28
 
