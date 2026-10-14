@@ -59,22 +59,31 @@ function buildKeysScript() {
   }
 
   // The user can pick another provider while a probe is in flight (only the
-  // test button is disabled). So a click works on the provider it was MADE
+  // key buttons are disabled). So a click works on the provider it was MADE
   // for: the IPC calls and that provider's records (check mark, hint) use
   // it, and the shared box UI is touched only if it is still the one shown.
   // Reading selectedProvider after an await saved a key under whichever
   // provider was picked meanwhile. Council review of PR 288 (A1/D2).
+  // Compared by ID, not object: switching away and back must still show the
+  // verdict however the provider list is built (council round 2, A1/C1).
+  function isShown(prov) { return !!selectedProvider && selectedProvider.id === prov.id; }
   function showVerdict(prov, text, cls, state) {
-    if (selectedProvider !== prov) { return false; }
+    if (!isShown(prov)) { return false; }
     statusMsg.textContent = text; statusMsg.className = cls; setInputState(state);
     return true;
   }
+
+  // One key action at a time: while a test, a save or a Remove is in flight,
+  // neither button can start another. A Remove landing under a stored-key
+  // test left "Stored key verified" on a box whose key was gone (council
+  // round 2 on PR 288, A2).
+  function setBusy(on) { testBtn.disabled = on; removeBtn.disabled = on; }
 
   // An empty box on a provider that has a stored key: test THAT key, in the
   // main process. The renderer never holds it (only its masked hint), and
   // nothing is saved.
   async function testStoredKey(prov) {
-    testBtn.disabled = true; testBtn.textContent = 'Testing...';
+    setBusy(true); testBtn.textContent = 'Testing...';
     statusMsg.textContent = ''; statusMsg.className = ''; setInputState('testing');
     try {
       var res = await window.sidecarSetup.invoke('sidecar:test-stored-key', prov.id);
@@ -86,7 +95,7 @@ function buildKeysScript() {
     } catch (_e) {
       showVerdict(prov, 'Connection failed', 'status-invalid', 'invalid');
     }
-    testBtn.disabled = false; testBtn.textContent = 'Save \\u0026 Test';
+    setBusy(false); testBtn.textContent = 'Save \\u0026 Test';
   }
 
   testBtn.addEventListener('click', async function() {
@@ -98,7 +107,7 @@ function buildKeysScript() {
       statusMsg.textContent = 'Please enter an API key'; statusMsg.className = 'status-invalid';
       setInputState('invalid'); return;
     }
-    testBtn.disabled = true; testBtn.textContent = 'Testing...';
+    setBusy(true); testBtn.textContent = 'Testing...';
     statusMsg.textContent = ''; statusMsg.className = ''; setInputState('testing');
     try {
       var res = await window.sidecarSetup.invoke('sidecar:validate-key', prov.id, key);
@@ -137,7 +146,7 @@ function buildKeysScript() {
     } catch (_e) {
       if (showVerdict(prov, 'Connection failed', 'status-invalid', 'invalid')) { keyValid = false; }
     }
-    testBtn.disabled = false; testBtn.textContent = 'Save \\u0026 Test';
+    setBusy(false); testBtn.textContent = 'Save \\u0026 Test';
   });
 
   keyInput.addEventListener('input', function() {
@@ -156,14 +165,14 @@ function buildKeysScript() {
   removeBtn.addEventListener('click', async function() {
     var prov = selectedProvider;   // the provider this click was made for (see showVerdict)
     if (!prov) { return; }
-    removeBtn.disabled = true;
+    setBusy(true);
     try {
       await window.sidecarSetup.invoke('sidecar:remove-key', prov.id);
       delete configuredKeys[prov.id]; delete keyHints[prov.id];
       var c = document.getElementById('check-' + prov.id);
       if (c) { c.textContent = ''; }
       updateNextState();
-      if (selectedProvider === prov) {
+      if (isShown(prov)) {
         keyInput.value = ''; keyInput.placeholder = prov.placeholder;
         keyInput.type = 'password'; keyValid = false; setInputState(null);
         statusMsg.textContent = 'Key removed'; statusMsg.className = 'status-testing';
@@ -171,9 +180,9 @@ function buildKeysScript() {
         if (window.hideProviderDefaultPicker) { window.hideProviderDefaultPicker(); }
       }
     } catch (_e) {
-      if (selectedProvider === prov) { statusMsg.textContent = 'Failed to remove'; statusMsg.className = 'status-invalid'; }
+      if (isShown(prov)) { statusMsg.textContent = 'Failed to remove'; statusMsg.className = 'status-invalid'; }
     }
-    removeBtn.disabled = false;
+    setBusy(false);
   });`;
 }
 

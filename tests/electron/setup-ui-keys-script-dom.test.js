@@ -69,11 +69,15 @@ function loadKeysStep({ keyHints = { openai: HINT }, answers = {} } = {}) {
     var keySection = $('key-section'), keyLabel = $('key-label'), helpLink = $('help-link');
     ${buildKeysScript()}
   `);
-  factory(document, window, PROVIDERS, keyHints, configuredKeys, () => {});
+  // A private copy: the page reads this array, and rebuildProviders swaps its
+  // objects for equal new ones (same ids) in place.
+  const providers = PROVIDERS.map((p) => ({ ...p }));
+  factory(document, window, providers, keyHints, configuredKeys, () => {});
 
   const $ = (id) => document.getElementById(id);
   const pick = (id) => body.querySelector(`.provider-btn[data-provider="${id}"]`).click();
-  return { input: $('api-key-input'), testBtn: $('test-btn'), removeBtn: $('remove-btn'), status: $('status-msg'), pick, calls, keyHints };
+  const rebuildProviders = () => providers.splice(0, providers.length, ...providers.map((p) => ({ ...p })));
+  return { input: $('api-key-input'), testBtn: $('test-btn'), removeBtn: $('remove-btn'), status: $('status-msg'), pick, calls, keyHints, rebuildProviders };
 }
 
 /** Every argument the page ever sent over IPC. */
@@ -214,6 +218,54 @@ describe('switching provider while a probe is in flight', () => {
     expect(page.keyHints.openai).toMatch(/^sk-proj-•/);
     expect(page.keyHints.deepseek).toBeUndefined();
     expect(page.status.textContent).toBe('');
+  });
+});
+
+// Council round 2 on PR 288 (A1/C1): the switch guard compared provider
+// OBJECTS, so it silently relied on every pick returning the same object.
+// Switching away and back must still show the verdict, even if the provider
+// list is rebuilt in between.
+describe('switching away and back before a probe lands', () => {
+  it('the verdict still shows on the provider it belongs to', async () => {
+    const inflight = deferred();
+    const page = loadKeysStep({ answers: { 'sidecar:test-stored-key': () => inflight.promise } });
+    page.pick('openai');
+    page.testBtn.click();
+    page.pick('deepseek');
+    page.rebuildProviders();                  // same ids, new objects
+    page.pick('openai');
+    inflight.resolve({ valid: true, status: 200 });
+    await flush();
+    expect(page.status.textContent).toMatch(/stored key verified/i);
+  });
+});
+
+// Council round 2 on PR 288 (A2): a stored-key test and a Remove could
+// interleave, leaving "Stored key verified" on a box whose key was just
+// removed. While one key action is in flight, neither button can start
+// another.
+describe('one key action at a time', () => {
+  it('Remove is unavailable while a test runs, and comes back after', async () => {
+    const inflight = deferred();
+    const page = loadKeysStep({ answers: { 'sidecar:test-stored-key': () => inflight.promise } });
+    page.pick('openai');
+    page.testBtn.click();
+    expect(page.removeBtn.disabled).toBe(true);
+    inflight.resolve({ valid: true, status: 200 });
+    await flush();
+    expect(page.removeBtn.disabled).toBe(false);
+    expect(page.testBtn.disabled).toBe(false);
+  });
+
+  it('Save & Test is unavailable while a Remove runs, and comes back after', async () => {
+    const removing = deferred();
+    const page = loadKeysStep({ answers: { 'sidecar:remove-key': () => removing.promise } });
+    page.pick('openai');
+    page.removeBtn.click();
+    expect(page.testBtn.disabled).toBe(true);
+    removing.resolve({ success: true });
+    await flush();
+    expect(page.testBtn.disabled).toBe(false);
   });
 });
 
