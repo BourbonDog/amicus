@@ -1,6 +1,6 @@
 /**
- * The DEFINITIVE key verdicts validateApiKey reports beside a 401. Split out
- * of api-key-validation.js to keep it under the 300-line size gate.
+ * Definitive key rejections besides a 401 (google API_KEY_INVALID, malformed keys).
+ * Split out of api-key-validation.js to keep it under the 300-line size gate.
  *
  * `keyRejected: true` marks "this credential is not accepted" — the verdict
  * that blocks a save (electron/ipc-keys.js, src/cli-handlers.js) and turns
