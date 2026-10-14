@@ -4,10 +4,16 @@
  */
 const https = require('https');
 
-/** Validation endpoints per provider */
+/**
+ * Validation endpoints per provider. Every one MUST require auth, or the probe
+ * vouches for nothing: openrouter's public /api/v1/models answered 200 and
+ * anthropic's /v1/messages answered 405 (before auth) to ANY key, so both
+ * passed fake keys. The two below answer 200 to a real key and 401 to a fake
+ * one (measured 2026-10-14).
+ */
 const VALIDATION_ENDPOINTS = {
   openrouter: {
-    url: 'https://openrouter.ai/api/v1/models',
+    url: 'https://openrouter.ai/api/v1/key',
     authHeader: (key) => ({ 'Authorization': `Bearer ${key}` })
   },
   openai: {
@@ -15,7 +21,7 @@ const VALIDATION_ENDPOINTS = {
     authHeader: (key) => ({ 'Authorization': `Bearer ${key}` })
   },
   anthropic: {
-    url: 'https://api.anthropic.com/v1/messages',
+    url: 'https://api.anthropic.com/v1/models',
     authHeader: (key) => ({
       'x-api-key': key,
       'anthropic-version': '2023-06-01'
@@ -177,12 +183,11 @@ function validateApiKey(provider, key) {
         });
         res.on('data', () => {});
         res.on('end', () => {
-          // Anthropic: the probe is a GET against /v1/messages, so in practice
-          // a WORKING key answers with a method/shape complaint (400/404/405).
-          // 200 is allowed too — defensively, in case the endpoint ever answers
-          // one — which is why it appears in the allowlist below. The earlier
-          // wording said "never 200" while listing 200 as success; the comment
-          // and the code disagreed (council review of PR 222).
+          // Anthropic: 200 is the ONLY pass. The probe used to be a GET against
+          // /v1/messages, and 400/404/405 were on the success allowlist because
+          // a working key answered with a method complaint — but that endpoint
+          // answers 405 BEFORE auth, so a fake key passed too. /v1/models
+          // checks the key first (see VALIDATION_ENDPOINTS).
           //
           // ⚠️ This used to be `else { valid: true }` — every code that was not
           // 401/429/5xx passed, INCLUDING 403. A region block or WAF therefore
@@ -197,7 +202,7 @@ function validateApiKey(provider, key) {
               resolve({ valid: false, status: code, error: FORBIDDEN_MESSAGE });
             } else if (code >= 500 || code === 429) {
               resolve({ valid: false, status: code, error: `Server error (${code})` });
-            } else if (code === 200 || code === 400 || code === 404 || code === 405) {
+            } else if (code === 200) {
               resolve({ valid: true, status: code });
             } else {
               resolve({ valid: false, status: code, error: `Unexpected response (${code})` });

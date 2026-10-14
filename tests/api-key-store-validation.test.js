@@ -152,8 +152,10 @@ describe('api-key-store validation', () => {
       expect(result).toEqual({ valid: false, status: 500, error: 'Unexpected response (500)' });
     });
 
-    it('should treat anthropic non-401 response as valid', async () => {
-      // Anthropic returns 400/405 for valid key with no body
+    it('should NOT treat an anthropic 400 as valid', async () => {
+      // The old /v1/messages probe answered 400/405 before checking the key,
+      // so this used to read as valid — for a fake key too. The /v1/models
+      // probe answers 200 to a real key; anything else is not a pass.
       const mockResponse = {
         statusCode: 400,
         on: jest.fn((event, cb) => {
@@ -167,8 +169,8 @@ describe('api-key-store validation', () => {
         return { on: jest.fn(), setTimeout: jest.fn(), destroy: jest.fn() };
       });
 
-      const result = await validateApiKey('anthropic', 'sk-ant-valid');
-      expect(result).toMatchObject({ valid: true });
+      const result = await validateApiKey('anthropic', 'sk-ant-fake');
+      expect(result).toEqual({ valid: false, status: 400, error: 'Unexpected response (400)' });
     });
 
     it('should treat anthropic 401 response as invalid', async () => {

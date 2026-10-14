@@ -153,13 +153,20 @@ describe('anthropic: no status may produce a FALSE GREEN', () => {
   // GOOD. That is the false-green class this whole line of work exists to kill,
   // sitting inside the function rewritten to fix 403 handling.
   //
-  // The probe is a GET against /v1/messages, so a working key answers with a
-  // method/shape complaint (400/404/405), not 200. Those are the only codes
-  // that evidence a key reaching auth and passing.
-  it.each([400, 404, 405])('%p means the key reached auth and passed', async (code) => {
+  // The probe is GET /v1/models, which checks the key first, so 200 is the
+  // only code that evidences a key reaching auth and passing. 400/404/405 were
+  // the pass list while the probe was a GET against /v1/messages — which
+  // answers 405 BEFORE auth, so a FAKE key passed (2026-10-14 diagnosis).
+  it('200 means the key reached auth and passed', async () => {
+    mockResponse(200);
+    await expect(validateApiKey('anthropic', 'sk-ant-x'))
+      .resolves.toMatchObject({ valid: true, status: 200 });
+  });
+
+  it.each([400, 404, 405])('%p is no longer a pass', async (code) => {
     mockResponse(code);
     await expect(validateApiKey('anthropic', 'sk-ant-x'))
-      .resolves.toMatchObject({ valid: true, status: code });
+      .resolves.toMatchObject({ valid: false, status: code });
   });
 
   it('403 is NOT valid and NOT a credential verdict', async () => {
