@@ -27,7 +27,11 @@ function buildKeysScript() {
       keyLabel.textContent = prov.name + ' API Key';
       keyInput.placeholder = prov.placeholder;
       if (keyHints[prov.id]) {
-        keyInput.value = keyHints[prov.id]; keyInput.type = 'text'; keyValid = false;
+        // The masked hint (8 chars + bullets) is the PLACEHOLDER, never the
+        // value. As the value it was sent as the key by Save & Test, and a
+        // paste APPENDED to it; now typing replaces it, and Save & Test on the
+        // empty box re-tests the stored key (testStoredKey below).
+        keyInput.value = ''; keyInput.placeholder = keyHints[prov.id]; keyInput.type = 'password'; keyValid = false;
         setInputState('valid');
         statusMsg.textContent = 'Key configured \\u2714'; statusMsg.className = 'status-valid';
         removeBtn.style.display = '';
@@ -54,9 +58,32 @@ function buildKeysScript() {
     if (state) { keyInput.classList.add('input-' + state); }
   }
 
+  // An empty box on a provider that has a stored key: test THAT key, in the
+  // main process. The renderer never holds it (only its masked hint), and
+  // nothing is saved.
+  async function testStoredKey() {
+    testBtn.disabled = true; testBtn.textContent = 'Testing...';
+    statusMsg.textContent = ''; statusMsg.className = ''; setInputState('testing');
+    try {
+      var res = await window.sidecarSetup.invoke('sidecar:test-stored-key', selectedProvider.id);
+      if (res && res.valid) {
+        statusMsg.textContent = 'Stored key verified \\u2713'; statusMsg.className = 'status-valid';
+        setInputState('valid');
+      } else {
+        statusMsg.textContent = (res && res.error) || 'Stored key failed the test'; statusMsg.className = 'status-invalid';
+        setInputState('invalid');
+      }
+    } catch (_e) {
+      statusMsg.textContent = 'Connection failed'; statusMsg.className = 'status-invalid';
+      setInputState('invalid');
+    }
+    testBtn.disabled = false; testBtn.textContent = 'Save \\u0026 Test';
+  }
+
   testBtn.addEventListener('click', async function() {
     if (!selectedProvider) { return; }
     var key = keyInput.value.trim();
+    if (!key && keyHints[selectedProvider.id]) { await testStoredKey(); return; }
     if (!key) {
       statusMsg.textContent = 'Please enter an API key'; statusMsg.className = 'status-invalid';
       setInputState('invalid'); return;
@@ -121,7 +148,8 @@ function buildKeysScript() {
       delete configuredKeys[selectedProvider.id]; delete keyHints[selectedProvider.id];
       var c = document.getElementById('check-' + selectedProvider.id);
       if (c) { c.textContent = ''; }
-      keyInput.value = ''; keyInput.type = 'password'; keyValid = false; setInputState(null);
+      keyInput.value = ''; keyInput.placeholder = selectedProvider.placeholder;
+      keyInput.type = 'password'; keyValid = false; setInputState(null);
       statusMsg.textContent = 'Key removed'; statusMsg.className = 'status-testing';
       removeBtn.style.display = 'none'; updateNextState();
       if (window.hideProviderDefaultPicker) { window.hideProviderDefaultPicker(); }
