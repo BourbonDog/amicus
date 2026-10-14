@@ -187,11 +187,23 @@ function validateApiKey(provider, key) {
         res.on('error', (err) => {
           resolve({ valid: false, status: null, error: redactSecret(messageOf(err), trimmedKey) });
         });
-        // Only google's 400 is read, for its reason; capped, never echoed.
-        let body = '';
+        // Only google's 400 is read, for its reason; never echoed. The cap is
+        // in BYTES and exact (a check-then-append let one chunk sail past it),
+        // and the bytes are decoded once, so a character split across chunks
+        // survives. A larger body is not google's ~400-byte key error: it is
+        // cut short, fails to parse, and lands on the non-blocking side.
+        const BODY_CAP = 16384;
+        const chunks = [];
+        let size = 0;
         const wantBody = provider === 'google' && code === 400;
-        res.on('data', (chunk) => { if (wantBody && body.length < 16384) { body += chunk; } });
+        res.on('data', (chunk) => {
+          if (!wantBody || size >= BODY_CAP) { return; }
+          const b = Buffer.from(chunk).subarray(0, BODY_CAP - size);
+          chunks.push(b);
+          size += b.length;
+        });
         res.on('end', () => {
+          const body = wantBody ? Buffer.concat(chunks).toString('utf8') : '';
           // Anthropic: 200 is the ONLY pass. The probe used to be a GET against
           // /v1/messages, and 400/404/405 were on the success allowlist because
           // a working key answered with a method complaint — but that endpoint

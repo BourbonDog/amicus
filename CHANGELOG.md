@@ -18,7 +18,9 @@ All notable changes to Amicus are documented here. Format follows
   characters, then bullets), and Save & Test sent the hint as the key. Every vendor failed, each
   with a different error, and pasting a key into the box appended it to the hint. The hint is now
   only the box's placeholder. Typing or pasting replaces it, and Save & Test on the empty box
-  re-tests the stored key in the main process, which never hands the key to the window.
+  re-tests the stored key in the main process, which never hands the key to the window. Picking
+  another provider while a test or a removal is still running no longer saves the key under, or
+  shows the result on, the provider picked meanwhile.
 - **A rejected key says so in words.** Google's answer to a bad key (HTTP 400, `API_KEY_INVALID`)
   read as "Unexpected response (400)", and a key containing characters no API key has produced
   Node's raw "Invalid character in header content". They are now "Invalid API key (400

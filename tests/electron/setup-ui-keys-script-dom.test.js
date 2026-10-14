@@ -168,6 +168,112 @@ describe('typing or pasting replaces the hint — it can never append to it', ()
   });
 });
 
+/** A promise the test settles by hand, to hold an IPC answer in flight. */
+function deferred() {
+  let resolve;
+  const promise = new Promise((r) => { resolve = r; });
+  return { promise, resolve };
+}
+
+// Council review of PR 288 (A1/D2): the verdict of a probe still in flight was
+// applied to whichever provider was selected when it LANDED, and the save
+// path read `selectedProvider.id` after awaiting validate-key — so switching
+// provider mid-probe saved the key under the NEWLY selected provider.
+describe('switching provider while a probe is in flight', () => {
+  it("a stored-key verdict never lands on another provider's box", async () => {
+    const inflight = deferred();
+    const page = loadKeysStep({ answers: { 'sidecar:test-stored-key': () => inflight.promise } });
+    page.pick('openai');
+    page.testBtn.click();
+    page.pick('deepseek');                     // unconfigured: an empty box, no verdict
+    inflight.resolve({ valid: true, status: 200 });
+    await flush();
+    expect(page.status.textContent).toBe('');
+    expect(page.input.classList.contains('input-valid')).toBe(false);
+    expect(page.testBtn.disabled).toBe(false);
+  });
+
+  it('a typed key is validated and saved under the provider it was typed for', async () => {
+    const validating = deferred();
+    const page = loadKeysStep({
+      keyHints: {},
+      answers: { 'sidecar:validate-key': () => validating.promise, 'sidecar:save-key': { success: true } },
+    });
+    page.pick('openai');
+    page.input.value = 'sk-proj-abcdef0123456789';
+    page.input.dispatch('input');
+    page.testBtn.click();
+    page.pick('deepseek');
+    validating.resolve({ valid: true, status: 200 });
+    await flush();
+    expect(page.calls).toEqual([
+      ['sidecar:validate-key', 'openai', 'sk-proj-abcdef0123456789'],
+      ['sidecar:save-key', 'openai', 'sk-proj-abcdef0123456789'],
+    ]);
+    // openai's own record is updated; deepseek's view is not touched.
+    expect(page.keyHints.openai).toMatch(/^sk-proj-•/);
+    expect(page.keyHints.deepseek).toBeUndefined();
+    expect(page.status.textContent).toBe('');
+  });
+});
+
+describe('switching provider while a Remove is in flight', () => {
+  it("clears the removed provider's records, never the newly picked one's", async () => {
+    const removing = deferred();
+    const page = loadKeysStep({
+      keyHints: { openai: HINT, deepseek: 'sk-00000' + '•'.repeat(12) },
+      answers: { 'sidecar:remove-key': () => removing.promise },
+    });
+    page.pick('openai');
+    page.removeBtn.click();
+    page.pick('deepseek');
+    removing.resolve({ success: true });
+    await flush();
+    expect(page.calls).toEqual([['sidecar:remove-key', 'openai']]);
+    expect(page.keyHints.openai).toBeUndefined();
+    expect(page.keyHints.deepseek).toBeDefined();
+    // deepseek's box still shows deepseek's hint and state.
+    expect(page.input.placeholder).toBe('sk-00000' + '•'.repeat(12));
+    expect(page.status.textContent).toMatch(/configured/i);
+  });
+});
+
+// Council review of PR 288 (D1): after a save the placeholder still showed
+// the hint from BEFORE it (or the provider's generic one, on a first save),
+// so an emptied box no longer said which key Save & Test would test.
+describe('after a save, the placeholder is the new key\'s hint', () => {
+  const SAVE_OK = { 'sidecar:validate-key': { valid: true, status: 200 }, 'sidecar:save-key': { success: true } };
+
+  it('a first save: emptying the box shows the new hint and re-tests the stored key', async () => {
+    const page = loadKeysStep({
+      keyHints: {}, answers: { ...SAVE_OK, 'sidecar:test-stored-key': { valid: true, status: 200 } },
+    });
+    page.pick('openai');
+    page.input.value = 'sk-proj-abcdef0123456789';
+    page.input.dispatch('input');
+    page.testBtn.click();
+    await flush();
+    page.input.value = '';
+    page.input.dispatch('input');
+    expect(page.input.placeholder).toBe('sk-proj-' + '•'.repeat(12));
+    page.testBtn.click();
+    await flush();
+    expect(page.calls.map((c) => c.slice(0, 2))).toEqual([
+      ['sidecar:validate-key', 'openai'], ['sidecar:save-key', 'openai'], ['sidecar:test-stored-key', 'openai'],
+    ]);
+  });
+
+  it("a replaced key: the old key's hint does not linger", async () => {
+    const page = loadKeysStep({ answers: SAVE_OK });      // openai starts with HINT ('sk-proj-…')
+    page.pick('openai');
+    page.input.value = 'sk-svcacct-abcdef0123456789';
+    page.input.dispatch('input');
+    page.testBtn.click();
+    await flush();
+    expect(page.input.placeholder).toBe('sk-svcac' + '•'.repeat(12));
+  });
+});
+
 describe('the paths that have no stored key are unchanged', () => {
   it('an unconfigured provider with an empty box still asks for a key and sends nothing', async () => {
     const page = loadKeysStep();

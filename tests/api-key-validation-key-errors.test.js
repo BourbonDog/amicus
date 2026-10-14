@@ -53,7 +53,9 @@ function mockProbe(statusCode, body) {
     req.destroy = () => {};
     process.nextTick(() => {
       cb(res);
-      if (body !== undefined) { res.emit('data', Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))); }
+      // An array is delivered as separate chunks, Buffers as given.
+      const chunks = Array.isArray(body) ? body : (body === undefined ? [] : [typeof body === 'string' ? body : JSON.stringify(body)]);
+      for (const c of chunks) { res.emit('data', Buffer.isBuffer(c) ? c : Buffer.from(c)); }
       res.emit('end');
     });
     return req;
@@ -108,6 +110,36 @@ describe("google's invalid-key 400 is an Invalid API key result", () => {
     expect(r.status).toBe(403);
     expect(r.keyRejected).toBeUndefined();
     expect(r.error).toMatch(/forbidden/i);
+  });
+});
+
+// Council review of PR 288 (A2, C1). The body was gathered as `body += chunk`
+// with the cap checked BEFORE each append, so one large chunk sailed past
+// "16 KiB", and each Buffer chunk was decoded on its own.
+describe("reading google's 400 body", () => {
+  const KEY = 'AIzaSy-NOT-A-REAL-KEY-0123456789';
+  const bytes = Buffer.from(JSON.stringify({
+    error: {
+      code: 400,
+      message: 'Clé API non valide — ключ недействителен — キーが無効です',
+      status: 'INVALID_ARGUMENT',
+      details: [{ reason: 'API_KEY_INVALID' }],
+    },
+  }), 'utf8');
+
+  it('a multi-byte character split across two chunks still reads as API_KEY_INVALID', async () => {
+    const cut = bytes.indexOf(Buffer.from('ключ', 'utf8')) + 1;     // inside the 2-byte "к"
+    mockProbe(400, [bytes.subarray(0, cut), bytes.subarray(cut)]);
+    const r = await validateApiKey('google', KEY);
+    expect(r.keyRejected).toBe(true);
+  });
+
+  it('the 16 KiB cap is real: a larger body is never parsed, even in ONE chunk', async () => {
+    // Not google's ~400-byte key error, so it falls to the NON-blocking side.
+    const huge = JSON.stringify({ error: { details: [{ reason: 'API_KEY_INVALID' }], pad: 'x'.repeat(20000) } });
+    mockProbe(400, [huge]);
+    const r = await validateApiKey('google', KEY);
+    expect(r).toEqual({ valid: false, status: 400, error: 'Unexpected response (400)' });
   });
 });
 

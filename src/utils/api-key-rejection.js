@@ -45,4 +45,6 @@ function isGoogleKeyInvalid(body) {
   }
 }
 
-module.exports = { MALFORMED_KEY_MESSAGE, isMalformedKey, invalidKey, malformedKey, isGoogleKeyInvalid };
+// MALFORMED_KEY_MESSAGE stays module-private: nothing imports it, and the
+// tests pin the literal text so a reword is a visible change.
+module.exports = { isMalformedKey, invalidKey, malformedKey, isGoogleKeyInvalid };
