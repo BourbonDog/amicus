@@ -231,6 +231,46 @@ describe('the CLI rule is mirrored, not reinvented (src/cli-handlers.js :: handl
   });
 });
 
+describe('a definitive rejection that is not a 401 also blocks (keyRejected)', () => {
+  // validateApiKey flags `keyRejected: true` when the provider (or the key's
+  // own shape) says the credential can never work: a 401, google's 400 with
+  // reason API_KEY_INVALID, or a key holding characters no API key contains.
+  // Each is the same verdict a 401 is — "this credential is not accepted" —
+  // so each blocks a save exactly as a 401 does.
+  test('google 400 API_KEY_INVALID blocks', async () => {
+    const { blocksSave } = require('../../electron/ipc-keys');
+    expect(blocksSave({ valid: false, status: 400, keyRejected: true })).toBe(true);
+    expect(blocksSave({ valid: false, status: null, keyRejected: true })).toBe(true);
+    // The flag never overrides `valid`, and its absence changes nothing.
+    expect(blocksSave({ valid: true, status: 200, keyRejected: true })).toBe(false);
+    expect(blocksSave({ valid: false, status: 400 })).toBe(false);
+  });
+
+  test('a flagged rejection is never persisted through save-key', async () => {
+    const { handlers, saveApiKey } = registerKeys({
+      validation: { valid: false, status: 400, keyRejected: true, error: 'Invalid API key (400 API_KEY_INVALID)' },
+    });
+    const result = await handlers['sidecar:save-key']({}, 'google', 'AIza-bad');
+    expect(saveApiKey).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ success: false, error: 'Invalid API key (400 API_KEY_INVALID)' });
+  });
+
+  // The wizard pre-filled its box with the MASKED HINT and could send it on.
+  // Through the REAL validator (no network: the shape check refuses it before
+  // any request), a direct save-key call with the hint must write nothing —
+  // before this, the probe answered `status: null`, which does not block, and
+  // the hint landed in .env.
+  test('the masked hint is never written into .env, even by a direct IPC call', async () => {
+    const { handlers, saveApiKey, validateApiKey } = registerKeys();
+    const real = jest.requireActual('../../src/utils/api-key-validation');
+    validateApiKey.mockImplementation(real.validateApiKey);
+    const hint = 'sk-or-v1' + '•'.repeat(12);
+    const result = await handlers['sidecar:save-key']({}, 'openrouter', hint);
+    expect(saveApiKey).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('providerDefault (Task 8) survives the move verbatim', () => {
   it('direct vendor: builds the picker choices from the offer catalog and arms the session', async () => {
     const { handlers, buildProviderDefaultChoices, offerCatalogs, getCatalog } =

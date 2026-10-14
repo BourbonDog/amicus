@@ -3,6 +3,7 @@
  * Extracted from api-key-store.js to keep modules under 300 lines.
  */
 const https = require('https');
+const { isMalformedKey, invalidKey, malformedKey, isGoogleKeyInvalid } = require('./api-key-rejection');
 
 /**
  * Validation endpoints per provider. Every one MUST require auth, or the probe
@@ -139,12 +140,14 @@ function redactSecret(text, key) {
  * ALWAYS RESOLVES — never rejects, even on a synchronous throw from https.get
  * (see redactSecret). Two of the three call sites have no catch.
  *
- * @returns {Promise<{valid: boolean, status: number|null, error?: string}>}
+ * @returns {Promise<{valid: boolean, status: number|null, keyRejected?: true, error?: string}>}
  *   `status` is the HTTP status, or null when no response was received. It is
  *   returned as DATA so callers never have to recover it by parsing `error`
  *   (council finding 2): that coupled control flow to message wording, and a
  *   reword that dropped the parentheses would have silently degraded detection
  *   to a permanent "unverified" with nothing failing to announce it.
+ *   `keyRejected` is the same kind of data for the definitive verdict — see
+ *   api-key-rejection.js.
  */
 function validateApiKey(provider, key) {
   if (!key || key.trim().length === 0) {
@@ -157,6 +160,9 @@ function validateApiKey(provider, key) {
   }
 
   const trimmedKey = key.trim();
+  if (isMalformedKey(trimmedKey)) {
+    return Promise.resolve(malformedKey());
+  }
 
   // Google uses query param auth, not header
   let url = endpoint.url;
@@ -181,7 +187,10 @@ function validateApiKey(provider, key) {
         res.on('error', (err) => {
           resolve({ valid: false, status: null, error: redactSecret(messageOf(err), trimmedKey) });
         });
-        res.on('data', () => {});
+        // Only google's 400 is read, for its reason; capped, never echoed.
+        let body = '';
+        const wantBody = provider === 'google' && code === 400;
+        res.on('data', (chunk) => { if (wantBody && body.length < 16384) { body += chunk; } });
         res.on('end', () => {
           // Anthropic: 200 is the ONLY pass. The probe used to be a GET against
           // /v1/messages, and 400/404/405 were on the success allowlist because
@@ -197,7 +206,7 @@ function validateApiKey(provider, key) {
           // Success is an ALLOWLIST now; anything unlisted is not-valid.
           if (provider === 'anthropic') {
             if (code === 401) {
-              resolve({ valid: false, status: code, error: 'Invalid API key (401)' });
+              resolve(invalidKey(code, '401'));
             } else if (code === 403) {
               resolve({ valid: false, status: code, error: FORBIDDEN_MESSAGE });
             } else if (code >= 500 || code === 429) {
@@ -213,7 +222,9 @@ function validateApiKey(provider, key) {
           if (code === 200) {
             resolve({ valid: true, status: code });
           } else if (code === 401) {
-            resolve({ valid: false, status: code, error: 'Invalid API key (401)' });
+            resolve(invalidKey(code, '401'));
+          } else if (wantBody && isGoogleKeyInvalid(body)) {
+            resolve(invalidKey(code, '400 API_KEY_INVALID'));
           } else if (code === 403) {
             // NOT stated as a bad key (council finding 1). Google returns 403
             // for "API not enabled" and for quota; a WAF returns it for bot

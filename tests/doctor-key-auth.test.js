@@ -220,6 +220,27 @@ describe('doctor: key-auth check (#210)', () => {
       // status must not be treated as a verdict.
       expect(classifyProbeFailure({ error: 'Invalid API key (401)' }).definitive).toBe(false);
     });
+
+    // keyRejected is validateApiKey's STRUCTURED flag for a definitive
+    // rejection that is not a 401 (2026-10-14): google's 400 with reason
+    // API_KEY_INVALID, or a stored key holding characters no API key contains
+    // (status null — refused before any request). A plain 400 above stays
+    // ambiguous; only the flag makes it a verdict.
+    it("google's flagged 400 is DEFINITIVE", () => {
+      const c = classifyProbeFailure({ status: 400, keyRejected: true, error: 'Invalid API key (400 API_KEY_INVALID)' });
+      expect(c.definitive).toBe(true);
+      expect(c.reason).toBe('rejected (HTTP 400)');
+    });
+
+    it('a flagged malformed key is DEFINITIVE, and says why without echoing it', () => {
+      const c = classifyProbeFailure({ status: null, keyRejected: true, error: 'The key contains …' });
+      expect(c.definitive).toBe(true);
+      expect(c.reason).toBe('rejected (malformed key)');
+    });
+
+    it('only a literal true counts — a truthy non-boolean is not a verdict', () => {
+      expect(classifyProbeFailure({ status: 400, keyRejected: 'yes' }).definitive).toBe(false);
+    });
   });
 
   describe('no key material, no URLs, ever', () => {

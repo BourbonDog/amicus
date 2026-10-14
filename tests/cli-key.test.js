@@ -123,6 +123,22 @@ describe('handleKey — save', () => {
     exitSpy.mockRestore();
   });
 
+  // keyRejected: validateApiKey's flag for a definitive rejection that is not
+  // a 401 — google's 400 API_KEY_INVALID, or a key holding characters no API
+  // key contains (status null). Same verdict as a 401, so the same refusal;
+  // the GUI's save-key (electron/ipc-keys.js) blocks on it too.
+  test.each([
+    [400, 'Invalid API key (400 API_KEY_INVALID)'],
+    [null, "The key contains characters that aren't valid in an API key — paste the full key"],
+  ])('a flagged rejection with status %p exits without saving', async (status, error) => {
+    validateApiKey.mockResolvedValue({ valid: false, status, keyRejected: true, error });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    await expect(handleKey({ _: ['key', 'google', 'AIza-bad'] })).rejects.toThrow('exit');
+    expect(saveApiKey).not.toHaveBeenCalled();
+    expect(consoleErrSpy).toHaveBeenCalledWith(expect.stringContaining(error));
+    exitSpy.mockRestore();
+  });
+
   test('prints error and exits for unknown provider', async () => {
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     await expect(handleKey({ _: ['key', 'fakeai', 'sk-abc'] })).rejects.toThrow('exit');

@@ -74,7 +74,7 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('openrouter', 'sk-or-bad');
-      expect(result).toEqual({ valid: false, status: 401, error: 'Invalid API key (401)' });
+      expect(result).toEqual({ valid: false, status: 401, keyRejected: true, error: 'Invalid API key (401)' });
     });
 
     it('should resolve invalid for network error', async () => {
@@ -188,7 +188,7 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('anthropic', 'sk-ant-bad');
-      expect(result).toEqual({ valid: false, status: 401, error: 'Invalid API key (401)' });
+      expect(result).toEqual({ valid: false, status: 401, keyRejected: true, error: 'Invalid API key (401)' });
     });
 
     it('should treat anthropic 429 as invalid (rate limited)', async () => {

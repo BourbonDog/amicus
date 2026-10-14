@@ -209,6 +209,7 @@ src/
 │   ├── alias-shadow.js  # Alias-shadow self-diagnosis — name a local alias that repoints a curated one.
 │   ├── alias-state.js  # Following-vs-pinned state for model aliases (#238 D1) and the normalization
 │   ├── alias-store.js  # The write sinks the alias review flow needs beyond `setup.js :: addAlias`
+│   ├── api-key-rejection.js  # The DEFINITIVE key verdicts validateApiKey reports beside a 401. Split out
 │   ├── api-key-store.js  # API Key Store — reading, saving, and validating API keys.
 │   ├── api-key-validation.js  # API Key Validation — test API keys against provider endpoints.
 │   ├── atomic-write.js  # Atomic file write helper.
@@ -719,6 +720,7 @@ evals/
 | `utils/alias-shadow.js` | Alias-shadow self-diagnosis — name a local alias that repoints a curated one. | `findAliasShadows()`, `formatAliasShadow()`, `noteAliasShadows()`, `auditAliasShadows()` |
 | `utils/alias-state.js` | Following-vs-pinned state for model aliases (#238 D1) and the normalization | `normalizeAliases()`, `listAliasRows()`, `isCurated()` |
 | `utils/alias-store.js` | The write sinks the alias review flow needs beyond `setup.js :: addAlias` | `removeAlias()`, `readDismissals()`, `stampDismissal()`, `recordDismissal()` |
+| `utils/api-key-rejection.js` | The DEFINITIVE key verdicts validateApiKey reports beside a 401. Split out | `MALFORMED_KEY_MESSAGE()`, `isMalformedKey()`, `invalidKey()`, `malformedKey()`, `isGoogleKeyInvalid()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `isTestWriteToRealKeyStore()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `redactSecret()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |

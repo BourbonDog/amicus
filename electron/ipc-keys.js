@@ -31,16 +31,23 @@ const { logger: defaultLogger } = require('../src/utils/logger');
  * at all because the machine is offline all say something about the REQUEST,
  * not the key. Refusing on those would be the false ALARM the doctor
  * classifier stopped raising.
+ *
+ * `keyRejected: true` (src/utils/api-key-rejection.js) carries the same verdict where
+ * the status cannot: google's 400 with reason API_KEY_INVALID — google's 401,
+ * in effect — and a key holding characters no API key contains, refused
+ * before any request (status null). The second is what keeps the wizard's
+ * masked hint out of .env: it validated to `status: null`, which never
+ * blocked, so a direct save-key call wrote it. The CLI blocks on both too.
  */
 const BLOCKS_SAVE = new Set([401]);
 
 /**
  * Would the CLI refuse to persist this key?
- * @param {{valid: boolean, status: number|null}} validation validateApiKey's result
+ * @param {{valid: boolean, status: number|null, keyRejected?: true}} validation validateApiKey's result
  * @returns {boolean}
  */
 function blocksSave(validation) {
-  return !validation.valid && BLOCKS_SAVE.has(validation.status);
+  return !validation.valid && (BLOCKS_SAVE.has(validation.status) || validation.keyRejected === true);
 }
 
 /**
