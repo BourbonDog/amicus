@@ -124,7 +124,9 @@ class FakeElement {
     const path = [];
     let n = this;
     while (n) { path.push(n); n = n.parentNode || (n === this.ownerDocument.body ? this.ownerDocument : null); }
-    path.forEach(node => (node.listeners[type] || []).slice().forEach(fn => fn(event)));
+    // `this` is the listening node, as in a browser (the keys script's
+    // provider buttons read `this.getAttribute`).
+    path.forEach(node => (node.listeners[type] || []).slice().forEach(fn => fn.call(node, event)));
     return event;
   }
   click() { return this.dispatch('click'); }

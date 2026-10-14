@@ -3,11 +3,18 @@
  * Extracted from api-key-store.js to keep modules under 300 lines.
  */
 const https = require('https');
+const { isMalformedKey, invalidKey, malformedKey, isGoogleKeyInvalid } = require('./api-key-rejection');
 
-/** Validation endpoints per provider */
+/**
+ * Validation endpoints per provider. Every one MUST require auth, or the probe
+ * vouches for nothing: openrouter's public /api/v1/models answered 200 and
+ * anthropic's /v1/messages answered 405 (before auth) to ANY key, so both
+ * passed fake keys. The two below answer 200 to a real key and 401 to a fake
+ * one (measured 2026-10-14).
+ */
 const VALIDATION_ENDPOINTS = {
   openrouter: {
-    url: 'https://openrouter.ai/api/v1/models',
+    url: 'https://openrouter.ai/api/v1/key',
     authHeader: (key) => ({ 'Authorization': `Bearer ${key}` })
   },
   openai: {
@@ -15,7 +22,7 @@ const VALIDATION_ENDPOINTS = {
     authHeader: (key) => ({ 'Authorization': `Bearer ${key}` })
   },
   anthropic: {
-    url: 'https://api.anthropic.com/v1/messages',
+    url: 'https://api.anthropic.com/v1/models',
     authHeader: (key) => ({
       'x-api-key': key,
       'anthropic-version': '2023-06-01'
@@ -133,12 +140,14 @@ function redactSecret(text, key) {
  * ALWAYS RESOLVES — never rejects, even on a synchronous throw from https.get
  * (see redactSecret). Two of the three call sites have no catch.
  *
- * @returns {Promise<{valid: boolean, status: number|null, error?: string}>}
+ * @returns {Promise<{valid: boolean, status: number|null, keyRejected?: true, error?: string}>}
  *   `status` is the HTTP status, or null when no response was received. It is
  *   returned as DATA so callers never have to recover it by parsing `error`
  *   (council finding 2): that coupled control flow to message wording, and a
  *   reword that dropped the parentheses would have silently degraded detection
  *   to a permanent "unverified" with nothing failing to announce it.
+ *   `keyRejected` is the same kind of data for the definitive verdict — see
+ *   api-key-rejection.js.
  */
 function validateApiKey(provider, key) {
   if (!key || key.trim().length === 0) {
@@ -151,6 +160,9 @@ function validateApiKey(provider, key) {
   }
 
   const trimmedKey = key.trim();
+  if (isMalformedKey(trimmedKey)) {
+    return Promise.resolve(malformedKey());
+  }
 
   // Google uses query param auth, not header
   let url = endpoint.url;
@@ -175,14 +187,28 @@ function validateApiKey(provider, key) {
         res.on('error', (err) => {
           resolve({ valid: false, status: null, error: redactSecret(messageOf(err), trimmedKey) });
         });
-        res.on('data', () => {});
+        // Only google's 400 is read, for its reason; never echoed. The cap is
+        // in BYTES and exact (a check-then-append let one chunk sail past it),
+        // and the bytes are decoded once, so a character split across chunks
+        // survives. A larger body is not google's ~400-byte key error: it is
+        // cut short, fails to parse, and lands on the non-blocking side.
+        const BODY_CAP = 16384;
+        const chunks = [];
+        let size = 0;
+        const wantBody = provider === 'google' && code === 400;
+        res.on('data', (chunk) => {
+          if (!wantBody || size >= BODY_CAP) { return; }
+          const b = Buffer.from(chunk).subarray(0, BODY_CAP - size);
+          chunks.push(b);
+          size += b.length;
+        });
         res.on('end', () => {
-          // Anthropic: the probe is a GET against /v1/messages, so in practice
-          // a WORKING key answers with a method/shape complaint (400/404/405).
-          // 200 is allowed too — defensively, in case the endpoint ever answers
-          // one — which is why it appears in the allowlist below. The earlier
-          // wording said "never 200" while listing 200 as success; the comment
-          // and the code disagreed (council review of PR 222).
+          const body = wantBody ? Buffer.concat(chunks).toString('utf8') : '';
+          // Anthropic: 200 is the ONLY pass. The probe used to be a GET against
+          // /v1/messages, and 400/404/405 were on the success allowlist because
+          // a working key answered with a method complaint — but that endpoint
+          // answers 405 BEFORE auth, so a fake key passed too. /v1/models
+          // checks the key first (see VALIDATION_ENDPOINTS).
           //
           // ⚠️ This used to be `else { valid: true }` — every code that was not
           // 401/429/5xx passed, INCLUDING 403. A region block or WAF therefore
@@ -192,12 +218,12 @@ function validateApiKey(provider, key) {
           // Success is an ALLOWLIST now; anything unlisted is not-valid.
           if (provider === 'anthropic') {
             if (code === 401) {
-              resolve({ valid: false, status: code, error: 'Invalid API key (401)' });
+              resolve(invalidKey(code, '401'));
             } else if (code === 403) {
               resolve({ valid: false, status: code, error: FORBIDDEN_MESSAGE });
             } else if (code >= 500 || code === 429) {
               resolve({ valid: false, status: code, error: `Server error (${code})` });
-            } else if (code === 200 || code === 400 || code === 404 || code === 405) {
+            } else if (code === 200) {
               resolve({ valid: true, status: code });
             } else {
               resolve({ valid: false, status: code, error: `Unexpected response (${code})` });
@@ -208,7 +234,9 @@ function validateApiKey(provider, key) {
           if (code === 200) {
             resolve({ valid: true, status: code });
           } else if (code === 401) {
-            resolve({ valid: false, status: code, error: 'Invalid API key (401)' });
+            resolve(invalidKey(code, '401'));
+          } else if (wantBody && isGoogleKeyInvalid(body)) {
+            resolve(invalidKey(code, '400 API_KEY_INVALID'));
           } else if (code === 403) {
             // NOT stated as a bad key (council finding 1). Google returns 403
             // for "API not enabled" and for quota; a WAF returns it for bot

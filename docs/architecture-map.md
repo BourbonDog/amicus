@@ -209,6 +209,7 @@ src/
 │   ├── alias-shadow.js  # Alias-shadow self-diagnosis — name a local alias that repoints a curated one.
 │   ├── alias-state.js  # Following-vs-pinned state for model aliases (#238 D1) and the normalization
 │   ├── alias-store.js  # The write sinks the alias review flow needs beyond `setup.js :: addAlias`
+│   ├── api-key-rejection.js  # Definitive key rejections besides a 401 (google API_KEY_INVALID, malformed keys).
 │   ├── api-key-store.js  # API Key Store — reading, saving, and validating API keys.
 │   ├── api-key-validation.js  # API Key Validation — test API keys against provider endpoints.
 │   ├── atomic-write.js  # Atomic file write helper.
@@ -409,7 +410,7 @@ electron/
 ├── fold.js  # Fold Logic
 ├── ipc-aliases.js  # IPC for the setup wizard's "Needs review" section (issue 238 D9, Phase 3).
 ├── ipc-guard.js  # IPC Guard Helpers
-├── ipc-keys.js  # Key IPC handlers for the setup window: `sidecar:validate-key` and
+├── ipc-keys.js  # Key IPC handlers for the setup window: `sidecar:validate-key`,
 ├── ipc-setup-local.js  # IPC handlers for the Electron wizard's "Local server" card (Task 13, v4.2 §4.6).
 ├── ipc-setup.js  # IPC Setup Handlers
 ├── ipc-workspace.js  # Council Workspace IPC (v4.4 §4.5) — all seven workspace: channels.
@@ -719,6 +720,7 @@ evals/
 | `utils/alias-shadow.js` | Alias-shadow self-diagnosis — name a local alias that repoints a curated one. | `findAliasShadows()`, `formatAliasShadow()`, `noteAliasShadows()`, `auditAliasShadows()` |
 | `utils/alias-state.js` | Following-vs-pinned state for model aliases (#238 D1) and the normalization | `normalizeAliases()`, `listAliasRows()`, `isCurated()` |
 | `utils/alias-store.js` | The write sinks the alias review flow needs beyond `setup.js :: addAlias` | `removeAlias()`, `readDismissals()`, `stampDismissal()`, `recordDismissal()` |
+| `utils/api-key-rejection.js` | Definitive key rejections besides a 401 (google API_KEY_INVALID, malformed keys). | `isMalformedKey()`, `invalidKey()`, `malformedKey()`, `isGoogleKeyInvalid()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `isTestWriteToRealKeyStore()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `redactSecret()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |

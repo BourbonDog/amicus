@@ -171,6 +171,12 @@ function classifyProbeFailure(res) {
   if (status !== null && DEFINITIVE_STATUSES.has(status)) {
     return { definitive: true, reason: `rejected (HTTP ${status})` };
   }
+  // The validator's structured flag for a definitive rejection that is not a
+  // 401: google's 400 API_KEY_INVALID, or a stored key no provider could
+  // issue (refused before any request, so no status). Only a literal true.
+  if (r.keyRejected === true) {
+    return { definitive: true, reason: status !== null ? `rejected (HTTP ${status})` : 'rejected (malformed key)' };
+  }
   if (status === 403) {
     // Deliberately NOT definitive (council finding 1). Google returns 403 for
     // "API not enabled" and for quota; a WAF returns it for bot protection.

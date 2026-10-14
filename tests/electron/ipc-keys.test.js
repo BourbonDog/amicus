@@ -35,8 +35,9 @@ const CATALOG = [
  * @param {object|Error} [opts.validation] resolved value of validateApiKey, or an Error to throw
  * @param {object} [opts.saveResult] return value of saveApiKey
  * @param {Array} [opts.catalog] catalog getCatalog resolves to
+ * @param {object} [opts.storedKeys] what readApiKeyValues returns (provider -> stored key)
  */
-function registerKeys({ validation, saveResult, catalog } = {}) {
+function registerKeys({ validation, saveResult, catalog, storedKeys } = {}) {
   jest.resetModules();
   const handlers = {};
   const saveApiKey = jest.fn(() => saveResult || { success: true });
@@ -53,7 +54,7 @@ function registerKeys({ validation, saveResult, catalog } = {}) {
     removeApiKey: jest.fn(),
     readApiKeys: jest.fn(() => ({})),
     readApiKeyHints: jest.fn(() => ({})),
-    readApiKeyValues: jest.fn(() => ({})),
+    readApiKeyValues: jest.fn(() => storedKeys || {}),
   }));
   jest.doMock('../../src/utils/model-catalog', () => ({
     getCatalog, refreshCatalog,
@@ -78,9 +79,9 @@ function registerKeys({ validation, saveResult, catalog } = {}) {
 const drainImmediates = () => new Promise((r) => setImmediate(r));
 
 describe('registerKeyHandlers', () => {
-  it('registers exactly the two key channels on the injected ipcMain', () => {
+  it('registers exactly the three key channels on the injected ipcMain', () => {
     const { handlers } = registerKeys();
-    expect(Object.keys(handlers).sort()).toEqual(['sidecar:save-key', 'sidecar:validate-key']);
+    expect(Object.keys(handlers).sort()).toEqual(['sidecar:save-key', 'sidecar:test-stored-key', 'sidecar:validate-key']);
   });
 });
 
@@ -95,6 +96,64 @@ describe('sidecar:validate-key', () => {
     const { handlers } = registerKeys({ validation: new Error('socket hang up') });
     expect(await handlers['sidecar:validate-key']({}, 'openai', 'sk-x'))
       .toEqual({ valid: false, error: 'socket hang up' });
+  });
+});
+
+// 2026-10-14: the setup window pre-filled the key box with the MASKED HINT and
+// Save & Test sent it as the key. The hint is now only a placeholder; an empty
+// box on a configured provider asks THIS channel to test the stored key. The
+// key is read and probed here, in the main process — the renderer gets back a
+// verdict, never the key.
+describe('sidecar:test-stored-key re-tests the stored key without exposing it', () => {
+  const STORED = 'sk-proj-STORED-SECRET-0123456789';
+
+  it('probes the key the store holds and returns only the verdict', async () => {
+    const { handlers, validateApiKey, saveApiKey } = registerKeys({
+      storedKeys: { openai: STORED }, validation: { valid: true, status: 200 },
+    });
+    const r = await handlers['sidecar:test-stored-key']({}, 'openai');
+    expect(validateApiKey).toHaveBeenCalledWith('openai', STORED);
+    expect(r).toEqual({ valid: true, status: 200 });
+    expect(saveApiKey).not.toHaveBeenCalled();
+  });
+
+  it('passes a rejection through, flag included', async () => {
+    const { handlers } = registerKeys({
+      storedKeys: { anthropic: STORED },
+      validation: { valid: false, status: 401, keyRejected: true, error: 'Invalid API key (401)' },
+    });
+    expect(await handlers['sidecar:test-stored-key']({}, 'anthropic'))
+      .toEqual({ valid: false, status: 401, keyRejected: true, error: 'Invalid API key (401)' });
+  });
+
+  it('copies only the verdict fields, and redacts the key from the error', async () => {
+    // A validator is trusted to redact; this channel does not depend on it.
+    const { handlers } = registerKeys({
+      storedKeys: { openai: STORED },
+      validation: { valid: false, status: null, error: `boom ${STORED}`, echoed: STORED },
+    });
+    const r = await handlers['sidecar:test-stored-key']({}, 'openai');
+    expect(JSON.stringify(r)).not.toContain(STORED);
+    expect(Object.keys(r).sort()).toEqual(['error', 'status', 'valid']);
+  });
+
+  it('a probe that throws degrades to a verdict, with the key redacted', async () => {
+    const { handlers } = registerKeys({ storedKeys: { openai: STORED }, validation: new Error(`socket hang up ${STORED}`) });
+    const r = await handlers['sidecar:test-stored-key']({}, 'openai');
+    expect(r.valid).toBe(false);
+    expect(r.status).toBeNull();
+    expect(r.error).toMatch(/socket hang up/);
+    expect(JSON.stringify(r)).not.toContain(STORED);
+  });
+
+  it.each([
+    ['nothing is stored for the provider', {}, 'openai'],
+    ['a provider name that is an Object.prototype key', {}, 'constructor'],
+  ])('%s → a plain "no stored key" verdict, nothing probed', async (_label, storedKeys, provider) => {
+    const { handlers, validateApiKey } = registerKeys({ storedKeys });
+    const r = await handlers['sidecar:test-stored-key']({}, provider);
+    expect(validateApiKey).not.toHaveBeenCalled();
+    expect(r).toEqual({ valid: false, status: null, error: 'No key is stored for this provider' });
   });
 });
 
@@ -228,6 +287,46 @@ describe('the CLI rule is mirrored, not reinvented (src/cli-handlers.js :: handl
     // the CLI reads first — honour it.
     expect(blocksSave({ valid: true, status: 401 })).toBe(false);
     expect(blocksSave({ valid: true, status: 200 })).toBe(false);
+  });
+});
+
+describe('a definitive rejection that is not a 401 also blocks (keyRejected)', () => {
+  // validateApiKey flags `keyRejected: true` when the provider (or the key's
+  // own shape) says the credential can never work: a 401, google's 400 with
+  // reason API_KEY_INVALID, or a key holding characters no API key contains.
+  // Each is the same verdict a 401 is — "this credential is not accepted" —
+  // so each blocks a save exactly as a 401 does.
+  test('google 400 API_KEY_INVALID blocks', async () => {
+    const { blocksSave } = require('../../electron/ipc-keys');
+    expect(blocksSave({ valid: false, status: 400, keyRejected: true })).toBe(true);
+    expect(blocksSave({ valid: false, status: null, keyRejected: true })).toBe(true);
+    // The flag never overrides `valid`, and its absence changes nothing.
+    expect(blocksSave({ valid: true, status: 200, keyRejected: true })).toBe(false);
+    expect(blocksSave({ valid: false, status: 400 })).toBe(false);
+  });
+
+  test('a flagged rejection is never persisted through save-key', async () => {
+    const { handlers, saveApiKey } = registerKeys({
+      validation: { valid: false, status: 400, keyRejected: true, error: 'Invalid API key (400 API_KEY_INVALID)' },
+    });
+    const result = await handlers['sidecar:save-key']({}, 'google', 'AIza-bad');
+    expect(saveApiKey).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ success: false, error: 'Invalid API key (400 API_KEY_INVALID)' });
+  });
+
+  // The wizard pre-filled its box with the MASKED HINT and could send it on.
+  // Through the REAL validator (no network: the shape check refuses it before
+  // any request), a direct save-key call with the hint must write nothing —
+  // before this, the probe answered `status: null`, which does not block, and
+  // the hint landed in .env.
+  test('the masked hint is never written into .env, even by a direct IPC call', async () => {
+    const { handlers, saveApiKey, validateApiKey } = registerKeys();
+    const real = jest.requireActual('../../src/utils/api-key-validation');
+    validateApiKey.mockImplementation(real.validateApiKey);
+    const hint = 'sk-or-v1' + '•'.repeat(12);
+    const result = await handlers['sidecar:save-key']({}, 'openrouter', hint);
+    expect(saveApiKey).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
   });
 });
 

@@ -1,8 +1,9 @@
 /**
  * Tests for src/utils/api-key-validation.js — checkOpenRouterCredit (#38)
  *
- * A zero-credit or free-tier OpenRouter key passes /api/v1/models validation
- * but every paid model 402s at runtime. checkOpenRouterCredit does a
+ * A zero-credit or free-tier OpenRouter key passes validateApiKey (an auth
+ * check against /api/v1/key — it reads the status, not the balance) but every
+ * paid model 402s at runtime. checkOpenRouterCredit does a
  * NON-BLOCKING GET https://openrouter.ai/api/v1/key and WARNS (never blocks)
  * when is_free_tier is true or limit_remaining <= 0.
  *

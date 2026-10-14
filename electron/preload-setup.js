@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('sidecarSetup', {
     const allowedChannels = [
       'sidecar:validate-key',
       'sidecar:save-key',
+      'sidecar:test-stored-key',
       'sidecar:remove-key',
       'sidecar:remove-from-opencode',
       'sidecar:setup-done',

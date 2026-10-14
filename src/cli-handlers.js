@@ -206,8 +206,12 @@ async function handleKey(args) {
   // to process.exit(1) while the comment above it claimed only 401 blocked —
   // the code and the narrative disagreed, and the narrative was the nicer of
   // the two. An allowlist cannot rot as new status codes appear.
+  // `keyRejected` is the same verdict where the status cannot carry it
+  // (google's 400 API_KEY_INVALID; a malformed key, status null) — see
+  // utils/api-key-rejection.js. electron/ipc-keys.js :: blocksSave mirrors this.
   const BLOCKS_SAVE = new Set([401]);
-  if (!validation.valid && !BLOCKS_SAVE.has(validation.status)) {
+  const blocks = BLOCKS_SAVE.has(validation.status) || validation.keyRejected === true;
+  if (!validation.valid && !blocks) {
     console.warn(`Warning: ${validation.error}`);
     console.warn('Saving the key anyway — run `amicus doctor` to re-check it later.');
   } else if (!validation.valid) {

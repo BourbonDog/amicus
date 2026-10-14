@@ -1,6 +1,6 @@
 /**
- * Key IPC handlers for the setup window: `sidecar:validate-key` and
- * `sidecar:save-key`.
+ * Key IPC handlers for the setup window: `sidecar:validate-key`,
+ * `sidecar:save-key` and `sidecar:test-stored-key`.
  *
  * Split out of electron/ipc-setup.js for issue 212. That file was at 294 of
  * the 300-line gate, and issue 212's fix — save-key validating in the MAIN
@@ -31,16 +31,40 @@ const { logger: defaultLogger } = require('../src/utils/logger');
  * at all because the machine is offline all say something about the REQUEST,
  * not the key. Refusing on those would be the false ALARM the doctor
  * classifier stopped raising.
+ *
+ * `keyRejected: true` (src/utils/api-key-rejection.js) carries the same
+ * verdict where the status cannot: google's 400 with reason API_KEY_INVALID
+ * — google's 401, in effect — and a key holding characters no API key
+ * contains, refused before any request (status null). The second is what
+ * keeps the wizard's masked hint out of .env: it validated to `status: null`,
+ * which never blocked, so a direct save-key call wrote it. The CLI blocks on
+ * both too.
  */
 const BLOCKS_SAVE = new Set([401]);
 
 /**
  * Would the CLI refuse to persist this key?
- * @param {{valid: boolean, status: number|null}} validation validateApiKey's result
+ * @param {{valid: boolean, status: number|null, keyRejected?: true}} validation validateApiKey's result
  * @returns {boolean}
  */
 function blocksSave(validation) {
-  return !validation.valid && BLOCKS_SAVE.has(validation.status);
+  return !validation.valid && (BLOCKS_SAVE.has(validation.status) || validation.keyRejected === true);
+}
+
+/**
+ * The verdict fields of a validateApiKey result, and nothing else, with the
+ * key redacted from the error. sidecar:test-stored-key answers the RENDERER
+ * about a key the renderer must never see, so it does not lean on the
+ * validator's own redaction: a field added there later cannot carry the key
+ * across.
+ */
+function verdictOnly(validation, key) {
+  const { redactSecret } = require('../src/utils/api-key-validation');
+  const v = validation || {};
+  const out = { valid: v.valid === true, status: typeof v.status === 'number' ? v.status : null };
+  if (v.keyRejected === true) { out.keyRejected = true; }
+  if (v.error !== undefined) { out.error = redactSecret(v.error, key); }
+  return out;
 }
 
 /**
@@ -58,6 +82,30 @@ function registerKeyHandlers({ ipcMain, offerCatalogs, logger = defaultLogger })
     } catch (err) {
       logger.error('validate-key handler error', { error: err.message });
       return { valid: false, error: err.message };
+    }
+  });
+
+  // Save & Test on a configured provider's EMPTY box (2026-10-14). The box used
+  // to hold the masked hint (8 chars + bullets) as its VALUE, and Save & Test
+  // sent that as the key: every vendor failed, each its own way. The hint is
+  // only the placeholder now, and this re-tests the STORED key here, in the
+  // main process. The renderer gets a verdict back, never the key, and
+  // nothing is written.
+  ipcMain.handle('sidecar:test-stored-key', async (_event, provider) => {
+    let key = '';
+    try {
+      const { readApiKeyValues, validateApiKey } = require('../src/utils/api-key-store');
+      const values = readApiKeyValues() || {};
+      // hasOwnProperty: a provider named 'constructor' must not read
+      // Object.prototype.constructor as a stored key.
+      key = Object.prototype.hasOwnProperty.call(values, provider) ? values[provider] : '';
+      if (!key) { return { valid: false, status: null, error: 'No key is stored for this provider' }; }
+      return verdictOnly(await validateApiKey(provider, key), key);
+    } catch (err) {
+      const { redactSecret } = require('../src/utils/api-key-validation');
+      const error = redactSecret(err && err.message ? err.message : err, key);
+      logger.error('test-stored-key handler error', { provider, error });
+      return { valid: false, status: null, error };
     }
   });
 

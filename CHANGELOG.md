@@ -3,6 +3,32 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **Anthropic and OpenRouter keys are checked against endpoints that require a key.** The anthropic
+  probe was a `GET` against `/v1/messages`, which answers 405 before it looks at the key, and 405
+  counted as a pass. The openrouter probe was the public `/api/v1/models` listing, which answers 200
+  to anyone. So the setup wizard, `amicus key` and `amicus doctor`'s key-auth row accepted ANY
+  anthropic or openrouter key. They now probe `GET /v1/models` and `GET /api/v1/key`, which answer
+  200 to a real key and 401 to a fake one.
+- **"Save & Test" in the setup window re-tests a stored key instead of testing its masked hint.**
+  For a provider that already had a key, the box was pre-filled with the hint (the first 8
+  characters, then bullets), and Save & Test sent the hint as the key. Every vendor failed, each
+  with a different error, and pasting a key into the box appended it to the hint. The hint is now
+  only the box's placeholder. Typing or pasting replaces it, and Save & Test on the empty box
+  re-tests the stored key in the main process, which never hands the key to the window. Picking
+  another provider while a test or a removal is still running no longer saves the key under, or
+  shows the result on, the provider picked meanwhile.
+- **A rejected key says so in words.** Google's answer to a bad key (HTTP 400, `API_KEY_INVALID`)
+  read as "Unexpected response (400)", and a key containing characters no API key has produced
+  Node's raw "Invalid character in header content". They are now "Invalid API key (400
+  API_KEY_INVALID)" and "The key contains characters that aren't valid in an API key — paste the
+  full key". Both are definitive rejections like a 401: the wizard and `amicus key` refuse to save
+  them, and `amicus doctor` reports them as rejected. Google's 403 (a disabled API or a quota) is
+  still a warning that saves.
+
 ## [4.14.2] - 2026-09-29
 
 ### Security
