@@ -503,13 +503,13 @@ evals/
 <!-- AUTO:modules -->
 | Module | Purpose | Key Exports |
 |--------|---------|-------------|
-| `cli-council-run-bench.js` | Bench and input resolution for the council run command. | `resolveBench()`, `resolveChair()`, `resolveCritic()`, `CHAIR_DEFAULT()`, `parseList()` |
+| `cli-council-run-bench.js` | Bench and input resolution for the council run command. | `resolveBench()`, `resolveChair()`, `resolveCritic()`, `CHAIR_DEFAULT`, `parseList()` |
 | `cli-council-run-render.js` |  | `renderRunHuman()` |
 | `cli-council-run-tools.js` | `--tools`/`--agent` validation and the two out-dir fences (placement, in use) for `council run`. | `checkCouncilRunTools()` |
 | `cli-handlers-abort.js` | CLI Abort Handler (B21-rest extraction) | `handleAbort()` |
-| `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `renderRunHuman()`, `CHAIR_DEFAULT()` |
+| `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `renderRunHuman()`, `CHAIR_DEFAULT` |
 | `cli-handlers-council.js` |  | `handleCouncil()` |
-| `cli-handlers-doctor.js` |  | `runDoctorChecks()`, `handleDoctor()`, `MAX_CATALOG_AGE_MS()` |
+| `cli-handlers-doctor.js` |  | `runDoctorChecks()`, `handleDoctor()`, `MAX_CATALOG_AGE_MS` |
 | `cli-handlers-fanout.js` | CLI handler for the fanout command (multi-model parallel runs). | `handleFanout()` |
 | `cli-handlers-init.js` | `amicus init [--claude] [--desktop] [--json]` (v4.2 §4.8, C2). Re-runs the | `handleInit()` |
 | `cli-handlers-key-local.js` | amicus key <localId> — bearer lifecycle for a config-defined local / | `handleLocalKey()`, `formatLocalKeyList()`, `maskKey()` |
@@ -522,47 +522,47 @@ evals/
 | `cli-handlers-template.js` |  | `handleTemplate()` |
 | `cli-handlers-watch.js` |  | `handleWatch()`, `resolveWatchTarget()` |
 | `cli-handlers.js` | CLI Command Handlers | `handleSetup()`, `handleAbort()`, `handleUpdate()`, `handleMcp()`, `handleKey()` |
-| `cli-template-args.js` |  | `applyTemplateForArgs()`, `NEEDS_TEMPLATE_MSG()` |
+| `cli-template-args.js` |  | `applyTemplateForArgs()`, `NEEDS_TEMPLATE_MSG` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `getCommandNames()`, `getBooleanFlags()` |
 | `conflict.js` | File Conflict Detection Module | `detectConflicts()`, `formatConflictWarning()` |
-| `context-compression.js` | Context Compression Module | `compressContext()`, `estimateTokenCount()`, `buildPreamble()`, `DEFAULT_TOKEN_LIMIT()` |
+| `context-compression.js` | Context Compression Module | `compressContext()`, `estimateTokenCount()`, `buildPreamble()`, `DEFAULT_TOKEN_LIMIT` |
 | `context.js` | Context Filtering Module | `filterContext()`, `parseDuration()`, `estimateTokens()`, `takeLastNTurns()` |
 | `drift.js` | Context Drift Detection Module | `calculateDrift()`, `formatDriftWarning()`, `countTurnsSince()`, `isDriftSignificant()` |
-| `environment.js` | Environment Detection Module | `inferClient()`, `getSessionRoot()`, `detectEnvironment()`, `VALID_CLIENTS()` |
+| `environment.js` | Environment Detection Module | `inferClient()`, `getSessionRoot()`, `detectEnvironment()`, `VALID_CLIENTS` |
 | `headless.js` | Headless Mode Runner | `runHeadless()`, `waitForServer()`, `withTimeout()`, `extractSummary()`, `findTrailingFoldMarker()` |
 | `index.js` | Amicus - Main Module | `startAmicus()`, `listAmicus()`, `resumeAmicus()`, `continueAmicus()`, `readAmicus()` |
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
 | `mcp-council-awareness.js` |  | `subWaveIds()`, `countWaveLegs()`, `elapsedOf()`, `enginePid()`, `buildCouncilStatusPayload()` |
 | `mcp-council-bench.js` |  | `resolveBenchInput()`, `auditBenchAliases()` |
-| `mcp-council-pack-map.js` | COUNCIL_PACK_PARAM_MAP, split out of mcp-council-run.js for the 300-line size gate (P2-R16). | `COUNCIL_PACK_PARAM_MAP()` |
+| `mcp-council-pack-map.js` | COUNCIL_PACK_PARAM_MAP, split out of mcp-council-run.js for the 300-line size gate (P2-R16). | `COUNCIL_PACK_PARAM_MAP` |
 | `mcp-council-run-dir.js` | amicus_council_run's run dir: `outDir` resolved and refused before any write (containment, then D-04's in-use check), split out of mcp-council-run.js for the 300-line size gate. | `resolveMcpRunDir()` |
-| `mcp-council-run.js` |  | `handleCouncilRunTool()`, `COUNCIL_PACK_PARAM_MAP()`, `buildCouncilStatusPayload()`, `listCouncilRuns()`, `abortCouncilRun()` |
+| `mcp-council-run.js` |  | `handleCouncilRunTool()`, `COUNCIL_PACK_PARAM_MAP`, `buildCouncilStatusPayload()`, `listCouncilRuns()`, `abortCouncilRun()` |
 | `mcp-notify.js` | Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'` | `validateOnComplete()`, `buildNotifyPayload()`, `requestMcpNotify()`, `consumeMcpNotify()` |
-| `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |
+| `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |
 | `mcp-spend.js` |  | `amicus_spend()`, `buildSpendResult()` |
 | `mcp-tools.js` | MCP Tool Definitions for Amicus | `getTools()`, `getGuideText()`, `safeTaskId()`, `safeModel()` |
 | `mcp-wait.js` | Engine for the amicus_wait MCP tool: blocks inside one tool call until a session/wave reaches a terminal state or the wait window closes. | `runWait()`, `registerInProcessRun()`, `settleInProcessRun()`, `hasInProcessRun()`, `clampTimeout()` |
-| `opencode-client.js` | OpenCode SDK Client Wrapper | `INSUFFICIENT_CREDITS_REASON()`, `providerErrorReason()`, `parseModelString()`, `createClient()`, `createSession()` |
+| `opencode-client.js` | OpenCode SDK Client Wrapper | `INSUFFICIENT_CREDITS_REASON`, `providerErrorReason()`, `parseModelString()`, `createClient()`, `createSession()` |
 | `project-root-allowlist.js` | The MCP `project` / cwd input becomes the session-store parent AND the spawned | `isAllowedProjectRoot()`, `isPathInside()`, `allowedRoots()` |
-| `prompt-builder.js` | System Prompt Builder | `buildSystemPrompt()`, `buildPrompts()`, `buildEnvironmentSection()`, `getSummaryTemplate()`, `SUMMARY_TEMPLATE()` |
+| `prompt-builder.js` | System Prompt Builder | `buildSystemPrompt()`, `buildPrompts()`, `buildEnvironmentSection()`, `getSummaryTemplate()`, `SUMMARY_TEMPLATE` |
 | `session-manager.js` | Session Manager Module | `createSession()`, `updateSession()`, `getSession()`, `saveConversation()`, `saveSummary()` |
 | `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `spend-query.js` |  | `filterRows()`, `groupRows()`, `computeWasted()`, `emptyTokens()`, `addTokens()` |
-| `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS()` |
-| `council/briefings-chair-task.js` |  | `CHAIR_ANSWER_VALUES()`, `ANSWER_SCALE_ADDENDUM()`, `TASK_CHAIR_SYNTHESIS()`, `TASK_CHAIR_SYNTHESIS_NO_CLAIMS()`, `TASK_CONCURRENCE_CAVEAT()` |
-| `council/briefings-chair.js` |  | `dateLine()`, `CHAIR_NO_TOOLS_LEAD()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `chairRepairPromptFor()`, `CHAIR_VERDICT_VALUES()` |
-| `council/briefings-debate.js` |  | `DEBATE_NO_TOOLS_PREAMBLE()`, `DEFENSE_CONTRACT()`, `REVOTE_CONTRACT()`, `buildDefenseBrief()`, `buildRevoteBundle()` |
-| `council/briefings-stage2-task.js` |  | `TASK_JUDGE_FRAME()`, `TASK_JUDGE_A()`, `TASK_JUDGE_B()`, `TASK_JUDGE_B_NO_CLAIMS()`, `NO_CLAIMS_INDEX()` |
-| `council/briefings-stage2.js` |  | `JUDGE_NO_TOOLS_PREAMBLE()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `JUDGE_OUTPUT_CONTRACT()`, `VERDICT_SCALE_ADDENDUM()` |
-| `council/briefings-task.js` |  | `TASK_ANTI_SYCOPHANCY_CLAUSE()`, `TASK_FINDINGS_JSON_SHAPE()`, `TASK_FINDINGS_CONTRACT()`, `buildTaskSeatBriefing()`, `buildTaskCriticBriefing()` |
-| `council/briefings.js` |  | `ANTI_SYCOPHANCY_CLAUSE()`, `FINDINGS_CONTRACT()`, `FINDINGS_JSON_SHAPE()`, `FINDINGS_TWO_PART_FRAMING()`, `buildSeatBriefing()` |
+| `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS` |
+| `council/briefings-chair-task.js` |  | `CHAIR_ANSWER_VALUES`, `ANSWER_SCALE_ADDENDUM`, `TASK_CHAIR_SYNTHESIS`, `TASK_CHAIR_SYNTHESIS_NO_CLAIMS`, `TASK_CONCURRENCE_CAVEAT` |
+| `council/briefings-chair.js` |  | `dateLine()`, `CHAIR_NO_TOOLS_LEAD`, `CHAIR_NO_TOOLS_PREAMBLE`, `chairRepairPromptFor()`, `CHAIR_VERDICT_VALUES` |
+| `council/briefings-debate.js` |  | `DEBATE_NO_TOOLS_PREAMBLE`, `DEFENSE_CONTRACT`, `REVOTE_CONTRACT`, `buildDefenseBrief()`, `buildRevoteBundle()` |
+| `council/briefings-stage2-task.js` |  | `TASK_JUDGE_FRAME`, `TASK_JUDGE_A`, `TASK_JUDGE_B`, `TASK_JUDGE_B_NO_CLAIMS`, `NO_CLAIMS_INDEX` |
+| `council/briefings-stage2.js` |  | `JUDGE_NO_TOOLS_PREAMBLE`, `CHAIR_NO_TOOLS_PREAMBLE`, `CHAIR_VERDICT_VALUES`, `JUDGE_OUTPUT_CONTRACT()`, `VERDICT_SCALE_ADDENDUM` |
+| `council/briefings-task.js` |  | `TASK_ANTI_SYCOPHANCY_CLAUSE`, `TASK_FINDINGS_JSON_SHAPE`, `TASK_FINDINGS_CONTRACT`, `buildTaskSeatBriefing()`, `buildTaskCriticBriefing()` |
+| `council/briefings.js` |  | `ANTI_SYCOPHANCY_CLAUSE`, `FINDINGS_CONTRACT`, `FINDINGS_JSON_SHAPE`, `FINDINGS_TWO_PART_FRAMING`, `buildSeatBriefing()` |
 | `council/chair-fallback.js` |  | `pickFallbackChair()`, `classifyChairAttempt()` |
-| `council/debate.js` |  | `applyDebate()`, `decorateRecord()`, `debateRunStatsRows()`, `PAST_TENSE()`, `DEBATE_ROLES()` |
-| `council/findings.js` |  | `validateFindings()`, `buildValidateDoc()`, `SEVERITIES()`, `lastJsonBlock()`, `countAttemptedFindings()` |
+| `council/debate.js` |  | `applyDebate()`, `decorateRecord()`, `debateRunStatsRows()`, `PAST_TENSE`, `DEBATE_ROLES` |
+| `council/findings.js` |  | `validateFindings()`, `buildValidateDoc()`, `SEVERITIES`, `lastJsonBlock()`, `countAttemptedFindings()` |
 | `council/ledger-join.js` |  | `benchLegs()`, `credFor()`, `splitFindingsBySeat()`, `meanCred()` |
-| `council/ledger-stats.js` |  | `LEDGER_FILE()`, `readRows()`, `avg()`, `countRuns()`, `deriveReliability()` |
-| `council/ledger.js` |  | `buildLedgerRows()`, `appendRun()`, `deriveReliability()`, `buildStatsDoc()`, `LEDGER_FILE()` |
-| `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()`, `parseChairAnswer()` |
+| `council/ledger-stats.js` |  | `LEDGER_FILE`, `readRows()`, `avg()`, `countRuns()`, `deriveReliability()` |
+| `council/ledger.js` |  | `buildLedgerRows()`, `appendRun()`, `deriveReliability()`, `buildStatsDoc()`, `LEDGER_FILE` |
+| `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS`, `JUDGE_VERDICTS`, `parseChairAnswer()` |
 | `council/peer-split.js` |  | `peersOf()`, `unattributedPeerDrops()` |
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
 | `council/promoted.js` | The ONE vocabulary for a leg that answered only in its reasoning channel (#257). | `isPromotedLeg()`, `promotedFacts()`, `tokenSplit()`, `reasoningOnlyClause()`, `reportedTokens()` |
@@ -570,7 +570,7 @@ evals/
 | `council/report-html.js` |  | `renderHtml()` |
 | `council/report-lost-rows.js` |  | `lostRowsOf()` |
 | `council/report-md.js` |  | `renderMd()` |
-| `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()`, `isSeatSpace()` |
+| `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER`, `SYMBOL`, `isSeatSpace()` |
 | `council/run-assemble.js` |  | `buildRunStatsEntry()`, `worseConformance()`, `buildTallyInput()`, `writeTallyFiles()`, `writeVerdictFiles()` |
 | `council/run-budget.js` |  | `createBudget()` |
 | `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()`, `classifyChairAttempt()` |
@@ -578,10 +578,10 @@ evals/
 | `council/run-debate-stage.js` |  | `runDebateStage()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
 | `council/run-degrade.js` |  | `createDegradeSink()`, `noteDroppedMembers()` |
-| `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
+| `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT` |
 | `council/run-finish.js` |  | `finishRun()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
-| `council/run-retry-gate.js` | The once-only Stage-1 retry's death-class gate (D-06): an OUTPUT_LENGTH death is held, never relaunched. | `isOutputLengthLoss()`, `outputLengthSkipClause()`, `OUTPUT_LENGTH_SKIP_CLAUSE()` |
+| `council/run-retry-gate.js` | The once-only Stage-1 retry's death-class gate (D-06): an OUTPUT_LENGTH death is held, never relaunched. | `isOutputLengthLoss()`, `outputLengthSkipClause()`, `OUTPUT_LENGTH_SKIP_CLAUSE` |
 | `council/run-retry-group.js` |  | `lensIndexOf()`, `recordFailure()`, `groupStage1Losses()`, `planStillDeadSources()`, `seatKey()` |
 | `council/run-retry-keys.js` |  | `seatKey()`, `twinAliases()`, `legLossKey()`, `srcLegClaimer()` |
 | `council/run-retry-launch.js` |  | `briefingFor()`, `bindRetryWave()` |
@@ -595,33 +595,33 @@ evals/
 | `council/run-stage1-rows.js` |  | `pushDeadSeatRows()`, `supersededRows()` |
 | `council/run-stage1-superseded.js` |  | `supersededRows()` |
 | `council/run-stage2-judge.js` | ONE judge leg, adjudicated: the body of `run-stage2.js :: runStage2`'s leg | `adjudicateJudgeLeg()` |
-| `council/run-stage2-notes.js` |  | `thinCrossReviewNote()`, `thinCrossReviewWhy()`, `MIN_CROSS_REVIEW_JUDGES()`, `judgeDeadNote()`, `promotedJudgeNote()` |
+| `council/run-stage2-notes.js` |  | `thinCrossReviewNote()`, `thinCrossReviewWhy()`, `MIN_CROSS_REVIEW_JUDGES`, `judgeDeadNote()`, `promotedJudgeNote()` |
 | `council/run-stage2.js` |  | `runStage2()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |
-| `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `initCouncilRun()`, `checkpoint()` |
+| `council/run-state.js` |  | `RUN_FILE`, `readRun()`, `initRun()`, `initCouncilRun()`, `checkpoint()` |
 | `council/run-stats-entry.js` |  | `buildRunStatsEntry()` |
 | `council/run-verdict-files.js` |  | `writeVerdictFiles()` |
-| `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
-| `council/seat-tools.js` |  | `REFUSED_TOOL_IDS()`, `REMOTE_TOOL_IDS()`, `NON_LOCAL_TOOL_IDS()`, `SEAT_READ_DENY_PATTERNS()`, `defaultToolsFor()` |
+| `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT` |
+| `council/seat-tools.js` |  | `REFUSED_TOOL_IDS`, `REMOTE_TOOL_IDS`, `NON_LOCAL_TOOL_IDS`, `SEAT_READ_DENY_PATTERNS`, `defaultToolsFor()` |
 | `council/seats.js` |  | `buildSeats()`, `roleAt()`, `bindSeats()`, `artifactName()`, `displayName()` |
 | `council/stage1-bind.js` |  | `bindStage1Waves()`, `orphanLegNote()`, `missingSeatDeadWave()`, `bindPaddedWave()` |
 | `council/street-cred.js` |  | `computeStreetCred()`, `rankPositions()`, `credSeats()` |
-| `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
+| `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION` |
 | `council/verdict-seat-loss.js` |  | `summarizeSeatLoss()`, `deriveSeatLoss()` |
 | `council/verdict-seats-reviewed.js` | #202: the bench-seat census for verdict.json, as a spreadable fragment. | `seatsReviewedOf()`, `isBenchRole()`, `isUnverifiedSeat()`, `isRefusedSeat()`, `seatLabel()` |
 | `council/verdict.js` |  | `buildVerdict()`, `summarizeSeatLoss()`, `deriveSeatLoss()`, `readOverallVerdict()`, `readPriorVerdictSurfaces()` |
-| `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
+| `design/tokens.js` |  | `tokenCss()`, `TOKENS` |
 | `observe/council-legs.js` |  | `buildLegRows()` |
-| `observe/events.js` |  | `appendEvent()`, `createEventTail()`, `EVENTS_FILE()`, `EVENTS_SCHEMA_VERSION()`, `emitWaveStarted()` |
+| `observe/events.js` |  | `appendEvent()`, `createEventTail()`, `EVENTS_FILE`, `EVENTS_SCHEMA_VERSION`, `emitWaveStarted()` |
 | `observe/follow.js` |  | `createFollowPrinter()` |
-| `observe/live-doc.js` |  | `enrichLegUsage()`, `markLive()`, `rollupWaveUsage()`, `TERMINAL()` |
-| `observe/on-complete.js` |  | `buildHookEnv()`, `runOnComplete()`, `fireWaveOnComplete()`, `fireCouncilOnComplete()`, `HOOK_TIMEOUT_MS()` |
+| `observe/live-doc.js` |  | `enrichLegUsage()`, `markLive()`, `rollupWaveUsage()`, `TERMINAL` |
+| `observe/on-complete.js` |  | `buildHookEnv()`, `runOnComplete()`, `fireWaveOnComplete()`, `fireCouncilOnComplete()`, `HOOK_TIMEOUT_MS` |
 | `observe/watch-render.js` |  | `renderTable()`, `renderPlainLines()`, `mapExitCode()`, `emitJsonChange()`, `runWatchLoop()` |
 | `pack/pack-cli.js` |  | `applyPackOrExit()` |
 | `pack/pack-forward.js` |  | `prepareForward()` |
 | `pack/pack-resolve.js` |  | `applyPackToArgs()`, `applyPackToMcpInput()` |
 | `pack/pack-store.js` |  | `packsDir()`, `canonicalHash()`, `resolvePackRef()`, `readPack()`, `writePack()` |
-| `pack/pack-validate.js` |  | `validatePack()`, `KIND_OPTIONS()`, `KINDS()` |
+| `pack/pack-validate.js` |  | `validatePack()`, `KIND_OPTIONS`, `KINDS` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
 | `sidecar/aliases-owner-gate.js` | The refusal gate for `amicus aliases --review --owner` (#238 D8), split out | `ownerGate()`, `isSourceCheckout()`, `defaultGit()` |
 | `sidecar/aliases-owner-sink.js` | The owner-mode write path for `amicus aliases --review --owner` (#238 D8), | `commit()`, `askRulings()` |
@@ -633,22 +633,22 @@ evals/
 | `sidecar/aliases-ui.js` | `amicus aliases --ui` (#238 D4): the Electron setup window opened on the Routing step. | `handleAliasesUi()` |
 | `sidecar/aliases-unpin.js` | `amicus aliases --unpin <name>` (#238 F6, R1) — moved verbatim out of | `handleUnpin()` |
 | `sidecar/aliases.js` | `amicus aliases` (#238 D4) — the user's alias map as a standing command. | `handleAliases()`, `collectAliasView()`, `renderAliasList()`, `buildAliasesDoc()`, `loadDeps()` |
-| `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
-| `sidecar/child-sessions.js` |  | `collectSubtreeUsage()`, `subtreeIsUnknown()`, `SUBTREE_MAX_DEPTH()`, `SUBTREE_MAX_SESSIONS()` |
+| `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK`, `ASSUMED_OUTPUT_TOKENS` |
+| `sidecar/child-sessions.js` |  | `collectSubtreeUsage()`, `subtreeIsUnknown()`, `SUBTREE_MAX_DEPTH`, `SUBTREE_MAX_SESSIONS` |
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |
 | `sidecar/continue.js` | Sidecar Continue Operations - Handles continuing from previous sessions | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `continueSidecar()` |
 | `sidecar/conversation-mirror.js` |  | `createMirrorState()`, `mirrorMessages()`, `logMessage()`, `mirrorUsageOnly()`, `allAssistantUsagePresent()` |
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
 | `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()`, `cachedZip()` |
-| `sidecar/electron-custody.js` | CUSTODY of the Electron artifact: one open, one read, one Buffer. | `readArtifactBytes()`, `isSafeArtifactName()`, `MAX_ARTIFACT_BYTES()`, `READ_CHUNK()` |
+| `sidecar/electron-custody.js` | CUSTODY of the Electron artifact: one open, one read, one Buffer. | `readArtifactBytes()`, `isSafeArtifactName()`, `MAX_ARTIFACT_BYTES`, `READ_CHUNK` |
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
-| `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant. | `isRepoPlantedName()`, `withScrubbedRepoEnv()`, `REPO_ENV_PREFIXES()` |
+| `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant. | `isRepoPlantedName()`, `withScrubbedRepoEnv()`, `REPO_ENV_PREFIXES` |
 | `sidecar/electron-exe-rel.js` | WHICH exe a package resolves through, and whether a `dist/` HOLDS one. | `platformExe()`, `writePathTxt()`, `heldExeRel()`, `distHeldExe()`, `containedExe()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `promoteDist()`, `extractBytesToDist()`, `sweepPromoteLitter()` |
-| `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
-| `sidecar/electron-native-plan.js` | THE MECHANICS OF A RESCUE: write the verified buffer down, walk the platform's | `nativeRescue()`, `RESCUE_ZIP()`, `INCOMING_PREFIX()` |
-| `sidecar/electron-native-rescue.js` | THE NATIVE-EXTRACTOR RESCUE — the one way an archive amicus's own extractor | `withNativeRescue()`, `isRescuableFailure()`, `RESCUE_TRIGGER()`, `RESCUE_ZIP()`, `INCOMING_PREFIX()` |
+| `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS` |
+| `sidecar/electron-native-plan.js` | THE MECHANICS OF A RESCUE: write the verified buffer down, walk the platform's | `nativeRescue()`, `RESCUE_ZIP`, `INCOMING_PREFIX` |
+| `sidecar/electron-native-rescue.js` | THE NATIVE-EXTRACTOR RESCUE — the one way an archive amicus's own extractor | `withNativeRescue()`, `isRescuableFailure()`, `RESCUE_TRIGGER`, `RESCUE_ZIP`, `INCOMING_PREFIX` |
 | `sidecar/electron-provision.js` | Electron CONTROLLED provision — the pinned download, and the fence that says | `cacheRootFor()`, `controlledProvision()`, `mayDeleteRejectedZip()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
 | `sidecar/electron-refuse.js` | Electron artifact REFUSALS — the ways amicus declines to turn bytes into an | `isUnsafeArchive()`, `refuseUnsafeArchive()`, `rejectCachedZip()`, `rejectDownloadedZip()`, `refuseUnreadableArtifact()` |
@@ -656,18 +656,18 @@ evals/
 | `sidecar/electron-rescue-notice.js` | THE TWO NOTICES the native-extractor rescue speaks — the offer a parse failure | `offerNativeRescue()`, `announceNativeRescue()` |
 | `sidecar/electron-state.js` | Electron install-state probes (#76). | `electronDirFor()`, `probeElectronState()` |
 | `sidecar/electron-trust.js` | Electron artifact TRUST core — the digest anchor and the gate. (The third | `electronTrustPolicy()`, `resolveAnchor()`, `expectedDigest()`, `verifyArtifactBytes()`, `sha256Bytes()` |
-| `sidecar/fallback-chains.js` |  | `resolveFallbackConfig()`, `deriveChain()`, `vendorOf()`, `DEFAULT_MAX_SUBSTITUTIONS()` |
+| `sidecar/fallback-chains.js` |  | `resolveFallbackConfig()`, `deriveChain()`, `vendorOf()`, `DEFAULT_MAX_SUBSTITUTIONS` |
 | `sidecar/fanout-budget.js` |  | `preflightBudget()` |
 | `sidecar/fanout-leg-fallback.js` |  | `runLegWithFallback()`, `recordAttemptSpend()`, `sumAttemptUsage()` |
 | `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `clearAttemptFields()`, `runLeg()`, `buildRoutingFailureLeg()` |
 | `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |
-| `sidecar/fanout-retry.js` |  | `ELIGIBLE_RETRY()`, `parseInitialContext()`, `buildRetryPlan()`, `retryFailedWave()` |
-| `sidecar/fanout-signals.js` |  | `installWaveAbort()`, `WAVE_FORCE_EXIT_MS()` |
-| `sidecar/fanout-validate.js` |  | `parseModelsList()`, `DEFAULT_MAX_LEGS()`, `validateFanoutModels()` |
+| `sidecar/fanout-retry.js` |  | `ELIGIBLE_RETRY`, `parseInitialContext()`, `buildRetryPlan()`, `retryFailedWave()` |
+| `sidecar/fanout-signals.js` |  | `installWaveAbort()`, `WAVE_FORCE_EXIT_MS` |
+| `sidecar/fanout-validate.js` |  | `parseModelsList()`, `DEFAULT_MAX_LEGS`, `validateFanoutModels()` |
 | `sidecar/fanout-wave-io.js` |  | `writeWaveMetadata()`, `writeWaveDoc()`, `finishWave()`, `stampLegAttribution()` |
-| `sidecar/fanout.js` |  | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
-| `sidecar/heartbeat.js` |  | `HEARTBEAT_INTERVAL()`, `createHeartbeat()` |
-| `sidecar/interactive-abort.js` |  | `startAbortWatch()`, `markResultAborted()`, `readAbortedMarker()`, `DEFAULT_INTERVAL_MS()` |
+| `sidecar/fanout.js` |  | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS`, `runFanout()` |
+| `sidecar/heartbeat.js` |  | `HEARTBEAT_INTERVAL`, `createHeartbeat()` |
+| `sidecar/interactive-abort.js` |  | `startAbortWatch()`, `markResultAborted()`, `readAbortedMarker()`, `DEFAULT_INTERVAL_MS` |
 | `sidecar/interactive-mirror.js` |  | `startInteractiveMirror()` |
 | `sidecar/interactive-process.js` | Sidecar Interactive Process Helpers - Electron probe/env/process-exit plumbing | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()` |
 | `sidecar/interactive.js` | Sidecar Interactive Mode - Electron GUI session management | `runInteractive()` |
@@ -676,45 +676,45 @@ evals/
 | `sidecar/list-limit.js` | The `--limit` core behind `amicus list` (v4.7 PR3 rider). | `normalizeLimit()`, `truncationNotice()` |
 | `sidecar/list-search.js` | The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5). | `searchSessions()` |
 | `sidecar/models-ceiling-line.js` | The one `Ceilings:` line `amicus models --refresh` prints (#218 P3). | `fmtCeilingLine()` |
-| `sidecar/models-probe.js` |  | `probeStoredAliases()`, `selectStoredAliases()`, `PROBE_WINDOW_MS()`, `PROBE_PROMPT()` |
-| `sidecar/models-render.js` | Presentation helpers for `amicus models` -- pure string formatting, no I/O. | `perMtok()`, `fmtRow()`, `fmtGatewayFinding()`, `PROBE_LABELS()`, `fmtProbeCost()` |
+| `sidecar/models-probe.js` |  | `probeStoredAliases()`, `selectStoredAliases()`, `PROBE_WINDOW_MS`, `PROBE_PROMPT` |
+| `sidecar/models-render.js` | Presentation helpers for `amicus models` -- pure string formatting, no I/O. | `perMtok()`, `fmtRow()`, `fmtGatewayFinding()`, `PROBE_LABELS`, `fmtProbeCost()` |
 | `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |
-| `sidecar/progress-fields.js` | Derived, agent-facing progress fields shared by the MCP status/list | `sanitizePreview()`, `latestAssistantPreview()`, `deriveStage()`, `COARSE_STAGES()`, `TERMINAL_PROGRESS_STAGES()` |
+| `sidecar/progress-fields.js` | Derived, agent-facing progress fields shared by the MCP status/list | `sanitizePreview()`, `latestAssistantPreview()`, `deriveStage()`, `COARSE_STAGES`, `TERMINAL_PROGRESS_STAGES` |
 | `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `writeTerminalProgressSafe()`, `extractLatest()`, `computeLastActivity()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `enumerateAllProjects()`, `searchSessions()`, `listSidecars()` |
 | `sidecar/reopen-notices.js` | The stderr Notice a reopen owes the user for the effort level it does NOT carry (#218 PR 4, council #235 r5 J1/A3). | `formatDroppedLevelNotice()`, `noticeDroppedLevel()` |
 | `sidecar/reopen-spend.js` | Spend finalization for a REOPENED session (continue/resume). Split out of | `finalizeSpendForReopen()` |
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
 | `sidecar/session-finalize.js` |  | `resolveTerminalState()`, `finalizeHeadlessResult()`, `stampBackstop()` |
-| `sidecar/session-utils.js` | Sidecar Session Utilities - Shared functionality for session management | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |
+| `sidecar/session-utils.js` | Sidecar Session Utilities - Shared functionality for session management | `HEARTBEAT_INTERVAL`, `SessionPaths`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |
 | `sidecar/setup-local.js` | The readline setup wizard's local / self-hosted provider add step (v4.2 §4.6, Task 12). | `addLocalProviderInteractive()` |
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
 | `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `addLocalProviderInteractive()`, `createDefaultConfig()`, `deriveFreeAlias()`, `detectApiKeys()` |
 | `sidecar/start-metadata.js` |  | `createSessionMetadata()` |
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
-| `sidecar/tool-part.js` |  | `TERMINAL_TOOL_STATUSES()`, `LIVE_TOOL_STATUSES()`, `isToolPart()`, `toolPartName()`, `toolPartInput()` |
-| `sidecar/unzip.js` | Native OS unzip command-planning for the Electron self-heal, and the refusal patterns and 240 s cap the in-memory extractor uses too. | `nativeUnzipPlan()`, `MAX_MS()`, `UNSAFE_PATTERNS()` |
-| `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
+| `sidecar/tool-part.js` |  | `TERMINAL_TOOL_STATUSES`, `LIVE_TOOL_STATUSES`, `isToolPart()`, `toolPartName()`, `toolPartInput()` |
+| `sidecar/unzip.js` | Native OS unzip command-planning for the Electron self-heal, and the refusal patterns and 240 s cap the in-memory extractor uses too. | `nativeUnzipPlan()`, `MAX_MS`, `UNSAFE_PATTERNS` |
+| `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL` |
 | `sidecar/workspace-auto-open.js` | Workspace Auto-Open Decision Helper | `shouldAutoOpenWorkspace()` |
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()`, `launchWorkspaceWindowDetached()` |
 | `sidecar/zip-entry-write.js` | ONE ENTRY of an in-memory archive, and the classified failures every caller | `failure()`, `badArchive()`, `badDestination()`, `outOfBound()`, `extractorUnavailable()` |
-| `sidecar/zip-from-buffer.js` | Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED. | `extractZipBuffer()`, `NAME_REFUSAL()` |
+| `sidecar/zip-from-buffer.js` | Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED. | `extractZipBuffer()`, `NAME_REFUSAL` |
 | `sidecar/zip-local-name-scan.js` | THE OTHER TABLE AN ARCHIVE DECLARES ITS NAMES IN — the local file headers. | `scanLocalNames()`, `declaredCentralOffset()` |
-| `sidecar/zip-name-scan.js` | WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central | `scanEntryNames()`, `nameRefusal()`, `SCAN_MS()`, `MAX_ENTRIES()` |
-| `sidecar/zip-stall-bound.js` | WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work. | `IDLE_MS()`, `MAX_MS()`, `UNWIND_MS()`, `stalled()`, `awaitUnwind()` |
-| `template/apply.js` |  | `applyTemplate()`, `ARTIFACT_CAP_BYTES()` |
-| `template/render.js` |  | `renderTemplate()`, `KNOWN_VARIABLES()` |
-| `template/store.js` |  | `templatesDir()`, `resolveTemplate()`, `listTemplates()`, `BUILTIN_TEMPLATES()` |
+| `sidecar/zip-name-scan.js` | WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central | `scanEntryNames()`, `nameRefusal()`, `SCAN_MS`, `MAX_ENTRIES` |
+| `sidecar/zip-stall-bound.js` | WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work. | `IDLE_MS`, `MAX_MS`, `UNWIND_MS`, `stalled()`, `awaitUnwind()` |
+| `template/apply.js` |  | `applyTemplate()`, `ARTIFACT_CAP_BYTES` |
+| `template/render.js` |  | `renderTemplate()`, `KNOWN_VARIABLES` |
+| `template/store.js` |  | `templatesDir()`, `resolveTemplate()`, `listTemplates()`, `BUILTIN_TEMPLATES` |
 | `utils/abort-coordinator.js` |  | `abortGraceMs()`, `isAlive()`, `killPidBestEffort()`, `killPidHard()`, `waitThenKill()` |
 | `utils/abort-result.js` | The abort-result document builder for `abort <taskId|--all> --json` (B21-rest). | `buildAbortResult()` |
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
-| `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
+| `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS`, `OPENCODE_AGENTS`, `HEADLESS_SAFE_AGENTS`, `mapAgentToOpenCode()`, `isValidAgent()` |
 | `utils/alias-audit.js` | Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3). | `collectAliasSources()`, `findStaleAliases()`, `findDriftedStoredAliases()`, `suggestReplacements()`, `findFabricatedAliasRepairs()` |
 | `utils/alias-groups.js` | Vendor-derived alias grouping (issue 213). Moved VERBATIM out of | `groupAliases()`, `aliasVendorOf()`, `vendorLabel()`, `titleCaseVendor()`, `PREFERRED_VENDOR_ORDER()` |
 | `utils/alias-notice-state.js` | #238 D5 — the awareness layer's machine state, kept OUT of config.json. | `noticeStatePath()`, `refreshLogPath()`, `readNoticeState()`, `writeNoticeState()` |
 | `utils/alias-notice.js` | #238 D5 — the passive alias notice and the weekly background catalog refresh, run from bin/amicus.js's exit listener. | `runExitHook()`, `countProposals()`, `refreshDue()`, `spawnDetachedRefresh()` |
 | `utils/alias-proposals.js` | The alias review ENGINE (#238 §2): pure, no I/O, no prompts. Turns | `buildAliasProposals()`, `gatedCatalogIds()` |
-| `utils/alias-refresh-state.js` | #238 D5/Q8 — the one predicate behind the alias notice and the background refresh, and the aliases footer line. | `refreshState()`, `exitHookAllowed()`, `refreshStateLine()`, `catalogInfoFromCache()`, `REFRESH_MAX_AGE_MS()` |
+| `utils/alias-refresh-state.js` | #238 D5/Q8 — the one predicate behind the alias notice and the background refresh, and the aliases footer line. | `refreshState()`, `exitHookAllowed()`, `refreshStateLine()`, `catalogInfoFromCache()`, `REFRESH_MAX_AGE_MS` |
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `autoRepairAlias()` |
 | `utils/alias-shadow-writer.js` | The alias-shadow notice's WRITE half: say it without ever sinking the run. | `safeWrite()`, `armStream()`, `writeNoticeToStderr()` |
 | `utils/alias-shadow.js` | Alias-shadow self-diagnosis — name a local alias that repoints a curated one. | `findAliasShadows()`, `formatAliasShadow()`, `noteAliasShadows()`, `auditAliasShadows()` |
@@ -722,20 +722,20 @@ evals/
 | `utils/alias-store.js` | The write sinks the alias review flow needs beyond `setup.js :: addAlias` | `removeAlias()`, `readDismissals()`, `stampDismissal()`, `recordDismissal()` |
 | `utils/api-key-rejection.js` | Definitive key rejections besides a 401 (google API_KEY_INVALID, malformed keys). | `isMalformedKey()`, `invalidKey()`, `malformedKey()`, `isGoogleKeyInvalid()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `isTestWriteToRealKeyStore()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()` |
-| `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `redactSecret()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()` |
+| `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `redactSecret()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
 | `utils/auth-json.js` | Auth JSON Reader | `readAuthJsonKeys()`, `importFromAuthJson()`, `checkAuthJson()`, `removeFromAuthJson()`, `AUTH_JSON_PATH()` |
 | `utils/base-url-classify.js` | v4.6.2 PR1 (spec §4, D1/D2): ANTHROPIC_BASE_URL classification, the | `classifyBaseUrl()`, `resolveBaseUrlOverride()`, `announceBaseUrlNormalizationOnce()`, `_resetBaseUrlNotice()` |
-| `utils/claude-register.js` | Registration core for amicus: skill install (chat skill + LLM Council), | `MCP_CONFIG()`, `addMcpToConfigFile()`, `installSkill()`, `installCouncilSkill()`, `readPrevClaudeCodeAmicusEntry()` |
+| `utils/claude-register.js` | Registration core for amicus: skill install (chat skill + LLM Council), | `MCP_CONFIG`, `addMcpToConfigFile()`, `installSkill()`, `installCouncilSkill()`, `readPrevClaudeCodeAmicusEntry()` |
 | `utils/cli-preflight.js` | Tiny shared preflight guards used by more than one CLI run handler | `requireNoUiForJson()`, `requireValidTaskId()`, `packSaveVersionConflict()` |
 | `utils/client-detect.js` | Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this | `detectClient()`, `matchClientName()` |
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
 | `utils/council-credit-preflight.js` | #256: the ruling the CI council's credit preflight makes, as a pure function. | `decideCreditPreflight()` |
 | `utils/council-credit-reservation.js` | #256 / council #264 r2 (HQ1): price the thing OpenRouter actually refuses. | `resolveBenchIds()`, `priceBenchReservation()`, `fetchOpenRouterModelPrices()`, `catalogKey()` |
-| `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
+| `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES`, `FRONTIER_ALIASES`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
 | `utils/curated-models.js` | Family definitions (match rules) over the shipped pins in ./curated-pins.json (v3). | `getFamilies()`, `toDefaultAliases()`, `stripGatewayPrefix()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
 | `utils/curated-pins.js` | The shipped pin set (#238 D8): src/utils/curated-pins.json, loaded, validated and written here. | `loadCuratedPins()`, `validateCuratedPins()`, `saveCuratedPins()`, `setPinRoute()`, `setPinRuling()` |
-| `utils/degrade.js` |  | `makeDegrade()`, `formatDegrade()`, `DEGRADE_CHANNELS()` |
+| `utils/degrade.js` |  | `makeDegrade()`, `formatDegrade()`, `DEGRADE_CHANNELS` |
 | `utils/doctor-alias-check.js` |  | `evaluateAliasesCheck()`, `repairAlias()` |
 | `utils/doctor-base-url-check.js` | v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row. | `evaluateAnthropicBaseUrl()` |
 | `utils/doctor-credit-check.js` | The `openrouter-credit` doctor row (#43), split out of | `evaluateOpenRouterCredit()` |
@@ -750,106 +750,106 @@ evals/
 | `utils/doctor-summary.js` | Compact doctor summary (v4.2 §4.7 C8). All-ok -> one line; otherwise the | `summarizeDoctor()` |
 | `utils/engine-ensure.js` | ensureEngine() — runtime engine self-heal at server start (report #2). | `ensureEngine()`, `_resetEnsureEngine()` |
 | `utils/engine-install-scan.js` | Discover + probe every amicus install that could serve the MCP (running, | `listAmicusInstalls()`, `scanEngineInstalls()`, `classifyLaunch()`, `resolveNpmRootG()` |
-| `utils/engine-lock.js` | Stale-aware single-flight lock for the engine self-heal (report #2). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
+| `utils/engine-lock.js` | Stale-aware single-flight lock for the engine self-heal (report #2). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS` |
 | `utils/engine-log-parse.js` | Line-shape parsing for the engine log: level, session, message. | `isErrorLine()`, `extractMessage()`, `collapseExcerpt()`, `mentionsSession()`, `lineIsAboutSession()` |
 | `utils/engine-log-tail.js` | One engine-log FILE: read its tail, find the newest usable excerpt in it. | `newestExcerptInFile()` |
 | `utils/engine-log.js` | Resolve the OpenCode engine's own error line for one session. | `engineErrorForSession()`, `engineLogDirCandidates()`, `isErrorLine()`, `extractMessage()`, `collapseExcerpt()` |
-| `utils/engine-output-flag.js` | #218 PR 2 — the one engine env flag amicus sets: OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX. | `withOutputTokenFlag()`, `outputTokenFlagValue()`, `OUTPUT_TOKEN_FLAG()`, `ENGINE_DEFAULT_OUTPUT_TOKENS()`, `PLAIN_OUTPUT_TOKEN_FLAG()` |
+| `utils/engine-output-flag.js` | #218 PR 2 — the one engine env flag amicus sets: OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX. | `withOutputTokenFlag()`, `outputTokenFlagValue()`, `OUTPUT_TOKEN_FLAG`, `ENGINE_DEFAULT_OUTPUT_TOKENS`, `PLAIN_OUTPUT_TOKEN_FLAG` |
 | `utils/engine-repair.js` | Engine self-heal primitive (report #2): make the opencode engine present ON | `repairEngine()`, `findDonor()`, `engineSourceRoot()`, `copyEnginePackages()`, `runningPkgDir()` |
 | `utils/engine-skew-records.js` | Server identity and the bounded store of standing engine-skew records. | `serverKeyForClient()`, `currentEngineSkew()`, `skewForKey()`, `rememberSkew()`, `forgetSkew()` |
 | `utils/engine-skew.js` | Runtime detection of an opencode ENGINE version skew: server vs installed. | `noteSessionVersion()`, `currentEngineSkew()`, `serverKeyForClient()`, `formatSkewWarning()`, `formatSkewSuffix()` |
-| `utils/engine-variants.js` | The effort lever (#218 PR 4): --thinking sent as the engine's variant field, validated against the engine's own declaration. | `VARIANT_LEVELS()`, `VariantRefusedError()`, `readModelDeclaration()`, `checkVariant()`, `formatUnverifiedVariantNote()` |
+| `utils/engine-variants.js` | The effort lever (#218 PR 4): --thinking sent as the engine's variant field, validated against the engine's own declaration. | `VARIANT_LEVELS`, `VariantRefusedError()`, `readModelDeclaration()`, `checkVariant()`, `formatUnverifiedVariantNote()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/env-num.js` |  | `envNumber()` |
 | `utils/env-raw-store.js` | Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6). | `saveRawEnv()`, `removeRawEnv()`, `upsertEnvLine()`, `deleteEnvLine()`, `isBlankSecret()` |
 | `utils/env-write-guard.js` | Issue 212 — refuse a write to the REAL user's amicus key store from inside a | `isWithin()`, `realHomedir()`, `realpathOrSelf()`, `isTestWriteToRealKeyStore()`, `assertNotTestWriteToRealKeyStore()` |
 | `utils/error-classify.js` |  | `classifyLegError()`, `isRetryable()` |
-| `utils/error-doc.js` |  | `ERROR_CODES()`, `buildErrorDoc()`, `failJson()` |
-| `utils/fold-marker.js` | Fold marker construction/parsing helpers — shared by prompt-builder.js | `FOLD_MARKER_PREFIX()`, `generateFoldNonce()`, `buildFoldMarker()`, `trailingFoldMarkerRegex()`, `extractNonceFromText()` |
+| `utils/error-doc.js` |  | `ERROR_CODES`, `buildErrorDoc()`, `failJson()` |
+| `utils/fold-marker.js` | Fold marker construction/parsing helpers — shared by prompt-builder.js | `FOLD_MARKER_PREFIX`, `generateFoldNonce()`, `buildFoldMarker()`, `trailingFoldMarkerRegex()`, `extractNonceFromText()` |
 | `utils/format-duration.js` |  | `formatDuration()` |
-| `utils/free-models.js` | Free OpenRouter model detection (Unit A). | `isFreeModel()`, `listFreeModels()`, `suggestFreeCouncil()`, `PINNED_FREE_MODELS()` |
+| `utils/free-models.js` | Free OpenRouter model detection (Unit A). | `isFreeModel()`, `listFreeModels()`, `suggestFreeCouncil()`, `PINNED_FREE_MODELS` |
 | `utils/gateway-route-audit.js` | Per-gateway-form audit for curated DEFAULT aliases (Task 6, #gwid). | `auditGatewayRoutes()` |
 | `utils/gateway-route-catalog.js` | Conservative cross-gateway catalog pairing helper (Task 5, #gwid). | `pairAcrossGateways()` |
 | `utils/gateway-router.js` | Pure gateway router (#61). Decides direct vs OpenRouter for a request using | `gatewayOf()`, `resolveRoute()` |
-| `utils/http-get.js` | One HTTPS GET, always resolved, never rejected — the timer/destroy/failure | `httpGetText()`, `getJson()`, `DEFAULT_TIMEOUT_MS()`, `DEFAULT_MAX_BYTES()`, `MAX_REDIRECTS()` |
+| `utils/http-get.js` | One HTTPS GET, always resolved, never rejected — the timer/destroy/failure | `httpGetText()`, `getJson()`, `DEFAULT_TIMEOUT_MS`, `DEFAULT_MAX_BYTES`, `MAX_REDIRECTS` |
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
 | `utils/input-validators.js` |  | `validateStartInputs()`, `levenshteinDistance()`, `suggestCommand()` |
-| `utils/known-flags.js` |  | `getKnownFlags()`, `unknownFlags()`, `INTERNAL_FLAGS()` |
+| `utils/known-flags.js` |  | `getKnownFlags()`, `unknownFlags()`, `INTERNAL_FLAGS` |
 | `utils/leg-riders.js` | The emit-when-set rider block every leg run document carries. | `legRiders()` |
 | `utils/legacy-mcp-migration.js` |  | `claudeCodeConfigPath()`, `claudeDesktopConfigPath()`, `inspectLegacySidecarEntry()`, `removeLegacySidecarEntry()`, `inspectAllLegacySidecarEntries()` |
-| `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `exitReaping()`, `ONE_SHOT_COMMANDS()` |
+| `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `exitReaping()`, `ONE_SHOT_COMMANDS` |
 | `utils/live-probes.js` | The single gate on outbound AUTHENTICATED network probes made by diagnostics | `enableLiveProbes()`, `liveProbesAllowed()`, `_resetLiveProbes()` |
 | `utils/local-probe.js` |  | `probeLocalProvider()`, `listLocalModels()` |
 | `utils/local-providers.js` |  | `getLocalProviders()`, `isLocalProvider()`, `deriveKeyEnv()`, `validateProviderEntry()`, `resolveLocalRouteInputs()` |
-| `utils/logger.js` | Structured Logger Module | `logger()`, `LOG_LEVELS()` |
+| `utils/logger.js` | Structured Logger Module | `logger`, `LOG_LEVELS` |
 | `utils/mcp-discovery.js` | MCP Discovery - Discovers MCP servers from parent LLM configuration | `discoverParentMcps()`, `discoverClaudeCodeMcps()`, `discoverCoworkMcps()`, `hasAmicusRegistration()`, `readAmicusMcpConfig()` |
-| `utils/mcp-self-identity.js` |  | `SELF_MCP_NAMES()`, `isAmicusMcpConfig()`, `stripSelfMcpEntries()`, `normalizeToken()` |
+| `utils/mcp-self-identity.js` |  | `SELF_MCP_NAMES`, `isAmicusMcpConfig()`, `stripSelfMcpEntries()`, `normalizeToken()` |
 | `utils/mcp-validators.js` | MCP Validators | `validateMcpSpec()`, `validateMcpConfigFile()` |
 | `utils/model-canonicalization.js` | Direct-first id canonicalization, guarded by `classifyModel` | `directFormIfSafe()`, `directFormIfProven()`, `namespaceFetchFailed()`, `vendorOfId()` |
 | `utils/model-catalog.js` | OpenRouter model catalog cache (F3 #18 / F5 foundation). | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `readCache()` |
 | `utils/model-ceilings-modelsdev.js` | #218 P3 — output ceilings for the direct-provider catalog rows. | `enrichCeilings()`, `fillCeilings()`, `needsFillCount()`, `limitsFromModelsDev()`, `emptyOutcome()` |
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
-| `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
+| `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()` |
 | `utils/model-id-siblings.js` | The tier-safe sibling comparator (#238 D7). A sibling shares a pin's vendor | `parsePin()`, `compareVersions()`, `newestSibling()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
 | `utils/model-output-limit.js` | Issue #218 — the per-model `limit` descriptor amicus hands opencode. | `normalizeOutputBudget()`, `buildLimitLookup()`, `computeModelLimit()`, `positiveCount()` |
-| `utils/model-shortlist.js` | Vendor model shortlist (#138) -- the family -> model second level. | `buildModelShortlist()`, `compareShortlistRows()`, `SHORTLIST_LIMIT()` |
-| `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS()`, `TIER_ORDER()`, `resolveTier()` |
+| `utils/model-shortlist.js` | Vendor model shortlist (#138) -- the family -> model second level. | `buildModelShortlist()`, `compareShortlistRows()`, `SHORTLIST_LIMIT` |
+| `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS`, `TIER_ORDER`, `resolveTier()` |
 | `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
 | `utils/no-output-backstop.js` | v4.6.2 PR2 (spec §5, D4): fail a headless leg fast when the model produces | `resolveNoOutputBackstopMs()`, `createNoOutputBackstop()`, `extendWindowMs()`, `decideBackstopExtension()`, `undecidedBackstopRecord()` |
-| `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE()` |
-| `utils/openrouter-credit.js` | The OpenRouter credit/limit probe, split out of api-key-validation.js to keep | `checkOpenRouterCredit()`, `checkOpenRouterBalance()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
-| `utils/output-length.js` | #218 PR 3: name the "Mode 2" death. | `OUTPUT_LENGTH_PREFIX()`, `isOutputLengthDeath()`, `formatOutputLengthReason()` |
+| `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE` |
+| `utils/openrouter-credit.js` | The OpenRouter credit/limit probe, split out of api-key-validation.js to keep | `checkOpenRouterCredit()`, `checkOpenRouterBalance()`, `OPENROUTER_NO_CREDIT_WARNING`, `OPENROUTER_FREE_TIER_WARNING` |
+| `utils/output-length.js` | #218 PR 3: name the "Mode 2" death. | `OUTPUT_LENGTH_PREFIX`, `isOutputLengthDeath()`, `formatOutputLengthReason()` |
 | `utils/path-fence.js` | Shared realpath-containment fence. | `isRealpathContained()`, `containsOnDisk()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()`, `hasOpencodeBinary()`, `opencodeRoots()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
 | `utils/pricing.js` |  | `emptyUsageTotals()`, `sumPerMessageUsage()`, `lookupPricing()`, `hasObservedTokens()`, `resolveLegCost()` |
 | `utils/project-path.js` | Canonical project-path helper. | `canonicalProjectPath()` |
-| `utils/project-root-sanity.js` |  | `assessProjectRoot()`, `looksLikeInstallDir()`, `INSTALL_PATTERNS()` |
+| `utils/project-root-sanity.js` |  | `assessProjectRoot()`, `looksLikeInstallDir()`, `INSTALL_PATTERNS` |
 | `utils/prompt-source.js` |  | `resolvePromptSource()` |
 | `utils/provider-default-picker.js` | Provider-default picker core (Part 2, Task 4). | `buildProviderDefaultChoices()`, `applyProviderDefault()`, `pricePerMInputFrom()`, `directFormIfSafe()`, `directFormIfProven()` |
 | `utils/provider-default-prompt.js` | Provider-default prompt flow (Part 2, Task 6/7 shared helper). | `runProviderDefaultFlow()`, `formatPrice()`, `formatRow()` |
-| `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS()`, `getProvider()`, `isDirectProvider()`, `listDirectProviders()`, `PROVIDER_ENV_MAP()` |
+| `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS`, `getProvider()`, `isDirectProvider()`, `listDirectProviders()`, `PROVIDER_ENV_MAP` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `canonicalRoutesFor()`, `pickCurrent()`, `resolveQuickPicks()`, `toStorableRoute()` |
-| `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES()` |
+| `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES` |
 | `utils/redact-provider-error.js` | #256 item 4: strip key IDENTIFIERS out of a provider's error text before it | `redactProviderError()` |
 | `utils/remediation-hints.js` |  |  |
 | `utils/result-schema-rebuild.js` |  | `buildRunResultFromSession()`, `buildWaveResultFromSession()` |
-| `utils/result-schema-version.js` | The single SCHEMA_VERSION constant shared by result-schema.js and | `SCHEMA_VERSION()` |
-| `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `durationBetween()`, `statusFromResult()`, `buildRunResult()` |
-| `utils/route-error.js` | Shared renderer (#61 Task 6.1): turns a router RouteResult — an error or a | `toStructuredError()`, `toCliMessage()`, `toErrorDocFields()`, `REASON_TEXT()`, `ROUTE_ERROR_REASONS()` |
-| `utils/route-launch.js` | Route-launch views (#61 gateway routing integration, Task 4.2). | `buildLaunchKeys()`, `getRouteCatalogInfo()`, `resolveRouteForLaunch()`, `buildSuggestions()`, `ROUTE_VERSION()` |
+| `utils/result-schema-version.js` | The single SCHEMA_VERSION constant shared by result-schema.js and | `SCHEMA_VERSION` |
+| `utils/result-schema.js` |  | `SCHEMA_VERSION`, `TERMINAL_STATUSES`, `durationBetween()`, `statusFromResult()`, `buildRunResult()` |
+| `utils/route-error.js` | Shared renderer (#61 Task 6.1): turns a router RouteResult — an error or a | `toStructuredError()`, `toCliMessage()`, `toErrorDocFields()`, `REASON_TEXT`, `ROUTE_ERROR_REASONS` |
+| `utils/route-launch.js` | Route-launch views (#61 gateway routing integration, Task 4.2). | `buildLaunchKeys()`, `getRouteCatalogInfo()`, `resolveRouteForLaunch()`, `buildSuggestions()`, `ROUTE_VERSION` |
 | `utils/route-suggestions.js` |  | `buildSuggestions()`, `applySuggestions()` |
-| `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `LOCK_RETRY_DELAYS_MS()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()` |
+| `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT`, `LOCK_RETRY_DELAYS_MS`, `isPortInUse()`, `getPortPid()`, `killPortProcess()` |
 | `utils/session-abort.js` | Session abort utilities: signal handler installation and terminal metadata writes. | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |
 | `utils/session-index-prune.js` |  | `listStaleSessionIndexEntries()`, `pruneStaleSessionIndexEntries()`, `evaluateSessionIndexPrune()` |
-| `utils/session-index-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionIndexTmpFiles()`, `unlinkSessionIndexTmp()`, `evaluateSessionIndexTmpSweep()` |
-| `utils/session-index.js` | Global session index (issue #40). | `INDEX_FILENAME()`, `recordSession()`, `lookupSessionProject()`, `readIndex()` |
+| `utils/session-index-tmp-sweep.js` |  | `AGE_THRESHOLD_MS`, `listSessionIndexTmpFiles()`, `unlinkSessionIndexTmp()`, `evaluateSessionIndexTmpSweep()` |
+| `utils/session-index.js` | Global session index (issue #40). | `INDEX_FILENAME`, `recordSession()`, `lookupSessionProject()`, `readIndex()` |
 | `utils/session-lock.js` |  | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
-| `utils/session-metadata-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionMetadataTmpFiles()`, `unlinkSessionMetadataTmp()`, `evaluateSessionMetadataTmpSweep()` |
+| `utils/session-metadata-tmp-sweep.js` |  | `AGE_THRESHOLD_MS`, `listSessionMetadataTmpFiles()`, `unlinkSessionMetadataTmp()`, `evaluateSessionMetadataTmpSweep()` |
 | `utils/session-path.js` | Session path resolution. | `safeSessionDir()`, `safeSessionDirUnder()` |
-| `utils/session-status.js` | #202: render the engine's SESSION STATUS as a clause on a leg's death report. | `formatSessionStatusSuffix()`, `probeUnknown()`, `isProbeOutcome()`, `isRenderableStatus()`, `MAX_STATUS_MESSAGE_CHARS()` |
+| `utils/session-status.js` | #202: render the engine's SESSION STATUS as a clause on a leg's death report. | `formatSessionStatusSuffix()`, `probeUnknown()`, `isProbeOutcome()`, `isRenderableStatus()`, `MAX_STATUS_MESSAGE_CHARS` |
 | `utils/shared-server.js` |  | `SharedServerManager()` |
-| `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
+| `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE`, `SPEND_LEDGER_SCHEMA_VERSION` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
-| `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()`, `safeFragment()`, `MAX_FRAGMENT_CHARS()` |
-| `utils/thinking-validators.js` | Thinking Level Validators | `VARIANT_LEVELS()`, `validateThinkingLevel()` |
+| `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS`, `safeFragment()`, `MAX_FRAGMENT_CHARS` |
+| `utils/thinking-validators.js` | Thinking Level Validators | `VARIANT_LEVELS`, `validateThinkingLevel()` |
 | `utils/ttft.js` | The one honesty predicate for the time-to-first-token probe (v4.9 W13). | `isMeasuredTtft()` |
-| `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()`, `defangOutboundFenceTags()`, `OUTBOUND_FENCE_TAGS()` |
+| `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()`, `defangOutboundFenceTags()`, `OUTBOUND_FENCE_TAGS` |
 | `utils/update-notice.js` | The MCP server is the one entry point that skips bin/amicus.js's update | `classifySelfInstall()`, `upgradeInstruction()`, `buildUpdateNotice()`, `maybeAppendUpdateNotice()`, `guideUpdateLine()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
-| `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `VARIANT_LEVELS()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
+| `utils/validators.js` | Input Validators | `VALID_AGENT_MODES`, `PROVIDER_KEY_MAP`, `VARIANT_LEVELS`, `TASK_ID_PATTERN`, `validateTaskId()` |
 | `utils/version-info.js` | After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps | `RUNNING_VERSION()`, `readOnDiskVersion()`, `versionWarning()`, `PKG_PATH()` |
-| `workspace/artifact-guard.js` | Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact). | `artifactAllowlist()`, `isSeatTable()`, `readRunArtifact()`, `isRealpathContained()`, `FIXED_ARTIFACTS()` |
-| `workspace/artifact-names.js` | Council Workspace — artifact NAME derivation (v4.8 PR5a). | `artifactAllowlist()`, `isSeatTable()`, `orphanExonerations()`, `FIXED_ARTIFACTS()`, `DEBATE_ARTIFACTS()` |
+| `workspace/artifact-guard.js` | Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact). | `artifactAllowlist()`, `isSeatTable()`, `readRunArtifact()`, `isRealpathContained()`, `FIXED_ARTIFACTS` |
+| `workspace/artifact-names.js` | Council Workspace — artifact NAME derivation (v4.8 PR5a). | `artifactAllowlist()`, `isSeatTable()`, `orphanExonerations()`, `FIXED_ARTIFACTS`, `DEBATE_ARTIFACTS` |
 | `workspace/blind-mode.js` | Council Workspace — blind-mode name mapping (v4.4 §6.3). | `buildNamePairs()`, `labelFor()`, `pairFor()` |
 | `workspace/fold-format.js` | Council Workspace — fold payload builder (v4.4 §7). | `buildFoldText()` |
 | `workspace/live-normalize.js` | Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam). | `normalizeLive()` |
 | `workspace/matrix-model.js` | Council Workspace — adjudication matrix view model (v4.4 §5.2). | `buildMatrixModel()` |
-| `workspace/run-detail.js` | Council Workspace — run detail: defensive parse of run.json / tally.json / | `getRunDetail()`, `costPanel()`, `TERMINAL_STATUSES()`, `STAGE_LABELS()` |
-| `workspace/run-scan.js` | Council Workspace — run discovery (v4.4 spec §4.3 / §5.1). | `scanCouncilRuns()`, `readPointer()`, `POINTER_RE()` |
+| `workspace/run-detail.js` | Council Workspace — run detail: defensive parse of run.json / tally.json / | `getRunDetail()`, `costPanel()`, `TERMINAL_STATUSES`, `STAGE_LABELS` |
+| `workspace/run-scan.js` | Council Workspace — run discovery (v4.4 spec §4.3 / §5.1). | `scanCouncilRuns()`, `readPointer()`, `POINTER_RE` |
 | `workspace/seat-space.js` | Council Workspace — the seat-space PREDICATES (v4.8 PR5b). | `isSeatTable()`, `orphanExonerations()` |
 <!-- /AUTO:modules -->
 
