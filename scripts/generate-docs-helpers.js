@@ -7,6 +7,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { exportKind } = require('./generate-docs-export-kinds');
 
 // ⚠️ DOCS-DRIFT FIX (v4.4 Task 19): 'workspace' was a speculative scratch-dir
 // name with no real match anywhere under TREE_DIRS until v4.4 Task 2 added the
@@ -205,8 +206,9 @@ function buildModuleIndex(rootDir) {
  * @param {string} dirPath - Directory to scan
  * @param {Array<{module: string, purpose: string, exports: string}>} rows - Accumulator
  * @param {string} [relPrefix=''] - Relative path prefix for nested dirs
+ * @param {Map} [modules] - Modules parsed so far in this run, shared by every export lookup
  */
-function collectModules(dirPath, rows, relPrefix = '') {
+function collectModules(dirPath, rows, relPrefix = '', modules = new Map()) {
   let entries;
   try {
     entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -227,12 +229,12 @@ function collectModules(dirPath, rows, relPrefix = '') {
     rows.push({
       module: modulePath,
       purpose: desc || '',
-      exports: exps.map(e => `\`${e}()\``).join(', '),
+      exports: exps.map(e => (exportKind(fullPath, e, { modules, seen: new Set() }) === 'value' ? `\`${e}\`` : `\`${e}()\``)).join(', '),
     });
   }
 
   for (const dir of sortedDirs) {
-    collectModules(path.join(dirPath, dir.name), rows, relPrefix ? `${relPrefix}/${dir.name}` : dir.name);
+    collectModules(path.join(dirPath, dir.name), rows, relPrefix ? `${relPrefix}/${dir.name}` : dir.name, modules);
   }
 }
 
