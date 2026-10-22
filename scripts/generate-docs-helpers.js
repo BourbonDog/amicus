@@ -7,6 +7,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { exportKind } = require('./generate-docs-export-kinds');
 
 // ⚠️ DOCS-DRIFT FIX (v4.4 Task 19): 'workspace' was a speculative scratch-dir
 // name with no real match anywhere under TREE_DIRS until v4.4 Task 2 added the
@@ -108,98 +109,6 @@ function extractExports(filePath) {
 }
 
 // ---------------------------------------------------------------------------
-// Export kinds: the module table writes `name()` for a function, `name` for a
-// value. Every export used to get `()`, so string constants read as functions
-// (council finding A3 on PR 289). Source text only; nothing is required. Only
-// a PROVEN value drops the parens: 'unknown' keeps the old `name()`.
-// ---------------------------------------------------------------------------
-
-const IDENT = '[A-Za-z_$][\\w$]*';
-const reName = (s) => s.replace(/\$/g, '\\$');
-// Literals, `new`, and builtins whose result is never a function.
-const VALUE_START = /^(['"`\d{[]|-\d|\/(?![/*])|(true|false|null|undefined)(?![\w$])|new\s|Object\.(freeze|create|fromEntries)\(|(Symbol|Number|String|Boolean)\()/;
-
-/** Resolve a relative require specifier the way Node would, or null. */
-function resolveRelative(fromFile, spec) {
-  const base = path.resolve(path.dirname(fromFile), spec);
-  const hit = [base, `${base}.js`, path.join(base, 'index.js')].find((p) => {
-    try { return fs.statSync(p).isFile(); } catch { return false; }
-  });
-  return hit || null;
-}
-
-const LEAD = '(?:^|[^\\w$.])';
-const END = '\\s*(?:[;,)}\\n]|$)';
-
-/** Export `name` of the module a relative `spec` names, or 'unknown' for a package. */
-function viaRequire(file, spec, name, seen) {
-  const target = spec.startsWith('.') ? resolveRelative(file, spec) : null;
-  return target ? exportKind(target, name, seen) : 'unknown';
-}
-
-/** 'function' | 'value' | 'unknown' for an expression, read from its first characters. */
-function kindOfExpr(src, expr, file, seen) {
-  const e = expr.trim();
-  if (/^(async\s+)?function(?![\w$])/.test(e) || /^class(?![\w$])/.test(e)) { return 'function'; }
-  if (new RegExp(`^(async\\s+)?(\\([^)]*\\)|${IDENT})\\s*=>`).test(e)) { return 'function'; }
-  if (VALUE_START.test(e)) { return 'value'; }
-  // require('./x').NAME
-  const direct = e.match(new RegExp(`^require\\(\\s*(['"])([^'"]+)\\1\\s*\\)\\.(${IDENT})${END}`));
-  if (direct) { return viaRequire(file, direct[2], direct[3], seen); }
-  // ns.NAME, where `const ns = require('./x')` (council/briefings-stage2.js)
-  const member = e.match(new RegExp(`^(${IDENT})\\.(${IDENT})${END}`));
-  if (member) {
-    const ns = src.match(new RegExp(`${LEAD}(?:const|let|var)\\s+${reName(member[1])}\\s*=\\s*require\\(\\s*(['"])([^'"]+)\\1\\s*\\)${END}`));
-    return ns ? viaRequire(file, ns[2], member[2], seen) : 'unknown';
-  }
-  // Arithmetic or string concatenation never yields a function.
-  if (new RegExp(`^${IDENT}\\s*[-+*/%](?![-+*/%=>])`).test(e)) { return 'value'; }
-  const alias = e.match(new RegExp(`^(${IDENT})${END}`));
-  return alias ? kindOfBinding(src, alias[1], file, seen) : 'unknown';
-}
-
-/** What a top-level name in `src` is bound to, following aliases and relative re-exports. */
-function kindOfBinding(src, name, file, seen) {
-  const key = `${file}@${name}`;
-  if (seen.has(key)) { return 'unknown'; }
-  seen.add(key);
-  const n = reName(name);
-  if (new RegExp(`${LEAD}(?:async\\s+)?function\\s*\\*?\\s*${n}\\s*\\(`).test(src)) { return 'function'; }
-  if (new RegExp(`${LEAD}class\\s+${n}(?![\\w$])`).test(src)) { return 'function'; }
-  const decl = src.match(new RegExp(`${LEAD}(?:const|let|var)\\s+${n}\\s*=(?![=>])([\\s\\S]{0,200})`));
-  if (decl) { return kindOfExpr(src, decl[1], file, seen); }
-  const reqRe = /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*(['"])([^'"]+)\2\s*\)/g;
-  let m;
-  while ((m = reqRe.exec(src)) !== null) {
-    for (const part of m[1].replace(/\/\/[^\n]*/g, '').split(',')) {
-      const [imported, local] = part.split(':').map((s) => s.trim());
-      if (imported && (local || imported) === name) { return viaRequire(file, m[3], imported, seen); }
-    }
-  }
-  return 'unknown';
-}
-
-/**
- * Whether export `name` of `file` is a function, a value, or unknown.
- * @returns {'function'|'value'|'unknown'}
- */
-function exportKind(file, name, seen = new Set()) {
-  let src;
-  try { src = fs.readFileSync(file, 'utf-8'); } catch { return 'unknown'; }
-  const obj = src.match(/module\.exports\s*=\s*\{([^}]*)\}/s);
-  if (obj) {
-    for (const part of obj[1].replace(/\/\/[^\n]*/g, '').split(',')) {
-      const i = part.indexOf(':');
-      if ((i === -1 ? part : part.slice(0, i)).trim() === name) {
-        return i === -1 ? kindOfBinding(src, name, file, seen) : kindOfExpr(src, part.slice(i + 1), file, seen);
-      }
-    }
-  }
-  const named = src.match(new RegExp(`exports\\.${reName(name)}\\s*=(?!=)([\\s\\S]{0,200})`));
-  return named ? kindOfExpr(src, named[1], file, seen) : kindOfBinding(src, name, file, seen);
-}
-
-// ---------------------------------------------------------------------------
 // Directory Tree Builder
 // ---------------------------------------------------------------------------
 
@@ -297,8 +206,9 @@ function buildModuleIndex(rootDir) {
  * @param {string} dirPath - Directory to scan
  * @param {Array<{module: string, purpose: string, exports: string}>} rows - Accumulator
  * @param {string} [relPrefix=''] - Relative path prefix for nested dirs
+ * @param {Map} [modules] - Modules parsed so far in this run, shared by every export lookup
  */
-function collectModules(dirPath, rows, relPrefix = '') {
+function collectModules(dirPath, rows, relPrefix = '', modules = new Map()) {
   let entries;
   try {
     entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -319,12 +229,12 @@ function collectModules(dirPath, rows, relPrefix = '') {
     rows.push({
       module: modulePath,
       purpose: desc || '',
-      exports: exps.map(e => (exportKind(fullPath, e) === 'value' ? `\`${e}\`` : `\`${e}()\``)).join(', '),
+      exports: exps.map(e => (exportKind(fullPath, e, { modules, seen: new Set() }) === 'value' ? `\`${e}\`` : `\`${e}()\``)).join(', '),
     });
   }
 
   for (const dir of sortedDirs) {
-    collectModules(path.join(dirPath, dir.name), rows, relPrefix ? `${relPrefix}/${dir.name}` : dir.name);
+    collectModules(path.join(dirPath, dir.name), rows, relPrefix ? `${relPrefix}/${dir.name}` : dir.name, modules);
   }
 }
 

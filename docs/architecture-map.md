@@ -457,6 +457,7 @@ scripts/
 ├── debug-cdp.js
 ├── eval-with-monitoring.sh
 ├── extract-workflow-env.js  # Extract the workflow-level and job-level `env:` blocks of a GitHub Actions
+├── generate-docs-export-kinds.js  # Export kinds for the module table: is an export a function, a value, or
 ├── generate-docs-helpers.js  # Helper functions for generate-docs.js.
 ├── generate-docs.js  # Auto-generate documentation sections from source code.
 ├── generate-icon.js  # Generate app icon PNG from SVG source.

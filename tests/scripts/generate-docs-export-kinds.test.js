@@ -197,4 +197,128 @@ describe('functions and anything unproven keep ()', () => {
       spy.mockRestore();
     }
   });
+
+  // Council A1 on PR 291: a cycle that never passes through a local binding
+  // used to skip the visited set, which only guarded binding lookups.
+  it.each([
+    ['a namespace member', ["const q = require('./q');", 'module.exports = { X: q.X };'],
+      ["const p = require('./p');", 'module.exports = { X: p.X };']],
+    ['a direct require(...).NAME', ["module.exports = { X: require('./q').X };"],
+      ["module.exports = { X: require('./p').X };"]],
+    ['exports.X = require(...).X', ["exports.X = require('./q').X;"], ["exports.X = require('./p').X;"]],
+  ])('a re-export cycle through %s terminates', (_label, p, q) => {
+    const spy = jest.spyOn(fs, 'readFileSync');
+    try {
+      expect(exportsCell({ 'p.js': p, 'q.js': q }, 'p.js')).toBe('`X()`');
+      expect(spy.mock.calls.length).toBeLessThan(50);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // Council B1/C1 on PR 291: `new` and Object.freeze can both yield a callable.
+  it.each([
+    ['new Function', "const F = new Function('return 1');"],
+    ['new Proxy over a function', 'const F = new Proxy(function () {}, {});'],
+    ['an instance of a local class', 'class Thing {}\nconst F = new Thing();'],
+    ['Object.freeze of a function', 'function g() {}\nconst F = Object.freeze(g);'],
+    ['Object.freeze of an arrow', 'const F = Object.freeze(() => 1);'],
+  ])('%s', (_label, decl) => {
+    expect(exportsCell({ 'n.js': [decl, 'module.exports = { F };'] }, 'n.js')).toBe('`F()`');
+  });
+
+  // Council A2/C2 on PR 291: only a top-level declaration binds the exported
+  // name. Comments, strings and nested scopes must not decide it.
+  it.each([
+    ['a commented-out declaration', ["// const F = 'old';", 'const F = make();']],
+    ['a block-commented declaration', ["/* const F = 'old'; */", 'const F = make();']],
+    ['a declaration inside a string', ['const DOC = "const F = 1;";', 'const F = make();']],
+    ['a declaration inside a template', ['const DOC = `const F = 1;`;', 'const F = make();']],
+    ['a shadowing declaration in a nested scope', ['function setup() { const F = 1; return F; }', 'const F = make();']],
+  ])('%s does not decide the binding', (_label, lines) => {
+    expect(exportsCell({ 's.js': [...lines, 'module.exports = { F };'] }, 's.js')).toBe('`F()`');
+  });
+
+  it('a commented-out exports.F = <literal> does not decide the export', () => {
+    expect(exportsCell({ 'c.js': ['// exports.F = 1;', 'exports.F = function () {};'] }, 'c.js')).toBe('`F()`');
+  });
+
+  it('an export reassigned inside a function is not proven by its first value', () => {
+    expect(exportsCell({ 'r.js': [
+      "exports.F = 'placeholder';",
+      'function init() { exports.F = () => {}; }',
+      'module.exports.init = init;',
+    ] }, 'r.js')).toBe('`F()`, `init()`');
+  });
+
+  it('a module that does not parse proves nothing', () => {
+    expect(exportsCell({ 'x.js': ["const V = 'x';", 'module.exports = { V };', '}'] }, 'x.js')).toBe('`V()`');
+  });
+
+  // Council A4 on PR 291: a package name must never be looked up next to the
+  // requiring module, even when a sibling file happens to share it.
+  it('a package require is not resolved against a same-named sibling file', () => {
+    expect(exportsCell({
+      'fs.js': ["const F = 'x';", 'module.exports = { F };'],
+      'u.js': ["const { F } = require('fs');", 'module.exports = { F };'],
+    }, 'u.js')).toBe('`F()`');
+  });
+});
+
+describe('what the fixes above must not take away', () => {
+  it.each([
+    ['new Map', 'const V = new Map();'],
+    ['new Error', "const V = new Error('x');"],
+    ['Object.freeze of an array constant', "const BASE = ['a'];\nconst V = Object.freeze(BASE);"],
+    ['a conditional between two literals', "const V = process.env.X ? 'a' : 'b';"],
+    ['a negative number', 'const V = -1;'],
+    // How council/briefings*.js builds its prompt text: join always returns a string.
+    ['an array literal joined into a string', "const V = ['a', 'b'].join('\\n');"],
+  ])('%s is a value', (_label, decl) => {
+    expect(exportsCell({ 'v.js': [decl, 'module.exports = { V };'] }, 'v.js')).toBe('`V`');
+  });
+
+  // The regex classifier read only an expression's first character, so these
+  // passed as values because they start with `[` or `{`.
+  it.each([
+    ['an element of an array literal', 'function g() {}\nconst F = [g][0];'],
+    ['a property of an object literal', 'function g() {}\nconst F = { g }.g;'],
+    ['another method on an array literal', 'function g() {}\nconst F = [g].find(Boolean);'],
+  ])('%s keeps ()', (_label, decl) => {
+    expect(exportsCell({ 'm.js': [decl, 'module.exports = { F };'] }, 'm.js')).toBe('`F()`');
+  });
+});
+
+// Shapes the parser makes visible that the fixes above also had to decide.
+describe('anything that could still end up a function keeps ()', () => {
+  it.each([
+    ['a fallback to a function', 'const F = process.env.X || function () {};'],
+    ['a value with a function fallback', 'const F = Number(process.env.X) || (() => 1);'],
+    ['a conditional with a function branch', "const F = process.env.X ? 'a' : () => 1;"],
+    ['a let reassigned to a function', "let F = 'x';\nF = () => 1;"],
+    ['a shadowed builtin constructor', "const Map = require('./m');\nconst F = new Map();"],
+  ])('%s', (_label, decl) => {
+    expect(exportsCell({ 'g.js': [decl, 'module.exports = { F };'] }, 'g.js')).toBe('`F()`');
+  });
+
+  it.each([
+    ['module.exports is replaced inside a function', ['function reset() { module.exports = { V: () => 1 }; }']],
+    ['module.exports.V is assigned as well', ['module.exports.V = () => 1;']],
+  ])('a value is not proven when %s', (_label, extra) => {
+    expect(exportsCell({ 'w.js': ["const V = 'x';", 'module.exports = { V };', ...extra] }, 'w.js')).toBe('`V()`');
+  });
+
+  it('a spread after the property could replace it', () => {
+    // The table's name scan also lists `extra`; only V's rendering is under test.
+    expect(exportsCell({ 'sp.js': ["const V = 'x';", 'const extra = {};', 'module.exports = { V, ...extra };'] }, 'sp.js'))
+      .toMatch(/^`V\(\)`/);
+  });
+
+  it('a top-level value is found past a nested declaration of the same name', () => {
+    expect(exportsCell({ 't.js': [
+      'function setup() { const V = make(); return V; }',
+      "const V = 'x';",
+      'module.exports = { V, setup };',
+    ] }, 't.js')).toBe('`V`, `setup()`');
+  });
 });
