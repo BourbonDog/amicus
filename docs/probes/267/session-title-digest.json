@@ -1,73 +1,138 @@
 {
   "engine": {
-    "binary": "C:\\Users\\sendt\\code\\amicus\\node_modules\\opencode-windows-x64\\bin\\opencode.exe",
+    "binary": "node_modules/opencode-windows-x64/bin/opencode.exe",
     "packageVersion": "1.18.15",
     "sdkVersion": "1.18.15",
     "amicus": "4.14.3",
-    "declared": "1.18.15"
+    "declared": "1.18.15",
+    "platform": "win32"
   },
   "model": "qwen/qwen3.8-27b",
   "settleMs": 6000,
+  "verdict": "PASS",
+  "why": "4 of 4 untitled sessions sent a title request; 4 of 4 amicus sessions sent one request each",
   "summary": {
     "untitled": {
       "sessions": 4,
-      "main": 4,
+      "requests": 8,
       "title": 4,
+      "main": 4,
       "threw": 0
     },
     "amicus": {
       "sessions": 4,
-      "main": 4,
+      "requests": 4,
       "title": 0,
+      "main": 4,
       "threw": 0
     }
   },
   "results": {
     "untitled": [
       {
-        "kinds": [
-          "title",
-          "main"
+        "requests": [
+          {
+            "kind": "title",
+            "model": "google/gemini-3.6-flash",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu"
+          },
+          {
+            "kind": "main",
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+          }
         ]
       },
       {
-        "kinds": [
-          "title",
-          "main"
+        "requests": [
+          {
+            "kind": "title",
+            "model": "google/gemini-3.6-flash",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu"
+          },
+          {
+            "kind": "main",
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+          }
         ]
       },
       {
-        "kinds": [
-          "title",
-          "main"
+        "requests": [
+          {
+            "kind": "title",
+            "model": "google/gemini-3.6-flash",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu"
+          },
+          {
+            "kind": "main",
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+          }
         ]
       },
       {
-        "kinds": [
-          "title",
-          "main"
+        "requests": [
+          {
+            "kind": "title",
+            "model": "google/gemini-3.6-flash",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu"
+          },
+          {
+            "kind": "main",
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+          }
         ]
       }
     ],
     "amicus": [
       {
-        "kinds": [
-          "main"
+        "requests": [
+          {
+            "kind": "main",
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+          }
         ]
       },
       {
-        "kinds": [
-          "main"
+        "requests": [
+          {
+            "kind": "main",
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+          }
         ]
       },
       {
-        "kinds": [
-          "main"
+        "requests": [
+          {
+            "kind": "main",
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+          }
         ]
       },
       {
-        "kinds": [
-          "main"
+        "requests": [
+          {
+            "kind": "main",
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+          }
         ]
       }
     ]

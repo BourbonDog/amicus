@@ -11,15 +11,25 @@
  *   - `untitled` — `client.session.create({query:{directory}})`, the pre-#267 shape
  *   - `amicus`   — src/opencode-client.js :: createSession(client, directory, taskId),
  *                  the call every amicus leg now makes
- * and counts, per session, the provider requests the capture server saw by kind.
- * The fix holds when every `amicus` session shows `main` only.
+ * and records, per session, every provider request the capture server saw.
+ *
+ * The verdict rests on COUNTS, not on recognising the title prompt (#294 council
+ * round 1, A4/B1/D3):
+ *   - the control must hold: every `untitled` session sent more than one request,
+ *     at least one of them recognised as `title`. If not, the probe can no longer
+ *     see the request it exists to count, and says so (`verdict: BLIND`);
+ *   - the fix must hold: every `amicus` session sent exactly one request.
+ * Each request's model, `max_tokens` and the head of its system prompt go in the
+ * digest, so the classification can be re-checked without the raw capture. It
+ * records no request bodies, so its one output is a digest (committed, per
+ * .gitignore). tests/probe-session-title-canary.integration.test.js runs it in
+ * CI's keyless job.
  *
  * Zero spend, no keys: sandbox, capture server and engine start all come from
  * scripts/probe-sandbox.js (the #218 harness). The provider is local.
  *
- * It records no request bodies, so its one output is a digest (committed, per .gitignore).
- *
  * Usage: node scripts/probe-session-title.js [--out docs/probes/267/session-title-digest.json] [--n 4]
+ * Exit: 0 PASS, 1 FAIL (an amicus session sent a hidden request), 2 BLIND.
  */
 
 'use strict';
@@ -30,27 +40,58 @@ require('../src/utils/path-setup').ensureNodeModulesBinInPath();
 
 const MODEL = 'qwen/qwen3.8-27b'; // a real CI bench id (.github/amicus-ci-aliases.json)
 const SETTLE_MS = 6000; // after the leg's own request, how long a late title request may take
+const REPO = path.join(__dirname, '..');
 
-/** @returns {Promise<{kinds: string[], threw?: string}>} the request kinds one session caused */
+/** @returns {string} every system message of a chat-completions body, joined */
+function systemText(body) {
+  return ((body && body.messages) || []).filter((m) => m && m.role === 'system')
+    .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n');
+}
+
+/** @returns {{kind: string, model: string|null, maxTokens: number|null, systemHead: string}} */
+function describeRequest(capture) {
+  const body = capture.body && typeof capture.body === 'object' ? capture.body : {};
+  return {
+    kind: capture.kind, model: body.model || null,
+    maxTokens: body.max_tokens ?? body.max_completion_tokens ?? null,
+    systemHead: systemText(body).slice(0, 60),
+  };
+}
+
+/** @returns {Promise<{requests: object[], threw?: string}>} every request one session caused */
 async function runSession(client, cap, create) {
   const start = cap.captures.length;
+  const mine = () => cap.captures.slice(start).filter((x) => x.method === 'POST');
   try {
     const sessionId = await create();
     await client.session.promptAsync({
       path: { id: sessionId }, query: { directory: process.cwd() },
       body: { model: { providerID: 'openrouter', modelID: MODEL }, parts: [{ type: 'text', text: 'ping' }] },
     });
-    const mine = () => cap.captures.slice(start).filter((x) => x.method === 'POST');
     let mainAt = null;
     for (const end = Date.now() + 30000; Date.now() < end;) {
       if (mainAt === null && mine().some((x) => x.kind === 'main')) { mainAt = Date.now(); }
       if (mainAt !== null && Date.now() - mainAt >= SETTLE_MS) { break; }
       await sb.sleep(150);
     }
-    return { kinds: mine().map((x) => x.kind) };
+    return { requests: mine().map(describeRequest) };
   } catch (err) {
-    return { kinds: [], threw: err.message };
+    return { requests: mine().map(describeRequest), threw: err.message };
   }
+}
+
+/** @returns {{verdict: 'PASS'|'FAIL'|'BLIND', why: string}} */
+function judge(results, n) {
+  const blind = results.untitled.filter((r) => r.threw || r.requests.length < 2
+    || !r.requests.some((q) => q.kind === 'title'));
+  if (blind.length > 0) {
+    return { verdict: 'BLIND', why: `${blind.length} of ${n} untitled sessions showed no title request — the probe cannot see what it counts` };
+  }
+  const leaked = results.amicus.filter((r) => r.threw || r.requests.length !== 1);
+  if (leaked.length > 0) {
+    return { verdict: 'FAIL', why: `${leaked.length} of ${n} amicus sessions did not send exactly one request` };
+  }
+  return { verdict: 'PASS', why: `${n} of ${n} untitled sessions sent a title request; ${n} of ${n} amicus sessions sent one request each` };
 }
 
 async function main() {
@@ -61,12 +102,14 @@ async function main() {
   if (!sb.assertSandboxed()) { process.exit(1); }
   const sdk = await import('@opencode-ai/sdk');
   const { createSession } = require('../src/opencode-client');
-  const engine = { ...sb.engineHeader(), declared: require('../package.json').dependencies['opencode-ai'] };
-  process.stdout.write(`engine: opencode-ai ${engine.packageVersion} (declared ${engine.declared}, sdk ${engine.sdkVersion}), amicus ${engine.amicus}\n\n`);
+  const header = sb.engineHeader();
+  const engine = {
+    ...header, binary: path.relative(REPO, header.binary).split(path.sep).join('/'),
+    declared: require('../package.json').dependencies['opencode-ai'], platform: process.platform,
+  };
+  process.stdout.write(`engine: opencode-ai ${engine.packageVersion} (declared ${engine.declared}, sdk ${engine.sdkVersion}), amicus ${engine.amicus}, ${engine.platform}\n\n`);
   const cap = await sb.startCapture(({ res, body, capture, sse }) => {
-    const sys = ((body && body.messages) || []).filter((m) => m && m.role === 'system')
-      .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n');
-    capture.kind = /You are a title generator/.test(sys) ? 'title' : 'main';
+    capture.kind = /You are a title generator/.test(systemText(body)) ? 'title' : 'main';
     sse(res, body && body.model, { finish: 'stop' });
   });
   const config = { provider: { openrouter: { options: { baseURL: `${cap.origin}/api/v1`, apiKey: 'probe-key' }, models: { [MODEL]: {} } } } };
@@ -86,26 +129,27 @@ async function main() {
       for (let i = 0; i < n; i++) {
         const r = await runSession(client, cap, () => create(i));
         results[arm].push(r);
-        process.stdout.write(`${arm.padEnd(9)} #${i + 1}: ${r.threw ? `THREW ${r.threw}` : r.kinds.join(' > ') || '(no requests)'}\n`);
+        const kinds = r.requests.map((q) => q.kind).join(' > ') || '(no requests)';
+        process.stdout.write(`${arm.padEnd(9)} #${i + 1}: ${kinds}${r.threw ? ` — THREW ${r.threw}` : ''}\n`);
       }
     }
   } finally {
     try { server.close(); } catch { /* engine gone */ }
     await cap.close();
   }
-  const count = (arm, kind) => results[arm].reduce((s, r) => s + r.kinds.filter((k) => k === kind).length, 0);
+  const count = (arm, kind) => results[arm].reduce((s, r) => s + r.requests.filter((q) => !kind || q.kind === kind).length, 0);
   const summary = Object.fromEntries(Object.keys(arms).map((arm) => [arm, {
-    sessions: n, main: count(arm, 'main'), title: count(arm, 'title'),
+    sessions: n, requests: count(arm), title: count(arm, 'title'), main: count(arm, 'main'),
     threw: results[arm].filter((r) => r.threw).length,
   }]));
-  process.stdout.write(`\nsummary: ${JSON.stringify(summary)}\n`);
+  const { verdict, why } = judge(results, n);
+  process.stdout.write(`\nsummary: ${JSON.stringify(summary)}\nverdict: ${verdict} — ${why}\n`);
   if (outPath) {
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, JSON.stringify({ engine, model: MODEL, settleMs: SETTLE_MS, summary, results }, null, 2) + '\n');
+    fs.writeFileSync(outPath, JSON.stringify({ engine, model: MODEL, settleMs: SETTLE_MS, verdict, why, summary, results }, null, 2) + '\n');
     process.stdout.write(`digest: ${outPath}\n`);
   }
-  const ok = summary.amicus.title === 0 && summary.amicus.main === n && summary.amicus.threw === 0;
-  process.exit(ok ? 0 : 1);
+  process.exit({ PASS: 0, FAIL: 1, BLIND: 2 }[verdict]);
 }
 
 if (process.argv.slice(2).includes(sb.INNER)) {

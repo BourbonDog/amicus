@@ -9,13 +9,15 @@ All notable changes to Amicus are documented here. Format follows
 
 - **Every engine session is named, so the engine no longer sends a hidden title request.** An
   untitled session made the engine send a second provider request before each leg: a title
-  generator carrying the leg's full prompt, at the leg's own output reservation (64000 tokens
-  under CI's budget). It returned no usage, so the spend ledger, `amicus spend` and a council's
-  `usage` never saw it, and the credit preflight could not count its reservation. Council and
-  fanout legs, `amicus start`, MCP starts and interactive chats now create their sessions as
-  `amicus <task id>`, which is also the title an interactive chat now shows. Measured keyless on
-  opencode-ai 1.18.15 with `scripts/probe-session-title.js`: 4 of 4 untitled sessions sent the
-  request and 0 of 4 named ones did (#267).
+  generator carrying the leg's full prompt, at the leg's own output reservation (the engine's
+  default 32000 tokens, or 64000 under CI's budget). It returned no usage, so the spend ledger,
+  `amicus spend` and a council's `usage` never saw it, and the credit preflight could not count
+  its reservation. Council and fanout legs, `amicus start`, MCP starts and interactive chats now
+  create their sessions as `amicus <task id>`, which is also the title an interactive chat now
+  shows. Measured keyless on opencode-ai 1.18.15 with `scripts/probe-session-title.js`: 4 of 4
+  untitled sessions sent the request and 0 of 4 named ones did. CI's keyless integration job
+  now runs that probe on every push, so an engine update that brings the request back fails CI
+  (#267).
 
 ## [4.14.3] - 2026-10-14
 

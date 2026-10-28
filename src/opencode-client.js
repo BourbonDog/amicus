@@ -373,12 +373,13 @@ async function checkHealth(client) {
  *
  * @param {import('@opencode-ai/sdk').OpencodeClient} client - SDK client
  * @param {string} parentId - Parent session ID
+ * @param {string} [taskId] - Names the session (see sessionTitle)
  * @returns {Promise<string>} Child session ID
  * @throws {Error} If child session creation fails
  */
-async function createChildSession(client, parentId) {
+async function createChildSession(client, parentId, taskId) {
   const result = await client.session.create({
-    body: { parentID: parentId, title: sessionTitle() }
+    body: { parentID: parentId, title: sessionTitle(taskId) }
   });
 
   if (result.error) {

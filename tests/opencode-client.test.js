@@ -713,6 +713,18 @@ describe('OpenCode Client Wrapper', () => {
       await expect(createChildSession(mockClient, 'parent-123'))
         .rejects.toThrow('Failed to create child session');
     });
+
+    // #294 council round 1, B4/D4: a child names its task like a parent does.
+    it('names the task in a child session title when one is passed (#267)', async () => {
+      const mockClient = {
+        session: { create: jest.fn().mockResolvedValue({ data: { id: 'child-1' } }) }
+      };
+      const { createChildSession } = require('../src/opencode-client');
+      await createChildSession(mockClient, 'parent-1', 'task-7');
+      expect(mockClient.session.create).toHaveBeenCalledWith({
+        body: { parentID: 'parent-1', title: 'amicus task-7' }
+      });
+    });
   });
 
   describe('getChildren', () => {
