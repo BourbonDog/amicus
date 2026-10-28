@@ -8,130 +8,209 @@
     "platform": "win32"
   },
   "model": "qwen/qwen3.8-27b",
-  "settleMs": 6000,
-  "verdict": "PASS",
-  "why": "4 of 4 untitled sessions sent a title request; 4 of 4 amicus sessions sent one request each",
-  "summary": {
-    "untitled": {
-      "sessions": 4,
-      "requests": 8,
-      "title": 4,
-      "main": 4,
-      "threw": 0
-    },
-    "amicus": {
-      "sessions": 4,
-      "requests": 4,
-      "title": 0,
-      "main": 4,
-      "threw": 0
-    }
+  "settle": {
+    "sessionMs": 3000,
+    "phaseMs": 15000
   },
-  "results": {
-    "untitled": [
-      {
-        "requests": [
-          {
-            "kind": "title",
-            "model": "google/gemini-3.6-flash",
-            "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu"
-          },
-          {
-            "kind": "main",
-            "model": "qwen/qwen3.8-27b",
-            "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
-          }
-        ]
-      },
-      {
-        "requests": [
-          {
-            "kind": "title",
-            "model": "google/gemini-3.6-flash",
-            "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu"
-          },
-          {
-            "kind": "main",
-            "model": "qwen/qwen3.8-27b",
-            "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
-          }
-        ]
-      },
-      {
-        "requests": [
-          {
-            "kind": "title",
-            "model": "google/gemini-3.6-flash",
-            "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu"
-          },
-          {
-            "kind": "main",
-            "model": "qwen/qwen3.8-27b",
-            "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
-          }
-        ]
-      },
-      {
-        "requests": [
-          {
-            "kind": "title",
-            "model": "google/gemini-3.6-flash",
-            "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu"
-          },
-          {
-            "kind": "main",
-            "model": "qwen/qwen3.8-27b",
-            "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
-          }
-        ]
-      }
-    ],
+  "verdict": "PASS",
+  "why": "4 of 4 untitled sessions sent a request to another model; 8 amicus sessions sent 8 requests, all to the leg's model",
+  "phaseA": [
+    {
+      "model": "qwen/qwen3.8-27b",
+      "maxTokens": 32000,
+      "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+      "titlePrompt": false
+    },
+    {
+      "model": "qwen/qwen3.8-27b",
+      "maxTokens": 32000,
+      "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+      "titlePrompt": false
+    },
+    {
+      "model": "qwen/qwen3.8-27b",
+      "maxTokens": 32000,
+      "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+      "titlePrompt": false
+    },
+    {
+      "model": "qwen/qwen3.8-27b",
+      "maxTokens": 32000,
+      "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+      "titlePrompt": false
+    },
+    {
+      "model": "qwen/qwen3.8-27b",
+      "maxTokens": 32000,
+      "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+      "titlePrompt": false
+    },
+    {
+      "model": "qwen/qwen3.8-27b",
+      "maxTokens": 32000,
+      "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+      "titlePrompt": false
+    },
+    {
+      "model": "qwen/qwen3.8-27b",
+      "maxTokens": 32000,
+      "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+      "titlePrompt": false
+    },
+    {
+      "model": "qwen/qwen3.8-27b",
+      "maxTokens": 32000,
+      "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+      "titlePrompt": false
+    }
+  ],
+  "sessions": {
     "amicus": [
       {
         "requests": [
           {
-            "kind": "main",
             "model": "qwen/qwen3.8-27b",
             "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
           }
         ]
       },
       {
         "requests": [
           {
-            "kind": "main",
             "model": "qwen/qwen3.8-27b",
             "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
           }
         ]
       },
       {
         "requests": [
           {
-            "kind": "main",
             "model": "qwen/qwen3.8-27b",
             "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
           }
         ]
       },
       {
         "requests": [
           {
-            "kind": "main",
             "model": "qwen/qwen3.8-27b",
             "maxTokens": 32000,
-            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI"
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
+          }
+        ]
+      }
+    ],
+    "amicus-unscoped": [
+      {
+        "requests": [
+          {
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
+          }
+        ]
+      },
+      {
+        "requests": [
+          {
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
+          }
+        ]
+      },
+      {
+        "requests": [
+          {
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
+          }
+        ]
+      },
+      {
+        "requests": [
+          {
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
+          }
+        ]
+      }
+    ],
+    "untitled": [
+      {
+        "requests": [
+          {
+            "model": "google/gemini-3.6-flash",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu",
+            "titlePrompt": true
+          },
+          {
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
+          }
+        ]
+      },
+      {
+        "requests": [
+          {
+            "model": "google/gemini-3.6-flash",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu",
+            "titlePrompt": true
+          },
+          {
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
+          }
+        ]
+      },
+      {
+        "requests": [
+          {
+            "model": "google/gemini-3.6-flash",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu",
+            "titlePrompt": true
+          },
+          {
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
+          }
+        ]
+      },
+      {
+        "requests": [
+          {
+            "model": "google/gemini-3.6-flash",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are a title generator. You outpu",
+            "titlePrompt": true
+          },
+          {
+            "model": "qwen/qwen3.8-27b",
+            "maxTokens": 32000,
+            "systemHead": "[{\"type\":\"text\",\"text\":\"You are opencode, an interactive CLI",
+            "titlePrompt": false
           }
         ]
       }

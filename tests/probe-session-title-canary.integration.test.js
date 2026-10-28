@@ -4,13 +4,15 @@
  *
  * tests/opencode-client.test.js pins that every session create carries a title;
  * nothing automated proved the pinned engine still SKIPS its title-generation
- * request when it gets one. This runs scripts/probe-session-title.js (two arms,
+ * request when it gets one. This runs scripts/probe-session-title.js (three arms,
  * two sessions each, one engine start, in the probe's own keyless sandbox) and
- * fails unless the untitled control still shows the hidden request and every
- * session amicus creates sends exactly one. Integration tier: CI's keyless job
- * runs it on every push, on Linux, so an engine bump that ignores `body.title`,
- * or adds another request of its own, turns that job red instead of quietly
- * reopening spend the ledger cannot see. Zero spend; about 30 seconds.
+ * fails unless every session amicus creates, with or without a directory, sends
+ * exactly one request, to the leg's model, and the untitled control still shows
+ * the hidden one. Integration tier: CI's keyless job runs it on every push, on
+ * Linux, so an engine bump that ignores `body.title`, or adds another request of
+ * its own, turns that job red instead of quietly reopening spend the ledger
+ * cannot see. The verdict's cases are pinned engine-free by
+ * tests/probe-session-title-judge.test.js. Zero spend; about 45 seconds.
  */
 const fs = require('fs');
 const os = require('os');
@@ -30,8 +32,9 @@ test('the pinned engine sends no title request for a session amicus names (#267)
     });
     const out = `${r.stdout || ''}\n${r.stderr || ''}`;
     const verdict = out.split(/\r?\n/).find((l) => l.startsWith('verdict: '));
-    // The whole line: BLIND (the control lost sight of the request) fails as hard as FAIL.
-    expect(verdict).toBe('verdict: PASS — 2 of 2 untitled sessions sent a title request; 2 of 2 amicus sessions sent one request each');
+    // PASS only: BLIND (the control lost sight of the request) fails as hard as FAIL.
+    // The reason after the dash is the probe's to word; the whole line is printed on failure.
+    expect(verdict).toMatch(/^verdict: PASS — /);
     expect(r.status).toBe(0);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

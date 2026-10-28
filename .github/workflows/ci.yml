@@ -265,7 +265,7 @@ jobs:
     # prompt at all, which pins that the engine still tells its own catalogue row
     # from a config-only one (council #235 r3, record M23), plus
     # tests/probe-session-title-canary.integration.test.js — one more engine start,
-    # four sessions, which pins that the engine still sends no hidden title request
+    # six sessions, which pins that the engine still sends no hidden title request
     # for a session amicus names (#267)).
     #
     # DO NOT ADD SECRETS TO THIS JOB. Paid suites belong on the human-initiated

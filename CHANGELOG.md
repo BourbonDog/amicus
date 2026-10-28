@@ -15,9 +15,9 @@ All notable changes to Amicus are documented here. Format follows
   its reservation. Council and fanout legs, `amicus start`, MCP starts and interactive chats now
   create their sessions as `amicus <task id>`, which is also the title an interactive chat now
   shows. Measured keyless on opencode-ai 1.18.15 with `scripts/probe-session-title.js`: 4 of 4
-  untitled sessions sent the request and 0 of 4 named ones did. CI's keyless integration job
-  now runs that probe on every push, so an engine update that brings the request back fails CI
-  (#267).
+  untitled sessions sent the request and 0 of 8 named ones did, half of them created without a
+  project directory. CI's keyless integration job now runs that probe on every push, so an
+  engine update that brings the request back fails CI (#267).
 
 ## [4.14.3] - 2026-10-14
 
