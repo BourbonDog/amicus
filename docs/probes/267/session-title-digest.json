@@ -1,0 +1,75 @@
+{
+  "engine": {
+    "binary": "C:\\Users\\sendt\\code\\amicus\\node_modules\\opencode-windows-x64\\bin\\opencode.exe",
+    "packageVersion": "1.18.15",
+    "sdkVersion": "1.18.15",
+    "amicus": "4.14.3",
+    "declared": "1.18.15"
+  },
+  "model": "qwen/qwen3.8-27b",
+  "settleMs": 6000,
+  "summary": {
+    "untitled": {
+      "sessions": 4,
+      "main": 4,
+      "title": 4,
+      "threw": 0
+    },
+    "amicus": {
+      "sessions": 4,
+      "main": 4,
+      "title": 0,
+      "threw": 0
+    }
+  },
+  "results": {
+    "untitled": [
+      {
+        "kinds": [
+          "title",
+          "main"
+        ]
+      },
+      {
+        "kinds": [
+          "title",
+          "main"
+        ]
+      },
+      {
+        "kinds": [
+          "title",
+          "main"
+        ]
+      },
+      {
+        "kinds": [
+          "title",
+          "main"
+        ]
+      }
+    ],
+    "amicus": [
+      {
+        "kinds": [
+          "main"
+        ]
+      },
+      {
+        "kinds": [
+          "main"
+        ]
+      },
+      {
+        "kinds": [
+          "main"
+        ]
+      },
+      {
+        "kinds": [
+          "main"
+        ]
+      }
+    ]
+  }
+}

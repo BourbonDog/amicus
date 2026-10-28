@@ -95,8 +95,9 @@ describe('shared-server runHeadless scopes every per-session call to the directo
     });
 
     // A scoped create is required so the shared server files the session under
-    // the right project. An UNSCOPED create reproduces the #47 failure.
-    expect(mockCreateSession).toHaveBeenCalledWith(mockClient, PROJECT);
+    // the right project. An UNSCOPED create reproduces the #47 failure. The
+    // taskId names the session (#267), so the engine never generates a title.
+    expect(mockCreateSession).toHaveBeenCalledWith(mockClient, PROJECT, taskId);
   });
 
   test('sendPromptAsync carries the directory', async () => {
@@ -222,8 +223,9 @@ describe('mcp-server shared-server path scopes createSession to the resolved pro
   test('createSession on the shared-server path receives the project directory', () => {
     // The bare, unscoped form must be gone from the shared-server branch.
     expect(src).not.toContain('createSession(client)');
-    // It must be scoped to the resolved project dir (cwd in this handler).
-    expect(src).toMatch(/createSession\(client,\s*cwd\)/);
+    // It must be scoped to the resolved project dir (cwd in this handler),
+    // and named for the task (#267).
+    expect(src).toMatch(/createSession\(client,\s*cwd,\s*taskId\)/);
   });
 
   test('runHeadless is invoked with a directory option scoped to the project', () => {

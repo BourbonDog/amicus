@@ -174,6 +174,29 @@ describe('OpenCode Client Wrapper', () => {
       const sessionId = await createSession(mockClient);
       expect(sessionId).toBe('nested-session-456');
     });
+
+    // #267: an untitled create makes the engine spend a hidden provider request
+    // (the full prompt, never ledgered) generating a title. Measured keyless on
+    // opencode-ai 1.18.15: passing body.title suppresses it (0 title requests in
+    // 8 sessions). Dropping the title from createSession fails these.
+    it('gives every session a title, so the engine never generates one (#267)', async () => {
+      const mockClient = {
+        session: { create: jest.fn().mockResolvedValue({ data: { id: 's1' } }) }
+      };
+      await createSession(mockClient);
+      expect(mockClient.session.create.mock.calls[0][0].body).toEqual({ title: 'amicus' });
+    });
+
+    it('names the task in the session title when one is passed (#267)', async () => {
+      const mockClient = {
+        session: { create: jest.fn().mockResolvedValue({ data: { id: 's1' } }) }
+      };
+      await createSession(mockClient, '/proj', 'task-9');
+      expect(mockClient.session.create).toHaveBeenCalledWith({
+        body: { title: 'amicus task-9' },
+        query: { directory: '/proj' }
+      });
+    });
   });
 
   /**
@@ -671,8 +694,9 @@ describe('OpenCode Client Wrapper', () => {
       const sessionId = await createChildSession(mockClient, 'parent-session-123');
 
       expect(sessionId).toBe('child-session-789');
+      // #267: a child session is titled too, so it cannot trigger title generation.
       expect(mockClient.session.create).toHaveBeenCalledWith({
-        body: { parentID: 'parent-session-123' }
+        body: { parentID: 'parent-session-123', title: 'amicus' }
       });
     });
 
@@ -822,8 +846,8 @@ describe('OpenCode Client Wrapper', () => {
         const client = makeClient();
         const { createSession } = require('../src/opencode-client');
         await createSession(client);
-        // Identical to the pre-#48 shape: create({}) with no query.
-        expect(client.session.create).toHaveBeenCalledWith({});
+        // The pre-#48 shape plus #267's title: no query key at all.
+        expect(client.session.create).toHaveBeenCalledWith({ body: { title: 'amicus' } });
         expect(client.session.create.mock.calls[0][0]).not.toHaveProperty('query');
       });
 
@@ -832,6 +856,7 @@ describe('OpenCode Client Wrapper', () => {
         const { createSession } = require('../src/opencode-client');
         await createSession(client, '/proj/dir');
         expect(client.session.create).toHaveBeenCalledWith({
+          body: { title: 'amicus' },
           query: { directory: '/proj/dir' }
         });
       });

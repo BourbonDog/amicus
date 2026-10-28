@@ -542,9 +542,10 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
   // #47: scope every per-session SDK call to the project directory so a SHARED
   // OpenCode server (one server, many projects) files and finds this session
   // under the right ?directory=. `dirArgs` is the trailing arg list for the
-  // positional client wrappers (createSession/getMessages/getSessionStatus/
-  // abortSession) and is EMPTY when no directory is supplied — so the un-scoped
-  // (owned-server) call shape stays byte-for-byte identical. A scoped create
+  // positional client wrappers (getMessages/getSessionStatus/abortSession;
+  // createSession takes `directory` and the taskId explicitly, #267) and is
+  // EMPTY when no directory is supplied — so the un-scoped (owned-server) call
+  // shape stays byte-for-byte identical. A scoped create
   // with un-scoped follow-ups reproduces the identical "session not found"
   // failure, so ALL of them must carry it.
   const { directory } = options;
@@ -712,7 +713,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       logger.debug('Using existing session', { sessionId });
     } else {
       try {
-        sessionId = await createSession(client, ...dirArgs);
+        sessionId = await createSession(client, directory, taskId);
       } catch (error) {
         if (watchdog) { watchdog.cancel(); }
         if (!externalServer) { await server.close(); }
