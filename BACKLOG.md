@@ -75,7 +75,18 @@ mint ids as `B-<theme>-<n>`; cite symbols, not line numbers; no size tables (the
 - [ ] **#206-r4-C3** — Stop a warm engine-log hit serving a stale excerpt as final in a death report (a bypass or an age stamp). (was L8604; —) — src/utils/engine-log.js:207-227; there are now two call sites, src/headless.js:904 and :1533.
 - [ ] **#207-r6-A3** — Qualify the `ttftMs` one-poll bound, or use a monotonic clock, so a forward wall-clock jump cannot inflate it. (was L8678; —) — src/headless.js:860, :1351; the bound sentence is at :1332-1334.
 - [ ] **B-CL-8** — Stop `noStatusDetail` calling a non-object, non-empty status answer "an empty status". (was L8932c; PR #263) — src/headless.js:400-401.
-- [ ] **B-CL-9** — Read the #270 weekend rounds' judge legs (zero spend) to test "judge deaths are a regime" against the weekend, before the artifacts expire on 2026-12-18/19. (was L9009; #251, #202) — runs 35437150184, 35444701260, 35465599616, 35476684772, 35514703539 (4.13.0's busy extension confounds the comparison); expiry read via `gh api`. All five runs' artifacts were archived outside the repo on 2026-10-28 (N-08), so the expiry no longer bounds this read.
+- [x] **B-CL-9** — Read the #270 weekend rounds' judge legs (zero spend) to test "judge deaths are a regime" against the weekend, before the artifacts expire on 2026-12-18/19. (was L9009; #251, #202) — runs 35437150184, 35444701260, 35465599616, 35476684772, 35514703539 (4.13.0's busy extension confounds the comparison); expiry read via `gh api`. All five runs' artifacts were archived outside the repo on 2026-10-28 (N-08), so the expiry no longer bounds this read. — done 2026-10-28 ($0). Neither a weekday effect nor a lasting v4.9.8 regime: the jump was a provider-side episode from about 2026-09-14 to 2026-09-19.
+  - Method: every archived round that ran at the 480 s cutoff, with the cutoff read from each run's own death texts: 362 judge legs. The 300 s and 120 s rounds are left out.
+  - The measure: a judge leg "crossed" when it died at the cutoff, or completed with `ttftMs` above it. The second case exists only under 4.13.0's busy extension, so the extension cannot hide a crossing.
+  - Check: the extraction reproduces Wave 3.0's 0 of 49 (2026-09-11..13) and 17 dead (09-14..17).
+  - Crossing rates:
+    - before v4.9.8: weekday 9/123 (7.3 %), weekend 4/80 (5.0 %);
+    - v4.9.8–4.12: weekday 18/72 (25 %), no weekend rounds;
+    - v4.13+: weekday 3/68 (4.4 %), weekend 3/19 (15.8 %, the five rounds named here).
+  - The five weekend rounds: 0 of 19 judge legs died. 3 crossed, all on 2026-09-19, the episode's tail, and the busy extension rescued all 3 (first output at 549, 573 and 579 s).
+  - The rate was back to baseline on 2026-09-18 (1/15), still under v4.12.0, before 4.13.0 shipped at 22:41Z. It has stayed there since (3/72 from 09-20 to 10-14), on releases that all carry v4.9.8.
+  - deepseek carried the episode: 1/48 before, 10/18 during, 3/22 after. The pins were identical across the last two periods. The provider-side reading is an inference, since no upstream is recorded (B-RC-7).
+  - Report, scripts and leg tables: C:/Users/sendt/OneDrive/AIProjects/SecondBrain/output/2026-10-28-amicus-bcl9-weekend-read/.
 - [ ] **B-CL-10** — Name the cause on a dead Stage-1 repair solo; two post-boundary deaths carry an empty reason. (was L9053; #251) — src/council/run-stages.js:222-228; `buildRunStatsEntry` has no reason field (src/council/run-stats-entry.js:70-138).
 - [ ] **#269-r2-D2** — Count second firings that read `window extended once … (session: idle)` before adding a mid-extension status re-check. (was L9130; #251) — status read once, at src/headless.js:1469.
 - [ ] **#257-r3-F3.3** — ⛔ Compare sanitised strings in the duplicate-reason check. (was L9236; #257) — src/council/run-retry-notes.js:222-225 compares the raw text, then renders `boundReason`.
