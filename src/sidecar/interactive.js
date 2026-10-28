@@ -82,7 +82,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       progressStage('session_created');
     } else {
       // New session: create and send initial prompt, scoped to --cwd (#45).
-      sessionId = await createSession(ocClient, sessionDirectory);
+      sessionId = await createSession(ocClient, sessionDirectory, taskId);
       progressStage('session_created');
 
       // System prompt is set on agent config (hidden from UI).

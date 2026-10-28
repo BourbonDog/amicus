@@ -87,6 +87,20 @@ describe('idle-detection exits classify as completed', () => {
     expect(result.summary).toBe('OK');
   });
 
+  // #267: the unscoped (no --directory) path names its session for the task too,
+  // so the engine never spends a hidden request generating a title.
+  it('names the engine session for the task when no directory is set (#267)', async () => {
+    mockGetMessages.mockResolvedValue(plainReply('OK'));
+    mockGetSessionStatus.mockResolvedValue({ type: 'idle' });
+
+    await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5 }
+    );
+    expect(mockCreateSession).toHaveBeenCalledWith({}, undefined, 'task1234');
+  });
+
   it('SDK idle status keyed by session id → completed:true', async () => {
     mockGetMessages.mockResolvedValue(plainReply('OK'));
     mockGetSessionStatus.mockResolvedValue({ 'session-1': { type: 'idle' } });

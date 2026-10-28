@@ -102,7 +102,8 @@ describe('runInteractive scopes session + route to --cwd (#45)', () => {
 
   it('creates the session scoped to canonicalProjectPath(--cwd)', async () => {
     await runInteractive('m', 'sys', 'hi', 'task-1', PROJECT, {});
-    expect(createSession).toHaveBeenCalledWith({ fake: 'client' }, EXPECTED_DIR);
+    // The taskId names the session (#267), so the engine never generates a title.
+    expect(createSession).toHaveBeenCalledWith({ fake: 'client' }, EXPECTED_DIR, 'task-1');
   });
 
   it('scopes the status poll and message mirror to the same directory', async () => {

@@ -131,12 +131,24 @@ function directoryQuery(directory) {
 }
 
 /**
+ * The title every session is created with. #267: an untitled create makes the
+ * engine spend a hidden provider request generating one (the full prompt,
+ * never ledgered); measured keyless on opencode-ai 1.18.15, a title suppresses it.
+ *
+ * @param {string} [taskId] - The amicus task the session serves
+ * @returns {string}
+ */
+function sessionTitle(taskId) {
+  return taskId ? `amicus ${taskId}` : 'amicus';
+}
+
+/**
  * Create a new session
  *
  * @param {import('@opencode-ai/sdk').OpencodeClient} client - SDK client
  * @param {string} [directory] - Optional project directory to scope the session
- *   to (threaded to the SDK as query.directory). Omitting it keeps the call
- *   byte-for-byte identical to before.
+ *   to (threaded to the SDK as query.directory). Omitting it sends no `query`.
+ * @param {string} [taskId] - Names the session (see sessionTitle)
  * @returns {Promise<string>} Session ID — deliberately still a plain string.
  *   The response's `version` (#133 piece 3, below) rides out through
  *   `utils/engine-skew` rather than widening this return type: measured, all
@@ -144,8 +156,11 @@ function directoryQuery(directory) {
  *   `sidecar/interactive.js`) assign it straight to a `sessionId` string.
  * @throws {Error} If session creation fails
  */
-async function createSession(client, directory) {
-  const result = await client.session.create({ ...directoryQuery(directory) });
+async function createSession(client, directory, taskId) {
+  const result = await client.session.create({
+    body: { title: sessionTitle(taskId) },
+    ...directoryQuery(directory)
+  });
 
   if (result.error) {
     throw new Error(result.error.message || 'Failed to create session');
@@ -358,12 +373,13 @@ async function checkHealth(client) {
  *
  * @param {import('@opencode-ai/sdk').OpencodeClient} client - SDK client
  * @param {string} parentId - Parent session ID
+ * @param {string} [taskId] - Names the session (see sessionTitle)
  * @returns {Promise<string>} Child session ID
  * @throws {Error} If child session creation fails
  */
-async function createChildSession(client, parentId) {
+async function createChildSession(client, parentId, taskId) {
   const result = await client.session.create({
-    body: { parentID: parentId }
+    body: { parentID: parentId, title: sessionTitle(taskId) }
   });
 
   if (result.error) {

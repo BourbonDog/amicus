@@ -175,6 +175,21 @@ describe('shared-server amicus_start settle wiring (Minor #4)', () => {
     });
   });
 
+  test('shared-server path: the engine session is named for the task it serves (#267)', async () => {
+    // #294 council round 1 (A1/B3/D2): the call site was pinned by a source regex only.
+    // Named mutant "MCPSESSIONNOTITLE": drop `taskId` from mcp-server.js's createSession call.
+    await jest.isolateModulesAsync(async () => {
+      mockCommonSeams({ runHeadlessImpl: async () => ({ completed: true, summary: 'all done' }) });
+      const { createSession } = require('../src/opencode-client');
+      const { handlers } = require('../src/mcp-server');
+      const startResult = await handlers.amicus_start({ prompt: 'p', noUi: true, model: 'google/gemini-test' }, tmpDir);
+      const { taskId } = JSON.parse(startResult.content[0].text);
+      await drain();
+      expect(createSession).toHaveBeenCalledTimes(1);
+      expect(createSession.mock.calls[0][2]).toBe(taskId);
+    });
+  });
+
   test('shared-server path: no thinking requested — no `variant` option, no `thinking` key', async () => {
     let seenOptions = null;
     await jest.isolateModulesAsync(async () => {
