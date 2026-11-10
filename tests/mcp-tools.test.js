@@ -518,11 +518,20 @@ describe('MCP Tool Definitions', () => {
     // The guarantee that actually matters is behavioural: a value the CLI accepts
     // must not be rejected over MCP, nor the reverse. So compare the matchers.
     //
-    // Which flags this catches, measured: `m` is detectable -- "abc\ndef" matches
-    // a multiline-anchored pattern and not an anchored one. `i` is INERT for this
-    // pattern, because [a-zA-Z0-9_-] already spans both cases, so no corpus can
-    // see it and no CLI/MCP divergence exists for it either. Narrow that class
-    // and `i` becomes detectable, at which point this corpus covers it too.
+    // WHAT THIS CATCHES, AND WHAT IT CANNOT. Measured against this pattern:
+    // `m` is detectable ("abc\ndef" matches a multiline-anchored pattern and not
+    // an anchored one). `i`, `s`, `u` and `v` are NOT: they change no acceptance
+    // decision for [a-zA-Z0-9_-]{1,64}, which already spans both cases and holds
+    // no dot, no escape and no surrogate. So for those flags there is no
+    // CLI/MCP divergence to catch here -- but neither would this corpus see one
+    // if the class were narrowed to make them bite. A behavioural corpus can
+    // only ever test the acceptance set, and a flag that does not change the
+    // acceptance set is invisible to every instrument available to a test:
+    // JSON Schema has no field for it and zod 4's `_def.checks` is opaque
+    // (v4.15.0 release council, round 2). The structural fix is to stop
+    // duplicating the literal and have mcp-tools.js import TAG_PATTERN, at which
+    // point no flag can differ because there is only one regex; that touches
+    // runtime code and is deliberately not in this release.
     const TAG_CORPUS = [
       'a', 'A', 'Z', '0', '9', '_', '-', 'sprint-42_v2', 'UPPER_case-9',
       'x'.repeat(64),

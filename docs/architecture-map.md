@@ -446,6 +446,7 @@ electron/
 scripts/
 ├── benchmark-api-direct.js  # Direct OpenRouter API Benchmark for Thinking Levels
 ├── benchmark-thinking.js  # Benchmark Thinking Levels
+├── capture-mcp-schema.js
 ├── check-ci-alias-pins.js  # Drift gate for the CI alias map (.github/amicus-ci-aliases.json).
 ├── check-citations.js  # Cross-file citation enforcement for the pre-commit hook and the whole-tree
 ├── check-file-sizes.js  # File size enforcement for the pre-commit hook and the whole-tree CI gate (--all).

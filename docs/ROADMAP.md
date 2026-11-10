@@ -664,9 +664,15 @@ all blind to it. Every session amicus creates is now named, so the request is ne
   the request back fails CI instead of quietly restoring the charge. (#267) *(M)*
 - **A shipped tree with no known advisory** — `npm audit --omit=dev` reports 0 vulnerabilities,
   down from 11 (1 critical, 5 high, 5 moderate). Ten cleared on a lockfile refresh alone; the
-  eleventh moved `zod` from `^3.0.0` to `^4.6.7`. The bump changed no runtime code — amicus builds zod
-  schemas in one file, uses only core constructors, never reads zod error shapes, and every
-  schema shape it builds was probed to behave identically under 4.6.7. *(M)*
+  eleventh moved `zod` from `^3.0.0` to `^4.6.7`. The bump changed no runtime code — amicus builds
+  zod schemas in one file, uses only core constructors, never reads zod error shapes, and every
+  shape it builds validates identically under 4.6.7. The published MCP schema does move, though,
+  on three properties: the SDK converts with a different library per zod major, and zod 3's
+  single-argument `record` had no key schema to emit, so three `z.record(z.any())` properties
+  now carry `propertyNames: {"type":"string"}`. A JSON object's keys are always strings, so
+  nothing a client sends validates differently — but it is a real change to the one
+  machine-facing interface, and `tools/list` is now pinned whole as a client receives it so the
+  next one is a reviewable diff rather than an unchecked claim. *(M)*
 > Why here: the charge was invisible exactly where it mattered most. A CI council run reserves
 > its legs against a credit preflight, and the preflight could not count a request nobody had
 > asked the engine to make. Naming the session is the whole fix; the keyless probe is what
