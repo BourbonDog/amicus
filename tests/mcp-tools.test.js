@@ -199,7 +199,10 @@ describe('MCP Tool Definitions', () => {
       // effective default (true when absent) now lives at the handler's read
       // site (mcp-server.js: `input.includeContext !== false`), not in the schema.
       const schema = startTool.inputSchema.includeContext;
-      expect(schema._def.typeName).toBe('ZodOptional');
+      // zod 4 dropped `_def.typeName`, so assert the claim itself: the schema is
+      // optional and is NOT a ZodDefault. Both checks hold on zod 3 and 4.
+      expect(schema).toBeInstanceOf(z.ZodOptional);
+      expect(schema).not.toBeInstanceOf(z.ZodDefault);
       expect(schema.isOptional()).toBe(true);
     });
 
@@ -460,7 +463,10 @@ describe('MCP Tool Definitions', () => {
       const tool = TOOLS.find(t => t.name === name);
       expect(tool.inputSchema).toHaveProperty('tag');
       const schema = tool.inputSchema.tag;
-      expect(schema._def.typeName).toBe('ZodOptional');
+      // zod 4 dropped `_def.typeName`, so assert the claim itself: the schema is
+      // optional and is NOT a ZodDefault. Both checks hold on zod 3 and 4.
+      expect(schema).toBeInstanceOf(z.ZodOptional);
+      expect(schema).not.toBeInstanceOf(z.ZodDefault);
       expect(schema.isOptional()).toBe(true);
     });
 
@@ -495,10 +501,56 @@ describe('MCP Tool Definitions', () => {
       const { TAG_PATTERN } = require('../src/utils/validators');
       const tool = TOOLS.find(t => t.name === name);
       const inner = tool.inputSchema.tag.unwrap(); // ZodOptional -> ZodString
-      const regexCheck = inner._def.checks.find(c => c.kind === 'regex');
-      expect(regexCheck).toBeDefined();
-      expect(regexCheck.regex.source).toBe(TAG_PATTERN.source);
-      expect(regexCheck.regex.flags).toBe(TAG_PATTERN.flags);
+      // Read the pattern through zod's PUBLIC JSON Schema conversion rather than
+      // `_def.checks`: zod 4 made that array opaque (each entry serialises as {}).
+      // Measured: this string is byte-identical to what `tools/list` publishes on
+      // the wire, and tests/mcp-protocol.integration.test.js pins that end directly.
+      expect(z.toJSONSchema(inner).pattern).toBe(TAG_PATTERN.source);
+    });
+
+    // The source pin above CANNOT see a regex flag. Neither JSON Schema nor the
+    // published wire schema has a field to carry one, so a flag added at the
+    // schema site is invisible to it. An earlier revision of this test asserted
+    // `expect(TAG_PATTERN.flags).toBe('')` and claimed that closed the hole; it
+    // does not -- that only inspects the CLI side, and it passes untouched while
+    // the schema side carries a flag (v4.15.0 release council, finding A1).
+    //
+    // The guarantee that actually matters is behavioural: a value the CLI accepts
+    // must not be rejected over MCP, nor the reverse. So compare the matchers.
+    //
+    // WHAT THIS CATCHES, AND WHAT IT CANNOT. Measured against this pattern:
+    // `m` is detectable ("abc\ndef" matches a multiline-anchored pattern and not
+    // an anchored one). `i`, `s`, `u` and `v` are NOT: they change no acceptance
+    // decision for [a-zA-Z0-9_-]{1,64}, which already spans both cases and holds
+    // no dot, no escape and no surrogate. So for those flags there is no
+    // CLI/MCP divergence to catch here -- but neither would this corpus see one
+    // if the class were narrowed to make them bite. A behavioural corpus can
+    // only ever test the acceptance set, and a flag that does not change the
+    // acceptance set is invisible to every instrument available to a test:
+    // JSON Schema has no field for it and zod 4's `_def.checks` is opaque
+    // (v4.15.0 release council, round 2). The structural fix is to stop
+    // duplicating the literal and have mcp-tools.js import TAG_PATTERN, at which
+    // point no flag can differ because there is only one regex; that touches
+    // runtime code and is deliberately not in this release.
+    const TAG_CORPUS = [
+      'a', 'A', 'Z', '0', '9', '_', '-', 'sprint-42_v2', 'UPPER_case-9',
+      'x'.repeat(64),
+      '', 'x'.repeat(65), 'bad tag!', 'tag.with.dots', 'tag/slash',
+      'abc\ndef', '\nabc', 'abc\n', ' abc', 'abc ', 'tag\twith\ttabs',
+      'caf\u00e9', 'semi;colon', 'quote"d', "apos'", 'back\\slash',
+    ];
+    test.each(TAG_TOOLS)('$name: tag accepts exactly what TAG_PATTERN accepts (flag-proof)', ({ name }) => {
+      const { TAG_PATTERN } = require('../src/utils/validators');
+      const tool = TOOLS.find(t => t.name === name);
+      const schema = tool.inputSchema.tag;
+      for (const value of TAG_CORPUS) {
+        // A fresh regex per value: a stateful flag (g/y) on TAG_PATTERN would make
+        // .test() depend on lastIndex, which is itself a divergence worth failing.
+        const cli = new RegExp(TAG_PATTERN.source, TAG_PATTERN.flags).test(value);
+        const mcp = schema.safeParse(value).success;
+        // Compared as objects so a failure names the offending value.
+        expect({ value, cli, mcp }).toEqual({ value, cli, mcp: cli });
+      }
     });
   });
 
@@ -878,7 +930,10 @@ describe('intent on the council MCP schemas (v4.9 W5.2)', () => {
   test('amicus_council_run declares intent as an optional review|task enum with no Zod default', () => {
     const schema = byName().amicus_council_run.inputSchema.intent;
     expect(schema).toBeDefined();
-    expect(schema._def.typeName).toBe('ZodOptional');
+    // zod 4 dropped `_def.typeName`, so assert the claim itself: the schema is
+    // optional and is NOT a ZodDefault. Both checks hold on zod 3 and 4.
+    expect(schema).toBeInstanceOf(z.ZodOptional);
+    expect(schema).not.toBeInstanceOf(z.ZodDefault);
     expect(schema.isOptional()).toBe(true);
   });
 

@@ -182,6 +182,137 @@ describe('MCP Protocol: handshake and tool discovery', () => {
       expect(tool.inputSchema).toBeDefined();
     }
   });
+
+  // v4.15.0 release council, rounds 1 and 2. Round 1 (D1/D2): zod's own
+  // `toJSONSchema` is zod-4-only, so a unit test reading it cannot prove the
+  // schema a client ACTUALLY receives survived the zod 3 -> 4 bump -- the SDK
+  // converts with a different library per zod major (v3: zod-to-json-schema,
+  // v4: zod/v4-mini), so a dependency bump alone can move the wire.
+  //
+  // Round 2 then showed that hand-written per-property pins are the wrong
+  // instrument, in both directions at once: too NARROW (they assert only the
+  // shapes someone thought to list, saying nothing about enum/union/boolean/
+  // number/object, and a newly added tool silently gets no pin at all) and too
+  // BRITTLE (a strict toEqual on one property object breaks CI on a harmless
+  // future `title`/`$schema` addition). Worse, they could not catch the thing
+  // that actually happened: zod 3's `z.record(z.any())` carried no key schema
+  // and so could not emit `propertyNames: {type: 'string'}`, so the published
+  // surface DID change at the byte level while the release asserted it had not.
+  //
+  // So the breadth lives in a committed fixture of the whole surface, and only
+  // the invariants a fixture cannot express are asserted by hand -- and those
+  // are DERIVED from the response, never a hardcoded tool list.
+  it('publishes exactly the committed tools/list surface', async () => {
+    const expected = require('./fixtures/mcp-tools-list.published.json');
+    const result = await client.request('tools/list', {});
+    // A cursor would mean this is page 1 of N, and a first-page pin compares
+    // equal to itself forever while the real surface is larger. Asserted rather
+    // than followed, because the response is unpaginated today: if that ever
+    // changes this fails loudly instead of silently truncating.
+    expect(result.result.nextCursor === undefined || result.result.nextCursor === null).toBe(true);
+
+    // Descriptions are stripped at every level, matching the capture script:
+    // several interpolate the caller's configured alias list, so the published
+    // prose differs between a dev machine and this credential-scrubbed rail.
+    // Prose has its own unit tests. EVERYTHING ELSE IS KEPT -- a first draft
+    // projected each tool to {name, inputSchema, annotations} and so silently
+    // dropped `execution` and would drop any field a future SDK adds, which
+    // defeats the purpose of a surface pin (release council, round 3).
+    const strip = (node) => {
+      if (Array.isArray(node)) { return node.map(strip); }
+      if (node && typeof node === 'object') {
+        return Object.fromEntries(Object.entries(node)
+          .filter(([k]) => k !== 'description')
+          .map(([k, v]) => [k, strip(v)]));
+      }
+      return node;
+    };
+    // Code point, not localeCompare: a fixture must be byte-reproducible on any
+    // machine regardless of locale.
+    const normalize = (tools) => [...tools]
+      .sort((a, b) => (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0)))
+      .map((t) => strip(t));
+    const live = normalize(result.result.tools);
+
+    // Name the drifted tools first: a bare toEqual on the whole surface is an
+    // unreadable diff, and the useful question is always "which tool moved".
+    // Keys are sorted recursively before stringifying so this diagnostic agrees
+    // with the order-insensitive toEqual below -- otherwise a benign key
+    // reordering reports drift that the real assertion then does not confirm.
+    const canonical = (node) => {
+      if (Array.isArray(node)) { return node.map(canonical); }
+      if (node && typeof node === 'object') {
+        return Object.fromEntries(Object.keys(node).sort().map((k) => [k, canonical(node[k])]));
+      }
+      return node;
+    };
+    const byName = (list) => Object.fromEntries(list.map((t) => [t.name, JSON.stringify(canonical(t))]));
+    const liveMap = byName(live);
+    const wantMap = byName(expected.tools);
+    const drifted = [...new Set([...Object.keys(liveMap), ...Object.keys(wantMap)])]
+      .filter((n) => liveMap[n] !== wantMap[n]).sort();
+    expect({
+      drifted,
+      hint: 're-bless deliberately with: node scripts/capture-mcp-schema.js (then READ the diff)',
+    }).toEqual({
+      drifted: [],
+      hint: 're-bless deliberately with: node scripts/capture-mcp-schema.js (then READ the diff)',
+    });
+    // Then the full comparison, for the detail once you know where to look.
+    expect(live).toEqual(expected.tools);
+  });
+
+  it('holds the cross-file and structural invariants a fixture cannot express', async () => {
+    const { TAG_PATTERN } = require('../src/utils/validators');
+    const result = await client.request('tools/list', {});
+    const tools = result.result.tools;
+
+    // The fixture pins the tag pattern as a STRING; it cannot know that string
+    // has to equal utils/validators.js's TAG_PATTERN, which is the CLI's own
+    // validator. Re-blessing the fixture would happily enshrine a drifted
+    // pattern, so the cross-file tie is asserted here -- and discovered from
+    // the response, so a fourth tag-bearing tool is covered automatically.
+    const tagged = tools.filter((t) => t.inputSchema && t.inputSchema.properties && t.inputSchema.properties.tag);
+    expect(tagged.length).toBeGreaterThanOrEqual(3);
+    for (const t of tagged) {
+      expect(t.inputSchema.properties.tag.pattern).toBe(TAG_PATTERN.source);
+    }
+
+    // The no-Zod-default rule is NOT global, and a first draft of this test that
+    // asserted it globally was simply wrong: amicus_start.windowPosition,
+    // amicus_read.mode, amicus_resume.noUi and amicus_continue.noUi all carry a
+    // published default, legitimately. The rule binds only where KEY PRESENCE is
+    // what decides caller-explicitness, because something downstream fills the
+    // key when it is absent -- includeContext is read by a pack (v4.5 Task 15
+    // fix wave 2, Finding 1), intent is the sole carrier of task mode on this
+    // surface, and tag must stay genuinely absent so list/search grouping does
+    // not invent one.
+    //
+    // Both includeContext-bearing tools are covered: amicus_fanout's was missed
+    // by the first draft (release council, round 3), so BOTH are discovered from
+    // the response now rather than listed, exactly as `tag` is. An earlier
+    // comment here also named `noContext` as a guarded key; no tool publishes
+    // such a property, so there was nothing to guard and the claim was wrong.
+    const withProp = (name) => tools
+      .filter((t) => t.inputSchema && t.inputSchema.properties && t.inputSchema.properties[name])
+      .map((t) => [t.name, name]);
+    const includeContextTools = withProp('includeContext');
+    expect(includeContextTools.map(([t]) => t).sort()).toEqual(['amicus_fanout', 'amicus_start']);
+    const mustHaveNoDefault = [
+      ...tagged.map((t) => [t.name, 'tag']),
+      ...includeContextTools,
+      ['amicus_council_run', 'intent'],
+    ];
+    const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
+    const offenders = [];
+    for (const [tool, name] of mustHaveNoDefault) {
+      const schema = byName[tool].inputSchema.properties[name];
+      expect(schema).toBeDefined();
+      if (Object.prototype.hasOwnProperty.call(schema, 'default')) { offenders.push(tool + '.' + name + ' has a default'); }
+      if ((byName[tool].inputSchema.required || []).includes(name)) { offenders.push(tool + '.' + name + ' is required'); }
+    }
+    expect(offenders).toEqual([]);
+  });
 });
 
 describe('MCP Protocol: tool invocation', () => {

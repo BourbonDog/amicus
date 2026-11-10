@@ -1,6 +1,6 @@
 {
   "name": "amicus",
-  "version": "4.14.3",
+  "version": "4.15.0",
   "mcpName": "io.github.BourbonDog/amicus",
   "description": "Multi-model LLM Council + parallel AI window for Claude Code. Run structured council reviews across Gemini, GPT, DeepSeek and more — or fork a conversation to any model and fold the results back.",
   "keywords": [
@@ -83,7 +83,7 @@
     "opencode-ai": "1.18.15",
     "update-notifier": "^7.3.1",
     "yauzl": "^2.10.0",
-    "zod": "^3.0.0"
+    "zod": "^4.6.7"
   },
   "optionalDependencies": {
     "electron": "^43.1.1"

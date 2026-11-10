@@ -3,7 +3,50 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
-## [Unreleased]
+## [4.15.0] - 2026-11-10
+
+### Security
+
+- **Every advisory against the shipped dependency tree is cleared: `npm audit --omit=dev`
+  reports 0 vulnerabilities, down from 11 (1 critical, 5 high, 5 moderate).** Ten were
+  resolved by a lockfile refresh alone, with no manifest change: `proxy-addr` (the critical
+  one -- IP spoofing via an IPv4-mapped IPv6 trust subnet), `@modelcontextprotocol/sdk`,
+  `electron` (43.1.1 to 43.8.7), `body-parser`, `undici`, `hono`, `@hono/node-server`,
+  `fast-uri`, `ip-address` and `qs`. The eleventh needed a major: **`zod` moves from
+  `^3.0.0` (3.25.76) to `^4.6.7`**, which clears a memory-exhaustion advisory in the
+  validation of oversized constrained collections. The bump is safe to take here:
+  `@modelcontextprotocol/sdk` already declares `zod` `^3.25 || ^4.0`, amicus builds zod
+  schemas in exactly one file (`src/mcp-tools.js`) using only core constructors, and it
+  never touches zod error shapes. Every shape it builds was measured to VALIDATE
+  identically under 4.6.7, and the bump itself changed no runtime code (the release’s own
+  runtime change is the named engine sessions below).
+- **The published MCP tool schema does change, on four properties, and the change is
+  semantically inert.** This is stated because the first cut of this release asserted the
+  public surface was unchanged without diffing it, and that was wrong. The SDK converts zod
+  to JSON Schema with a different library per zod major (v3 `zod-to-json-schema`, v4
+  `zod/v4-mini`), so a dependency bump alone can move the wire. Measured on both sides:
+  zod 3 emitted `{"type":"object","additionalProperties":{}}` for all four
+  `z.record(z.any())` properties -- `amicus_verdict.record`, `amicus_verdict.seatLoss`,
+  `amicus_verdict.degrades` and `amicus_council_tally.runStats` -- and zod 4 emits the same
+  plus `"propertyNames":{"type":"string"}`, because zod 3's single-argument `record` carried
+  no key schema to emit. (An earlier revision of this entry said three and omitted
+  `degrades`: the count came from a truncated grep and was wrong. The whole-surface fixture
+  below is what surfaced the fourth, which is the argument for having it.) A JSON object's keys are always strings, so no document that
+  validated before fails now and no client behaviour changes; it is a tightening that
+  restates what JSON already guarantees. Every other published shape -- string with
+  pattern, boolean, number, enum, union, object -- is byte-identical across the bump. A
+  changed public surface is also part of why this release is a minor rather than a patch.
+  `tools/list` is now pinned whole, as a client receives it, in
+  `tests/fixtures/mcp-tools-list.published.json`, regenerated deliberately with
+  `node scripts/capture-mcp-schema.js`, so the next such move shows up as a reviewable
+  diff instead of an assertion nobody checked.
+- **Four test assertions stopped reading zod internals.** Three read `_def.typeName` and one
+  read `_def.checks`, both restructured by zod 4. The no-Zod-default checks now assert the
+  claim directly (`toBeInstanceOf(z.ZodOptional)` and not `z.ZodDefault`), and the tag
+  regex-parity pin is behavioural: a corpus of values is run through both the CLI's
+  `TAG_PATTERN` and the MCP schema, which must agree on every one. That replaces a flags
+  comparison the rewrite had dropped while claiming to keep it -- no schema-shaped
+  assertion can carry a regex flag, so only the acceptance set can be compared.
 
 ### Fixed
 

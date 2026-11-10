@@ -13,7 +13,7 @@ lives under **Backlog (tracked, not scheduled)** with everything else that is re
 Nothing about the content changed and no judgment about its value is implied; only its status. When
 an org buyer and the org to support them exist, it earns a number then.
 
-Amicus is at **v4.14.3** (2026-10-14). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.15.0** (2026-11-10). Each 4.x rev below leads with the benefit, not the
 plumbing; the patch releases (v4.9.1–v4.9.8 and v4.14.1–v4.14.3) carry no section of their own, because each corrected a
 defect rather than adding scope — where one added a surface (v4.9.4's `--thinking` refusals and
 `output-budget` doctor row, v4.9.5's Electron digest gate, v4.9.6's artifact custody, v4.9.7's dual name-table rescue boundary, v4.9.8's per-run seat tool allowlist and its unverified/refused seat census, v4.14.1's `none` conformance for a row nothing checked, v4.14.2's refusals of a council folder that already holds a run, of an Electron artifact the trusted table does not list and of a `path.txt` outside `dist/`, v4.14.3's re-test of a stored key from the setup window, which never hands the key to the window) it did so to
@@ -22,9 +22,11 @@ v4.11.0 finished it (owner mode, the setup window's Needs-review section, the on
 v4.12.0 added one of its own (the CI council's credit preflight), v4.13.0 changed what a
 shipped one does (the no-output backstop asks the engine before it kills), and v4.14.0 changed
 what a council accepts as a review (an answer given only in the reasoning channel is not one),
-so each gets a section. See `CHANGELOG.md` for what each one contained.
+and v4.15.0 removed a provider request no reader could see (an unnamed engine session made the
+engine mint its own title, carrying the leg's full prompt at the leg's own output reservation,
+and reporting no usage at all), so each gets a section. See `CHANGELOG.md` for what each one contained.
 
-**Status:** v4.0 through **v4.14.0** have **shipped**, plus the v4.9.1–v4.9.8, v4.14.1, v4.14.2 and **v4.14.3** patch releases —
+**Status:** v4.0 through **v4.15.0** have **shipped**, plus the v4.9.1–v4.9.8, v4.14.1, v4.14.2 and v4.14.3 patch releases —
 everything on this page is a record of what landed, not a plan. Composition — the scope that
 carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
 release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
@@ -645,6 +647,37 @@ judges' bundle.
 > council marks that leg `promoted: true`, loses the seat and exits 2. The flip side is by design:
 > a seat that answers only in its reasoning channel on every call loses every council it sits on.
 > Re-seat it; a pre-flight warning for such a seat is filed, not built.
+
+## v4.15 — "Every request a leg pays for is on the ledger" *(the engine’s hidden title generation — #267)* — ✅ SHIPPED v4.15.0, 2026-11-10
+**Benefit:** a council leg no longer pays for a second provider request nobody could see. An
+unnamed engine session made the engine mint a title for itself before each leg — a generator
+carrying that leg's full prompt, reserved at the leg's own output budget — and it reported no
+usage, so the spend ledger, `amicus spend`, a council's `usage` and the credit preflight were
+all blind to it. Every session amicus creates is now named, so the request is never sent.
+
+- **★ Every engine session is named, so the engine sends no title request** — council and
+  fanout legs, `amicus start`, MCP starts and interactive chats all create their sessions as
+  `amicus <task id>`, which is also the title an interactive chat now shows. Measured keyless
+  on opencode-ai 1.18.15 with `scripts/probe-session-title.js`: 4 of 4 untitled sessions sent
+  the request and 0 of 8 named ones did, half of them created without a project directory.
+  CI’s keyless integration job runs that probe on every push, so an engine update that brings
+  the request back fails CI instead of quietly restoring the charge. (#267) *(M)*
+- **A shipped tree with no known advisory** — `npm audit --omit=dev` reports 0 vulnerabilities,
+  down from 11 (1 critical, 5 high, 5 moderate). Ten cleared on a lockfile refresh alone; the
+  eleventh moved `zod` from `^3.0.0` to `^4.6.7`. The bump changed no runtime code — amicus builds
+  zod schemas in one file, uses only core constructors, never reads zod error shapes, and every
+  shape it builds validates identically under 4.6.7. The published MCP schema does move, though,
+  on four properties: the SDK converts with a different library per zod major, and zod 3's
+  single-argument `record` had no key schema to emit, so all four `z.record(z.any())`
+  properties now carry `propertyNames: {"type":"string"}`. A JSON object's keys are always strings, so
+  nothing a client sends validates differently — but it is a real change to the one
+  machine-facing interface, and `tools/list` is now pinned whole as a client receives it so the
+  next one is a reviewable diff rather than an unchecked claim. *(M)*
+> Why here: the charge was invisible exactly where it mattered most. A CI council run reserves
+> its legs against a credit preflight, and the preflight could not count a request nobody had
+> asked the engine to make. Naming the session is the whole fix; the keyless probe is what
+> keeps it fixed, because the council workflow installs `amicus@latest` and would otherwise
+> notice only when a bill grew.
 
 ## Backlog (tracked, not scheduled)
 
