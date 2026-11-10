@@ -199,7 +199,10 @@ describe('MCP Tool Definitions', () => {
       // effective default (true when absent) now lives at the handler's read
       // site (mcp-server.js: `input.includeContext !== false`), not in the schema.
       const schema = startTool.inputSchema.includeContext;
-      expect(schema._def.typeName).toBe('ZodOptional');
+      // zod 4 dropped `_def.typeName`, so assert the claim itself: the schema is
+      // optional and is NOT a ZodDefault. Both checks hold on zod 3 and 4.
+      expect(schema).toBeInstanceOf(z.ZodOptional);
+      expect(schema).not.toBeInstanceOf(z.ZodDefault);
       expect(schema.isOptional()).toBe(true);
     });
 
@@ -460,7 +463,10 @@ describe('MCP Tool Definitions', () => {
       const tool = TOOLS.find(t => t.name === name);
       expect(tool.inputSchema).toHaveProperty('tag');
       const schema = tool.inputSchema.tag;
-      expect(schema._def.typeName).toBe('ZodOptional');
+      // zod 4 dropped `_def.typeName`, so assert the claim itself: the schema is
+      // optional and is NOT a ZodDefault. Both checks hold on zod 3 and 4.
+      expect(schema).toBeInstanceOf(z.ZodOptional);
+      expect(schema).not.toBeInstanceOf(z.ZodDefault);
       expect(schema.isOptional()).toBe(true);
     });
 
@@ -495,10 +501,14 @@ describe('MCP Tool Definitions', () => {
       const { TAG_PATTERN } = require('../src/utils/validators');
       const tool = TOOLS.find(t => t.name === name);
       const inner = tool.inputSchema.tag.unwrap(); // ZodOptional -> ZodString
-      const regexCheck = inner._def.checks.find(c => c.kind === 'regex');
-      expect(regexCheck).toBeDefined();
-      expect(regexCheck.regex.source).toBe(TAG_PATTERN.source);
-      expect(regexCheck.regex.flags).toBe(TAG_PATTERN.flags);
+      // Read the pattern through zod's PUBLIC JSON Schema conversion rather than
+      // `_def.checks`: zod 4 made that array opaque (each entry serialises as {}),
+      // and the published JSON Schema is also the form an MCP client actually
+      // validates against -- which is exactly the drift this test exists to catch.
+      expect(z.toJSONSchema(inner).pattern).toBe(TAG_PATTERN.source);
+      // TAG_PATTERN carries no flags and JSON Schema has no field to carry one, so
+      // a flag added on either side must fail here rather than pass silently.
+      expect(TAG_PATTERN.flags).toBe('');
     });
   });
 
@@ -878,7 +888,10 @@ describe('intent on the council MCP schemas (v4.9 W5.2)', () => {
   test('amicus_council_run declares intent as an optional review|task enum with no Zod default', () => {
     const schema = byName().amicus_council_run.inputSchema.intent;
     expect(schema).toBeDefined();
-    expect(schema._def.typeName).toBe('ZodOptional');
+    // zod 4 dropped `_def.typeName`, so assert the claim itself: the schema is
+    // optional and is NOT a ZodDefault. Both checks hold on zod 3 and 4.
+    expect(schema).toBeInstanceOf(z.ZodOptional);
+    expect(schema).not.toBeInstanceOf(z.ZodDefault);
     expect(schema.isOptional()).toBe(true);
   });
 

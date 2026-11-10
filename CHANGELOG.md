@@ -5,6 +5,26 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Security
+
+- **Every advisory against the shipped dependency tree is cleared: `npm audit --omit=dev`
+  reports 0 vulnerabilities, down from 11 (1 critical, 5 high, 5 moderate).** Ten were
+  resolved by a lockfile refresh alone, with no manifest change: `proxy-addr` (the critical
+  one -- IP spoofing via an IPv4-mapped IPv6 trust subnet), `@modelcontextprotocol/sdk`,
+  `electron` (43.1.1 to 43.8.7), `body-parser`, `undici`, `hono`, `@hono/node-server`,
+  `fast-uri`, `ip-address` and `qs`. The eleventh needed a major: **`zod` moves from
+  `^3.0.0` (3.25.76) to `^4.6.7`**, which clears a memory-exhaustion advisory in the
+  validation of oversized constrained collections. The bump is safe to take here:
+  `@modelcontextprotocol/sdk` already declares `zod` `^3.25 || ^4.0`, amicus builds zod
+  schemas in exactly one file (`src/mcp-tools.js`) using only core constructors, it never
+  touches zod error shapes, and every schema shape it does build was probed to behave
+  identically under 4.6.7. No runtime code changed. The major did require a test change:
+  three assertions read `_def.typeName` and one read `_def.checks`, both of which zod 4
+  restructured, so the no-Zod-default checks now assert the claim directly
+  (`toBeInstanceOf(z.ZodOptional)` and not `z.ZodDefault`) and the tag regex-parity pin
+  reads its pattern through the public `z.toJSONSchema()` conversion -- which is also the
+  form an MCP client actually validates against.
+
 ### Fixed
 
 - **Every engine session is named, so the engine no longer sends a hidden title request.** An
