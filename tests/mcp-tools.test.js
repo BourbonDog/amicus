@@ -502,13 +502,46 @@ describe('MCP Tool Definitions', () => {
       const tool = TOOLS.find(t => t.name === name);
       const inner = tool.inputSchema.tag.unwrap(); // ZodOptional -> ZodString
       // Read the pattern through zod's PUBLIC JSON Schema conversion rather than
-      // `_def.checks`: zod 4 made that array opaque (each entry serialises as {}),
-      // and the published JSON Schema is also the form an MCP client actually
-      // validates against -- which is exactly the drift this test exists to catch.
+      // `_def.checks`: zod 4 made that array opaque (each entry serialises as {}).
+      // Measured: this string is byte-identical to what `tools/list` publishes on
+      // the wire, and tests/mcp-protocol.integration.test.js pins that end directly.
       expect(z.toJSONSchema(inner).pattern).toBe(TAG_PATTERN.source);
-      // TAG_PATTERN carries no flags and JSON Schema has no field to carry one, so
-      // a flag added on either side must fail here rather than pass silently.
-      expect(TAG_PATTERN.flags).toBe('');
+    });
+
+    // The source pin above CANNOT see a regex flag. Neither JSON Schema nor the
+    // published wire schema has a field to carry one, so a flag added at the
+    // schema site is invisible to it. An earlier revision of this test asserted
+    // `expect(TAG_PATTERN.flags).toBe('')` and claimed that closed the hole; it
+    // does not -- that only inspects the CLI side, and it passes untouched while
+    // the schema side carries a flag (v4.15.0 release council, finding A1).
+    //
+    // The guarantee that actually matters is behavioural: a value the CLI accepts
+    // must not be rejected over MCP, nor the reverse. So compare the matchers.
+    //
+    // Which flags this catches, measured: `m` is detectable -- "abc\ndef" matches
+    // a multiline-anchored pattern and not an anchored one. `i` is INERT for this
+    // pattern, because [a-zA-Z0-9_-] already spans both cases, so no corpus can
+    // see it and no CLI/MCP divergence exists for it either. Narrow that class
+    // and `i` becomes detectable, at which point this corpus covers it too.
+    const TAG_CORPUS = [
+      'a', 'A', 'Z', '0', '9', '_', '-', 'sprint-42_v2', 'UPPER_case-9',
+      'x'.repeat(64),
+      '', 'x'.repeat(65), 'bad tag!', 'tag.with.dots', 'tag/slash',
+      'abc\ndef', '\nabc', 'abc\n', ' abc', 'abc ', 'tag\twith\ttabs',
+      'caf\u00e9', 'semi;colon', 'quote"d', "apos'", 'back\\slash',
+    ];
+    test.each(TAG_TOOLS)('$name: tag accepts exactly what TAG_PATTERN accepts (flag-proof)', ({ name }) => {
+      const { TAG_PATTERN } = require('../src/utils/validators');
+      const tool = TOOLS.find(t => t.name === name);
+      const schema = tool.inputSchema.tag;
+      for (const value of TAG_CORPUS) {
+        // A fresh regex per value: a stateful flag (g/y) on TAG_PATTERN would make
+        // .test() depend on lastIndex, which is itself a divergence worth failing.
+        const cli = new RegExp(TAG_PATTERN.source, TAG_PATTERN.flags).test(value);
+        const mcp = schema.safeParse(value).success;
+        // Compared as objects so a failure names the offending value.
+        expect({ value, cli, mcp }).toEqual({ value, cli, mcp: cli });
+      }
     });
   });
 

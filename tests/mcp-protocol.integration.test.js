@@ -182,6 +182,47 @@ describe('MCP Protocol: handshake and tool discovery', () => {
       expect(tool.inputSchema).toBeDefined();
     }
   });
+
+  // v4.15.0 release council, findings D1/D2: zod's own `toJSONSchema` is
+  // zod-4-only, so a unit test that reads it cannot prove the schema an MCP
+  // client ACTUALLY receives is unchanged -- the serialization path across the
+  // SDK necessarily moved with the zod 3 -> 4 bump. This pins that end
+  // directly, off the real tools/list response, and is converter-agnostic by
+  // construction. It also guards the three `z.record()` shapes against a future
+  // zod 4.x minor (permitted by the ^4.6.7 caret) changing record conversion.
+  it('publishes the tag pattern, the record shapes and no Zod defaults', async () => {
+    const { TAG_PATTERN } = require('../src/utils/validators');
+    const result = await client.request('tools/list', {});
+    const byName = Object.fromEntries(result.result.tools.map(t => [t.name, t]));
+    const prop = (tool, name) => byName[tool].inputSchema.properties[name];
+    // Descriptions are prose and move freely; the validation shape must not.
+    const shape = (o) => { const { description, ...rest } = o; return rest; };
+
+    // Regex parity at the boundary that actually validates caller input. Exact,
+    // not a subset: an added keyword (a flags carrier, a format, a length) has
+    // to fail here rather than pass unnoticed.
+    for (const tool of ['amicus_start', 'amicus_fanout', 'amicus_council_run']) {
+      expect(shape(prop(tool, 'tag'))).toEqual({ type: 'string', pattern: TAG_PATTERN.source });
+    }
+
+    // The three z.record(z.any()) sites, as published.
+    const OPEN_RECORD = { type: 'object', propertyNames: { type: 'string' }, additionalProperties: {} };
+    expect(shape(prop('amicus_verdict', 'record'))).toEqual(OPEN_RECORD);
+    expect(shape(prop('amicus_council_tally', 'runStats'))).toEqual({ type: 'array', items: OPEN_RECORD });
+    expect(shape(prop('amicus_verdict', 'seatLoss'))).toEqual({ anyOf: [OPEN_RECORD, { type: 'null' }] });
+
+    // No Zod default may materialise a key the caller omitted (v4.5 Task 15 fix
+    // wave 2, Finding 1): the published schema carries no `default`, and the key
+    // is not required, so a pack can still fill it.
+    const NO_DEFAULT = [
+      ['amicus_start', 'includeContext'], ['amicus_council_run', 'intent'],
+      ['amicus_start', 'tag'], ['amicus_fanout', 'tag'], ['amicus_council_run', 'tag'],
+    ];
+    for (const [tool, name] of NO_DEFAULT) {
+      expect(prop(tool, name)).not.toHaveProperty('default');
+      expect(byName[tool].inputSchema.required || []).not.toContain(name);
+    }
+  });
 });
 
 describe('MCP Protocol: tool invocation', () => {

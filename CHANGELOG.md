@@ -18,7 +18,8 @@ All notable changes to Amicus are documented here. Format follows
   `@modelcontextprotocol/sdk` already declares `zod` `^3.25 || ^4.0`, amicus builds zod
   schemas in exactly one file (`src/mcp-tools.js`) using only core constructors, it never
   touches zod error shapes, and every schema shape it does build was probed to behave
-  identically under 4.6.7. No runtime code changed. The major did require a test change:
+  identically under 4.6.7. The bump itself changed no runtime code (the release’s own
+  runtime change is the named engine sessions below). The major did require a test change:
   three assertions read `_def.typeName` and one read `_def.checks`, both of which zod 4
   restructured, so the no-Zod-default checks now assert the claim directly
   (`toBeInstanceOf(z.ZodOptional)` and not `z.ZodDefault`) and the tag regex-parity pin
