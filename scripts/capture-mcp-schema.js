@@ -91,6 +91,14 @@ function capture() {
       const listed = await request('tools/list', {});
       clearTimeout(timer);
       child.kill();
+      // A cursor means this is page 1 of N and the fixture would be a partial
+      // surface that still compares equal to itself. Refuse rather than capture
+      // a truncated pin (v4.15.0 release council, round 3).
+      if (listed.result.nextCursor !== undefined && listed.result.nextCursor !== null) {
+        reject(new Error('tools/list returned nextCursor: the response is paginated and this script '
+          + 'captures only the first page. Teach it to follow the cursor before re-blessing.'));
+        return;
+      }
       resolve(listed.result.tools);
     })().catch((err) => { clearTimeout(timer); child.kill(); reject(err); });
   });
@@ -110,11 +118,23 @@ function stripDescriptions(node) {
   return node;
 }
 
-/** Tools sorted by name so the fixture never churns on registration order. */
+/**
+ * Tools sorted by name, with descriptions stripped and EVERYTHING ELSE KEPT.
+ *
+ * Keeping everything matters: a first draft of this projected each tool down to
+ * {name, inputSchema, annotations}, which silently discarded `execution`
+ * ({"taskSupport":"forbidden"} on all 16 tools -- a real published contract) and
+ * would discard any field a future SDK adds, such as `outputSchema`. A pin that
+ * drops unknown fields cannot see a new one appear, which is most of the point
+ * (v4.15.0 release council, round 3).
+ *
+ * Sorted by code point rather than localeCompare: localeCompare is
+ * locale-sensitive, and a fixture has to be byte-reproducible on any machine.
+ */
 function normalize(tools) {
   return [...tools]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((t) => ({ name: t.name, inputSchema: stripDescriptions(t.inputSchema), annotations: t.annotations }));
+    .sort((a, b) => (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0)))
+    .map((t) => stripDescriptions(t));
 }
 
 capture()

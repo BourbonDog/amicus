@@ -205,10 +205,19 @@ describe('MCP Protocol: handshake and tool discovery', () => {
   it('publishes exactly the committed tools/list surface', async () => {
     const expected = require('./fixtures/mcp-tools-list.published.json');
     const result = await client.request('tools/list', {});
+    // A cursor would mean this is page 1 of N, and a first-page pin compares
+    // equal to itself forever while the real surface is larger. Asserted rather
+    // than followed, because the response is unpaginated today: if that ever
+    // changes this fails loudly instead of silently truncating.
+    expect(result.result.nextCursor === undefined || result.result.nextCursor === null).toBe(true);
+
     // Descriptions are stripped at every level, matching the capture script:
-    // several of them interpolate the caller's configured alias list, so the
-    // published prose differs between a dev machine and this credential-scrubbed
-    // rail. Prose has its own unit tests; this pins the validation surface.
+    // several interpolate the caller's configured alias list, so the published
+    // prose differs between a dev machine and this credential-scrubbed rail.
+    // Prose has its own unit tests. EVERYTHING ELSE IS KEPT -- a first draft
+    // projected each tool to {name, inputSchema, annotations} and so silently
+    // dropped `execution` and would drop any field a future SDK adds, which
+    // defeats the purpose of a surface pin (release council, round 3).
     const strip = (node) => {
       if (Array.isArray(node)) { return node.map(strip); }
       if (node && typeof node === 'object') {
@@ -218,14 +227,26 @@ describe('MCP Protocol: handshake and tool discovery', () => {
       }
       return node;
     };
+    // Code point, not localeCompare: a fixture must be byte-reproducible on any
+    // machine regardless of locale.
     const normalize = (tools) => [...tools]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((t) => ({ name: t.name, inputSchema: strip(t.inputSchema), annotations: t.annotations }));
+      .sort((a, b) => (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0)))
+      .map((t) => strip(t));
     const live = normalize(result.result.tools);
 
-    // Name the drifted tools first: a bare toEqual on ~47 KB of schema is an
+    // Name the drifted tools first: a bare toEqual on the whole surface is an
     // unreadable diff, and the useful question is always "which tool moved".
-    const byName = (list) => Object.fromEntries(list.map((t) => [t.name, JSON.stringify(t)]));
+    // Keys are sorted recursively before stringifying so this diagnostic agrees
+    // with the order-insensitive toEqual below -- otherwise a benign key
+    // reordering reports drift that the real assertion then does not confirm.
+    const canonical = (node) => {
+      if (Array.isArray(node)) { return node.map(canonical); }
+      if (node && typeof node === 'object') {
+        return Object.fromEntries(Object.keys(node).sort().map((k) => [k, canonical(node[k])]));
+      }
+      return node;
+    };
+    const byName = (list) => Object.fromEntries(list.map((t) => [t.name, JSON.stringify(canonical(t))]));
     const liveMap = byName(live);
     const wantMap = byName(expected.tools);
     const drifted = [...new Set([...Object.keys(liveMap), ...Object.keys(wantMap)])]
@@ -262,16 +283,24 @@ describe('MCP Protocol: handshake and tool discovery', () => {
     // amicus_read.mode, amicus_resume.noUi and amicus_continue.noUi all carry a
     // published default, legitimately. The rule binds only where KEY PRESENCE is
     // what decides caller-explicitness, because something downstream fills the
-    // key when it is absent -- includeContext and noContext are read by a pack
-    // (v4.5 Task 15 fix wave 2, Finding 1), intent is the sole carrier of task
-    // mode on this surface, and tag must stay genuinely absent so list/search
-    // grouping does not invent one. Those are the keys asserted here.
+    // key when it is absent -- includeContext is read by a pack (v4.5 Task 15
+    // fix wave 2, Finding 1), intent is the sole carrier of task mode on this
+    // surface, and tag must stay genuinely absent so list/search grouping does
+    // not invent one.
     //
-    // `tag` is discovered from the response rather than listed, so a fourth
-    // tag-bearing tool is covered the moment it is registered.
+    // Both includeContext-bearing tools are covered: amicus_fanout's was missed
+    // by the first draft (release council, round 3), so BOTH are discovered from
+    // the response now rather than listed, exactly as `tag` is. An earlier
+    // comment here also named `noContext` as a guarded key; no tool publishes
+    // such a property, so there was nothing to guard and the claim was wrong.
+    const withProp = (name) => tools
+      .filter((t) => t.inputSchema && t.inputSchema.properties && t.inputSchema.properties[name])
+      .map((t) => [t.name, name]);
+    const includeContextTools = withProp('includeContext');
+    expect(includeContextTools.map(([t]) => t).sort()).toEqual(['amicus_fanout', 'amicus_start']);
     const mustHaveNoDefault = [
       ...tagged.map((t) => [t.name, 'tag']),
-      ['amicus_start', 'includeContext'],
+      ...includeContextTools,
       ['amicus_council_run', 'intent'],
     ];
     const byName = Object.fromEntries(tools.map((t) => [t.name, t]));

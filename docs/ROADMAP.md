@@ -667,9 +667,9 @@ all blind to it. Every session amicus creates is now named, so the request is ne
   eleventh moved `zod` from `^3.0.0` to `^4.6.7`. The bump changed no runtime code — amicus builds
   zod schemas in one file, uses only core constructors, never reads zod error shapes, and every
   shape it builds validates identically under 4.6.7. The published MCP schema does move, though,
-  on three properties: the SDK converts with a different library per zod major, and zod 3's
-  single-argument `record` had no key schema to emit, so three `z.record(z.any())` properties
-  now carry `propertyNames: {"type":"string"}`. A JSON object's keys are always strings, so
+  on four properties: the SDK converts with a different library per zod major, and zod 3's
+  single-argument `record` had no key schema to emit, so all four `z.record(z.any())`
+  properties now carry `propertyNames: {"type":"string"}`. A JSON object's keys are always strings, so
   nothing a client sends validates differently — but it is a real change to the one
   machine-facing interface, and `tools/list` is now pinned whole as a client receives it so the
   next one is a reviewable diff rather than an unchecked claim. *(M)*

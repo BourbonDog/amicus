@@ -20,16 +20,18 @@ All notable changes to Amicus are documented here. Format follows
   never touches zod error shapes. Every shape it builds was measured to VALIDATE
   identically under 4.6.7, and the bump itself changed no runtime code (the release’s own
   runtime change is the named engine sessions below).
-- **The published MCP tool schema does change, on three properties, and the change is
+- **The published MCP tool schema does change, on four properties, and the change is
   semantically inert.** This is stated because the first cut of this release asserted the
   public surface was unchanged without diffing it, and that was wrong. The SDK converts zod
   to JSON Schema with a different library per zod major (v3 `zod-to-json-schema`, v4
   `zod/v4-mini`), so a dependency bump alone can move the wire. Measured on both sides:
-  zod 3 emitted `{"type":"object","additionalProperties":{}}` for the three
-  `z.record(z.any())` properties -- `amicus_verdict.record`, `amicus_verdict.seatLoss` and
-  `amicus_council_tally.runStats` -- and zod 4 emits the same plus
-  `"propertyNames":{"type":"string"}`, because zod 3's single-argument `record` carried no
-  key schema to emit. A JSON object's keys are always strings, so no document that
+  zod 3 emitted `{"type":"object","additionalProperties":{}}` for all four
+  `z.record(z.any())` properties -- `amicus_verdict.record`, `amicus_verdict.seatLoss`,
+  `amicus_verdict.degrades` and `amicus_council_tally.runStats` -- and zod 4 emits the same
+  plus `"propertyNames":{"type":"string"}`, because zod 3's single-argument `record` carried
+  no key schema to emit. (An earlier revision of this entry said three and omitted
+  `degrades`: the count came from a truncated grep and was wrong. The whole-surface fixture
+  below is what surfaced the fourth, which is the argument for having it.) A JSON object's keys are always strings, so no document that
   validated before fails now and no client behaviour changes; it is a tightening that
   restates what JSON already guarantees. Every other published shape -- string with
   pattern, boolean, number, enum, union, object -- is byte-identical across the bump. A
