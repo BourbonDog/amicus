@@ -75,7 +75,8 @@ const MCP_CONFIG = { command: 'npx', args: ['-y', 'amicus@latest', 'mcp'] };
 function addMcpToConfigFile(configPath, name, config) {
   let existing = {};
   try {
-    existing = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    const content = fs.readFileSync(configPath, 'utf-8');
+    if (content.trim()) { existing = JSON.parse(content); } // empty/whitespace = missing
   } catch (err) {
     // Only a missing file starts fresh; rewriting an unparseable one would
     // delete the user's other MCP servers (mirrors legacy-mcp-migration.js).
@@ -93,7 +94,10 @@ function addMcpToConfigFile(configPath, name, config) {
   if (status !== 'unchanged') {
     const dir = path.dirname(configPath);
     if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); }
-    writeFileAtomic(configPath, JSON.stringify(existing, null, 2), { mode: 0o600 });
+    // rename REPLACES a symlink (dotfile managers); write beside the real target, as saveConfig does.
+    let writePath = configPath;
+    try { writePath = fs.realpathSync(configPath); } catch { /* absent — write the lexical path */ }
+    writeFileAtomic(writePath, JSON.stringify(existing, null, 2), { mode: 0o600 });
   }
   return status;
 }

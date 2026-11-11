@@ -57,6 +57,30 @@ describe('claude-register module surface', () => {
     expect(fs.readFileSync(file, 'utf-8')).toBe(broken); // the user's other servers survive
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  test('addMcpToConfigFile treats an empty or whitespace-only config as {} (same as missing)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reg-'));
+    for (const blank of ['', ' \n\t ']) {
+      const file = path.join(dir, 'claude_desktop_config.json');
+      fs.writeFileSync(file, blank);
+      expect(reg.addMcpToConfigFile(file, 'amicus', reg.MCP_CONFIG)).toBe('added');
+      expect(JSON.parse(fs.readFileSync(file, 'utf-8')).mcpServers.amicus).toEqual(reg.MCP_CONFIG);
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('addMcpToConfigFile writes THROUGH a symlinked config, keeping the link', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reg-'));
+    const real = path.join(dir, 'dotfiles-claude.json');
+    const link = path.join(dir, '.claude.json');
+    fs.writeFileSync(real, JSON.stringify({ mcpServers: { other: { command: 'x' } } }));
+    try { fs.symlinkSync(real, link, 'file'); } catch { fs.rmSync(dir, { recursive: true, force: true }); return; } // OS refused (Windows without Developer Mode)
+    expect(reg.addMcpToConfigFile(link, 'amicus', reg.MCP_CONFIG)).toBe('added');
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    const after = JSON.parse(fs.readFileSync(real, 'utf-8'));
+    expect(Object.keys(after.mcpServers).sort()).toEqual(['amicus', 'other']);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 // Everything below touches os.homedir()/APPDATA — ALWAYS redirected to a
