@@ -28,8 +28,9 @@ All notable changes to Amicus are documented here. Format follows
   stay. A stored alias that names an old id keeps working, since each one is still served. It
   is not migrated: `amicus aliases --review` offers the move. The frontier council bench
   (`gpt-pro`, `opus`, `gemini-pro`) is unchanged. Its rule is now stated as each vendor's
-  flagship general model rather than its priciest, since `codex` (a coding model) now
-  out-prices `gpt-pro` and `fable` out-prices `opus`.
+  flagship general model rather than its priciest: `codex` now out-prices `gpt-pro` but is a
+  coding model, and `fable` now out-prices `opus`, but the owner keeps `opus` as Anthropic's
+  seat; the two have not been compared on a council.
 - **amicus is CLI-only, with no library API.** `package.json`'s `exports` named
   `./opencode-client` → `src/opencode-client.mjs`, a file that never existed, so
   `require('amicus')` has failed since v0.3.0. `exports` now lists only `./package.json`, the

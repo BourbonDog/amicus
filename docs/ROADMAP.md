@@ -680,7 +680,7 @@ all blind to it. Every session amicus creates is now named, so the request is ne
 > keeps it fixed, because the council workflow installs `amicus@latest` and would otherwise
 > notice only when a bill grew.
 
-## v4.16 — "A failed read never costs you the file" *(a whole-repo audit — #299)* — ✅ SHIPPED v4.16.0, 2026-11-11
+## v4.16 — "A failed read never costs you the file" *(a whole-repo audit — #299; with the pin refresh and drift fixes of #297 and #298)* — ✅ SHIPPED v4.16.0, 2026-11-11
 **Benefit:** a file amicus could not read is no longer a file amicus may overwrite. One
 trailing comma in `~/.claude.json` used to cost every other MCP server registered there; a
 typo in `config.json` cost every alias and preset; an antivirus lock on `run.json` shrank a
