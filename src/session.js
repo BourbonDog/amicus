@@ -82,6 +82,10 @@ function resolveSession(projectDir, sessionArg) {
     }
 
     if (fs.existsSync(sessionPath)) {
+      // ...nor may a `<id>.jsonl` symlink inside it point at a file elsewhere.
+      if (path.dirname(fs.realpathSync.native(sessionPath)) !== fs.realpathSync.native(projectDir)) {
+        return { path: null, method: 'error', warning: `Session ${sessionArg} is not a valid session id.` };
+      }
       return { path: sessionPath, method: 'explicit' };
     }
 

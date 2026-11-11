@@ -27,8 +27,24 @@ describe('project-root-allowlist', () => {
     // '/foobar' must not be considered inside '/foo'
     expect(isPathInside('C:/Users/mexico', 'C:/Users/me')).toBe(false);
   });
-  test('isPathInside: slash/case differences are normalized', () => {
-    expect(isPathInside('c:\\Users\\ME\\repo', 'C:/Users/me')).toBe(true);
+  describe('case handling follows the platform', () => {
+    const realPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const stubPlatform = (value) => Object.defineProperty(process, 'platform', { value, configurable: true });
+    afterEach(() => { Object.defineProperty(process, 'platform', realPlatform); });
+
+    test('win32: slash/case differences are normalized', () => {
+      stubPlatform('win32');
+      expect(isPathInside('c:\\Users\\ME\\repo', 'C:/Users/me')).toBe(true);
+    });
+    test('darwin: case-insensitive', () => {
+      stubPlatform('darwin');
+      expect(isPathInside('/Users/ME/repo', '/Users/me')).toBe(true);
+    });
+    test('linux: a case-variant sibling is NOT inside', () => {
+      stubPlatform('linux');
+      expect(isPathInside('/tmp/FOO/repo', '/tmp/foo')).toBe(false);
+      expect(isPathInside('/tmp/foo/repo', '/tmp/foo')).toBe(true);
+    });
   });
 
   test('a path under home is allowed', () => {

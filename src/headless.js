@@ -671,6 +671,14 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
   // rather than `||`: 0 is a legal injection (withTimeout reads it as unbounded).
   const toolSettleAbortTimeoutMs = options.toolSettleAbortTimeoutMs === undefined
     ? TOOL_SETTLE_ABORT_TIMEOUT_MS : options.toolSettleAbortTimeoutMs;
+  // Best-effort close of the owned server: a rejection OR a close that never
+  // settles must not discard the result or hang the leg (close's own SIGKILL
+  // escalation is ~2s, inside this bound).
+  const closeOwnedServer = async (where) => {
+    try { await withTimeout(server.close(), toolSettleAbortTimeoutMs, 'server.close()'); } catch (closeErr) {
+      logger.debug(`server.close() failed ${where} (best-effort)`, { taskId, error: closeErr.message });
+    }
+  };
 
   try {
     if (!externalServer) {
@@ -681,7 +689,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       writeProgress(sessionDir, 'server_ready');
 
       if (!serverReady) {
-        await server.close();
+        await closeOwnedServer('on server-not-ready');
         // FR-1: returns out of the outer try — the A3 catch never sees it.
         if (!writeTerminalProgressSafe(sessionDir, 'OpenCode server failed to start')) {
           logger.debug('terminal progress write failed on server-not-ready (best-effort)', { taskId });
@@ -722,7 +730,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         sessionId = await createSession(client, directory, taskId);
       } catch (error) {
         if (watchdog) { watchdog.cancel(); }
-        if (!externalServer) { await server.close(); }
+        if (!externalServer) { await closeOwnedServer('on createSession failure'); }
         // FR-1: the one path a council leg can hit under T0.5's shared server —
         // pre-fix, the Workspace showed the seat perpetually live off a
         // non-terminal 'server_ready' while metadata.json said 'error'.
@@ -1939,13 +1947,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 
     // Guarded like the outer catch's close: a rejection here must not discard
     // the usage and summary already gathered above.
-    if (!externalServer) {
-      try { await server.close(); } catch (closeErr) {
-        logger.debug('server.close() failed after the poll loop (best-effort)', {
-          taskId, error: closeErr.message,
-        });
-      }
-    }
+    if (!externalServer) { await closeOwnedServer('after the poll loop'); }
     if (mirror.toolCalls.length > 0) {
       logger.info('Tool calls summary', {
         totalToolCalls: mirror.toolCalls.length,
@@ -2177,13 +2179,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // the port by the time we get here; a failure to close cleanly is not this handler's
     // problem to propagate, so it is logged and swallowed, same discipline as every other
     // best-effort close in this file (see the signal handler above).
-    if (!externalServer) {
-      try { await server.close(); } catch (closeErr) {
-        logger.debug('server.close() failed in the outer exception handler (best-effort)', {
-          taskId, error: closeErr.message,
-        });
-      }
-    }
+    if (!externalServer) { await closeOwnedServer('in the outer exception handler'); }
     // ⚠️ v4.4.1 A3 — the last hole in LC-3's story. LC-3 made the SUCCESS path's terminal
     // progress write derive its stage from resolveTerminalState instead of hardcoding 'complete',
     // so an aborted/errored/timed-out leg stopped rendering with a green check. This path — the
