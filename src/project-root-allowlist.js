@@ -18,16 +18,30 @@
  *     - any extra root the caller passes (e.g. the MCP client's advertised root)
  *   REJECT anything outside all of the above (e.g. C:/Windows, /etc).
  *
- * Pure(ish): only reads os/env/cwd for the default allow-list; never touches the
- * filesystem and never throws.
+ * isPathInside is lexical (path.resolve collapses `..`); isAllowedProjectRoot
+ * also realpaths existing paths so a link under home is judged by its target.
+ * Never throws.
  */
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { canonicalProjectPath } = require('./utils/project-path');
 
+/** Absolute, `..`-free form of `p` (lexical; no filesystem access). */
+function resolvedPath(p) {
+  return canonicalProjectPath(path.resolve(canonicalProjectPath(p)));
+}
+
+/** resolvedPath, then the symlink/junction target when the path exists. */
+function realPath(p) {
+  const r = resolvedPath(p);
+  try { return canonicalProjectPath(fs.realpathSync.native(r)); } catch { return r; }
+}
+
 /**
- * True when `child` is `parent` or lives beneath it. Both are canonicalized
- * first so slash/case/trailing-slash differences don't cause false negatives.
+ * True when `child` is `parent` or lives beneath it. Both are resolved and
+ * canonicalized first so `..`, slash/case/trailing-slash differences can't
+ * cause false answers.
  * Comparison is case-insensitive to match Windows path semantics (and harmless
  * on case-sensitive POSIX for our purposes — a genuine escape still fails).
  * @param {string} child
@@ -36,8 +50,8 @@ const { canonicalProjectPath } = require('./utils/project-path');
  */
 function isPathInside(child, parent) {
   if (!child || !parent) { return false; }
-  const c = canonicalProjectPath(child).toLowerCase();
-  const p = canonicalProjectPath(parent).toLowerCase();
+  const c = resolvedPath(child).toLowerCase();
+  const p = resolvedPath(parent).toLowerCase();
   if (c === p) { return true; }
   // Guard against prefix false-positives: '/foobar' is NOT inside '/foo'.
   const base = p.endsWith('/') ? p : `${p}/`;
@@ -69,7 +83,8 @@ function allowedRoots(extraRoots = []) {
  */
 function isAllowedProjectRoot(candidate, extraRoots = []) {
   if (!candidate) { return false; }
-  return allowedRoots(extraRoots).some((root) => isPathInside(candidate, root));
+  const real = realPath(candidate);
+  return allowedRoots(extraRoots).some((root) => isPathInside(real, realPath(root)));
 }
 
-module.exports = { isAllowedProjectRoot, isPathInside, allowedRoots };
+module.exports = { isAllowedProjectRoot, isPathInside, allowedRoots, resolvedPath };

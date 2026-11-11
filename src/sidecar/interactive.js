@@ -183,13 +183,12 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     env.AMICUS_OPENCODE_PORT = serverPort;
     env.AMICUS_SESSION_ID = sessionId;
 
-    const debugPort = process.env.AMICUS_DEBUG_PORT || '9222';
-    logger.debug('Launching Electron', { taskId, model, debugPort, serverPort, sessionId });
+    // Opt-in only: an open DevTools port lets any local process drive the window.
+    const debugPort = process.env.AMICUS_DEBUG_PORT;
+    logger.debug('Launching Electron', { taskId, model, debugPort: debugPort || 'disabled', serverPort, sessionId });
 
-    electronProcess = spawn(electronPath, [
-      `--remote-debugging-port=${debugPort}`,
-      mainPath
-    ], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const args = debugPort ? [`--remote-debugging-port=${debugPort}`, mainPath] : [mainPath];
+    electronProcess = spawn(electronPath, args, { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
 
     // Best-effort: if the parent amicus process dies (exit / Ctrl-C / SIGTERM)
     // before Electron exits, SIGTERM the orphaned child so it doesn't linger.

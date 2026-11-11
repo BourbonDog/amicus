@@ -41,6 +41,22 @@ describe('project-root-allowlist', () => {
     expect(isAllowedProjectRoot(sys)).toBe(false);
   });
 
+  test('a `..` escape out of home is rejected (audit #4)', () => {
+    // '<home>/../..' is the filesystem root: lexically it starts with home.
+    expect(isAllowedProjectRoot(`${os.homedir()}/../../amicus-escape-probe`)).toBe(false);
+  });
+
+  test('a link under tmp pointing outside the roots is judged by its target (audit #4)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-link-'));
+    const link = path.join(dir, 'escape');
+    try {
+      try { fs.symlinkSync(path.parse(os.homedir()).root, link, 'junction'); } catch { return; }
+      expect(isAllowedProjectRoot(link)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('an extra (client) root allows an otherwise-out-of-bounds path', () => {
     // Simulate a workspace root outside home that the MCP client advertised.
     const clientRoot = process.platform === 'win32' ? 'D:/workspace' : '/srv/workspace';
@@ -84,6 +100,24 @@ describe('resolveProjectDir containment', () => {
     } finally {
       fs.rmSync(tmp, { recursive: true });
     }
+  });
+
+  test('returns the resolved path, not the raw `..` spelling (audit #4)', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'contain-dots-'));
+    try {
+      const { resolveProjectDir, getProjectDir } = require('../src/mcp-server');
+      const raw = `${tmp}/sub/..`;
+      fs.mkdirSync(path.join(tmp, 'sub'));
+      expect(await resolveProjectDir(raw, undefined)).toBe(canonicalProjectPath(tmp));
+      expect(getProjectDir(raw)).toBe(canonicalProjectPath(tmp));
+    } finally {
+      fs.rmSync(tmp, { recursive: true });
+    }
+  });
+
+  test('rejects a `..` escape from home (audit #4)', async () => {
+    const { resolveProjectDir } = require('../src/mcp-server');
+    await expect(resolveProjectDir(`${os.homedir()}/../..`, undefined)).rejects.toThrow(/allowed project roots/i);
   });
 
   test('rejects an out-of-bounds explicit project', async () => {

@@ -44,16 +44,6 @@ function getSessionDirectory(projectPath, homeDir = os.homedir()) {
 }
 
 /**
- * Extract session ID from a filename
- *
- * @param {string} filename - Session filename (e.g., abc123.jsonl or abc123)
- * @returns {string} Session ID without extension
- */
-function getSessionId(filename) {
-  return filename.replace(/\.jsonl$/, '');
-}
-
-/**
  * Resolve a Claude Code session file
  * Spec Reference: §5.1 Session Resolution (Primary + Fallback)
  *
@@ -85,6 +75,11 @@ function resolveSession(projectDir, sessionArg) {
     // Handle both full filename and just the UUID
     const filename = sessionArg.endsWith('.jsonl') ? sessionArg : `${sessionArg}.jsonl`;
     const sessionPath = path.join(projectDir, filename);
+    // Containment: an id like `../other-project/<uuid>` must not read another
+    // project's transcript (it is sent to an external model).
+    if (path.dirname(path.resolve(sessionPath)) !== path.resolve(projectDir)) {
+      return { path: null, method: 'error', warning: `Session ${sessionArg} is not a valid session id.` };
+    }
 
     if (fs.existsSync(sessionPath)) {
       return { path: sessionPath, method: 'explicit' };
@@ -163,6 +158,5 @@ function findMostRecentSession(projectDir) {
 module.exports = {
   encodeProjectPath,
   getSessionDirectory,
-  getSessionId,
   resolveSession
 };

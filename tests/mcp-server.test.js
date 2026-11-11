@@ -123,6 +123,28 @@ describe('MCP spawn arg building', () => {
     });
   });
 
+  test('amicus_start does not inject a DevTools port into the child env (audit #6)', async () => {
+    let capturedEnv;
+    const prev = process.env.AMICUS_DEBUG_PORT;
+    delete process.env.AMICUS_DEBUG_PORT;
+    try {
+      await jest.isolateModulesAsync(async () => {
+        jest.doMock('child_process', () => ({
+          spawn: jest.fn((cmd, args, opts) => {
+            capturedEnv = opts.env;
+            return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+          }),
+        }));
+        const { handlers: h } = require('../src/mcp-server');
+        await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, PROJECT);
+      });
+      expect(capturedEnv).toBeDefined();
+      expect(capturedEnv.AMICUS_DEBUG_PORT).toBeUndefined();
+    } finally {
+      if (prev !== undefined) { process.env.AMICUS_DEBUG_PORT = prev; }
+    }
+  });
+
   test('amicus_start passes --timeout when provided', async () => {
     let capturedArgs;
     await jest.isolateModulesAsync(async () => {

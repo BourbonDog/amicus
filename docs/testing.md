@@ -267,7 +267,7 @@ const child = spawn(process.execPath, ['tests/helpers/start-server.js']);
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `AMICUS_HEADLESS_TEST` | unset | Set to `1` to suppress `mainWindow.show()` in Electron. Window is created but never made visible. CDP screenshots still work (captures off-screen renderer). |
-| `AMICUS_DEBUG_PORT` | `9222` | CDP remote debugging port (the legacy `SIDECAR_DEBUG_PORT` name was removed in v2.0.0 — see [docs/SHIMS.md](./SHIMS.md)). Use `9223`+ to avoid conflicts with Chrome browser. E2E tests use `9224`. |
+| `AMICUS_DEBUG_PORT` | unset (disabled) | Opt-in CDP remote debugging port; no port is opened unless it is set (the legacy `SIDECAR_DEBUG_PORT` name was removed in v2.0.0 — see [docs/SHIMS.md](./SHIMS.md)). Use `9223`+ to avoid conflicts with Chrome browser. E2E tests use `9224`. |
 | `AMICUS_MOCK_UPDATE` | unset | Mock update banner state: `available`, `updating`, `success`, `error`. The legacy `SIDECAR_MOCK_UPDATE` name was removed in v2.0.0. Used in Electron toolbar E2E tests. |
 
 ---

@@ -547,10 +547,10 @@ evals/
 | `mcp-tools.js` | MCP Tool Definitions for Amicus | `getTools()`, `getGuideText()`, `safeTaskId()`, `safeModel()` |
 | `mcp-wait.js` | Engine for the amicus_wait MCP tool: blocks inside one tool call until a session/wave reaches a terminal state or the wait window closes. | `runWait()`, `registerInProcessRun()`, `settleInProcessRun()`, `hasInProcessRun()`, `clampTimeout()` |
 | `opencode-client.js` | OpenCode SDK Client Wrapper | `INSUFFICIENT_CREDITS_REASON`, `providerErrorReason()`, `parseModelString()`, `createClient()`, `createSession()` |
-| `project-root-allowlist.js` | The MCP `project` / cwd input becomes the session-store parent AND the spawned | `isAllowedProjectRoot()`, `isPathInside()`, `allowedRoots()` |
+| `project-root-allowlist.js` | The MCP `project` / cwd input becomes the session-store parent AND the spawned | `isAllowedProjectRoot()`, `isPathInside()`, `allowedRoots()`, `resolvedPath()` |
 | `prompt-builder.js` | System Prompt Builder | `buildSystemPrompt()`, `buildPrompts()`, `buildEnvironmentSection()`, `getSummaryTemplate()`, `SUMMARY_TEMPLATE` |
 | `session-manager.js` | Session Manager Module | `createSession()`, `updateSession()`, `getSession()`, `saveConversation()`, `saveSummary()` |
-| `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
+| `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `resolveSession()` |
 | `spend-query.js` |  | `filterRows()`, `groupRows()`, `computeWasted()`, `emptyTokens()`, `addTokens()` |
 | `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS` |
 | `council/briefings-chair-task.js` |  | `CHAIR_ANSWER_VALUES`, `ANSWER_SCALE_ADDENDUM`, `TASK_CHAIR_SYNTHESIS`, `TASK_CHAIR_SYNTHESIS_NO_CLAIMS`, `TASK_CONCURRENCE_CAVEAT` |
