@@ -719,8 +719,14 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(envBlock).toContain('HEAD_REF: ${{ github.event.pull_request.head.ref }}');
       // PR-controlled: referenced through env, never interpolated into the script.
       expect(step.slice(step.indexOf('run: |'))).not.toContain('${{ github.event.pull_request.head.ref }}');
-      expect(step).toContain('case "$HEAD_REF" in');
-      expect(step).toContain('release/*)');
+      // Only THIS repo's release/* heads: a fork can name a branch release/* too
+      // (PR #297 review). HEAD_REPO also goes through env, never interpolated.
+      expect(envBlock).toContain('HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}');
+      expect(step).toContain('case "${HEAD_REPO}:${HEAD_REF}" in');
+      expect(step).toContain('"${GH_REPO}:release/"*)');
+      // The compare API lists oldest first, so the cap keeps the NEWEST commits.
+      expect(step).toContain('tail -n 80 landed.txt');
+      expect(step).not.toContain('head -n 80 landed.txt');
       expect(step).toContain('repos/${GH_REPO}/releases/latest');
       expect(step).toContain('repos/${GH_REPO}/compare/${LAST_TAG}...${BASE_REF}');
       expect(step).toContain('Release cut (context, NOT part of the diff)');

@@ -730,6 +730,8 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
           # PR-controlled: used only as a `case` pattern subject and echoed as text.
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          # A fork can name its branch release/* too; only this repo's own heads are cuts.
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           gh pr diff "$PR_NUMBER" --repo "$GH_REPO" > full.diff
           # Feed the council the CODE, not the paperwork. A raw byte prefix of
@@ -857,8 +859,8 @@ jobs:
           # published release. Supplementary context, so an API failure is a notice
           # and the framing still ships, never a failed run.
           : > release-context.md
-          case "$HEAD_REF" in
-            release/*)
+          case "${HEAD_REPO}:${HEAD_REF}" in
+            "${GH_REPO}:release/"*)
               LAST_TAG=$(gh api "repos/${GH_REPO}/releases/latest" --jq '.tag_name' 2>/dev/null || true)
               : > landed.txt
               if [ -n "$LAST_TAG" ] && gh api "repos/${GH_REPO}/compare/${LAST_TAG}...${BASE_REF}" \
@@ -879,9 +881,10 @@ jobs:
                 echo "> the diff shows."
                 echo
                 if [ "$LANDED_N" -gt 0 ]; then
-                  echo "Already on \`${BASE_REF}\` since ${LAST_TAG} (${LANDED_N} commits listed; up to 80 shown):"
+                  echo "Already on \`${BASE_REF}\` since ${LAST_TAG} (${LANDED_N} commits listed; the newest 80 shown):"
                   echo
-                  head -n 80 landed.txt | while IFS= read -r subj || [ -n "$subj" ]; do echo "- ${subj}"; done
+                  # The compare API lists oldest first; the newest work is likeliest the headline.
+                  tail -n 80 landed.txt | while IFS= read -r subj || [ -n "$subj" ]; do echo "- ${subj}"; done
                 else
                   echo "(The commits already on \`${BASE_REF}\` could not be listed for this run.)"
                 fi
