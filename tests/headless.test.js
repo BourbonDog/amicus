@@ -1451,9 +1451,12 @@ describe('Headless Mode Runner', () => {
         parts: [{ id: 'p1', type: 'text', text: `Quick\n${NONCED_MARKER}` }]
       }]);
       const start = Date.now();
+      // usageSettlePolls: 0 — the post-completion usage re-poll (3 × 400 ms by
+      // default) is ~800 ms of this run and unrelated to the poll interval; it
+      // left ~200 ms of headroom, which a loaded macOS runner exceeded (#287, 1077 ms).
       const result = await runHeadless(
         testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
-        30000, 'build', { pollIntervalMs: 5 }
+        30000, 'build', { pollIntervalMs: 5, usageSettlePolls: 0 }
       );
       expect(result.completed).toBe(true);
       expect(Date.now() - start).toBeLessThan(1000); // 5ms polls, not 2000ms
