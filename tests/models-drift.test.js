@@ -84,6 +84,9 @@ describe('runCheck drift wiring', () => {
   // The --json doc once dropped these findings entirely: `drifted: 0` while the
   // text path printed a "Pinned fallback drift" block. Both paths now read
   // findFallbackDrift; the parity assertion below reddens if either forks.
+  // Named mutant "JSONDRIFT": pass `fallbackDrift: []` to buildAuditDoc in
+  // runCheck. Measured red 2026-11-10 under the full `npm test`: exactly this
+  // test (1 of 11474). Restored after measurement.
   test('console path prints the drift header; --json carries the same findings as data', async () => {
     const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
