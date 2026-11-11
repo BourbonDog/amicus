@@ -207,12 +207,12 @@ describe('resolveRouteForLaunch — gatewayIds bridging for curated aliases (Tas
   // Real (unmocked) curated-models.toGatewayRoutes().opus, so this test tracks
   // the actual curated Anthropic ids rather than hand-duplicating them.
   const { toGatewayRoutes, toDefaultAliases } = require('../src/utils/curated-models');
-  const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-5', openrouter: 'openrouter/anthropic/claude-opus-5' }
+  const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-5-5', openrouter: 'openrouter/anthropic/claude-opus-5.5' }
   const opusDefault = toDefaultAliases().opus; // whatever config stores as the effective alias today
   // haiku is the surviving divergent-FORM alias (dash+date direct vs dot OR);
   // the opus-5 pin (2026-08-04) unified opus's two forms, so the dot-vs-dash
   // regression tests below ride haiku now.
-  const haikuRoutes = toGatewayRoutes().haiku; // { direct: 'anthropic/claude-haiku-4-5-20251001', openrouter: 'openrouter/anthropic/claude-haiku-4.5' }
+  const haikuRoutes = toGatewayRoutes().haiku; // { direct: 'anthropic/claude-haiku-5-5', openrouter: 'openrouter/anthropic/claude-haiku-5.5' }
   const haikuDefault = toDefaultAliases().haiku;
 
   test('opus alias (curated default, not overridden) resolves direct via the bridged dash-form gatewayIds id', async () => {
@@ -223,7 +223,7 @@ describe('resolveRouteForLaunch — gatewayIds bridging for curated aliases (Tas
     });
     const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: opusRoutes.direct });
-    expect(r.executableId).toBe('anthropic/claude-opus-5');
+    expect(r.executableId).toBe('anthropic/claude-opus-5-5');
   });
 
   test('opus alias (curated default, not overridden), OR-only key, resolves openrouter via the bridged gatewayIds id', async () => {
@@ -234,7 +234,7 @@ describe('resolveRouteForLaunch — gatewayIds bridging for curated aliases (Tas
     });
     const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: opusRoutes.openrouter });
-    expect(r.executableId).toBe('openrouter/anthropic/claude-opus-5');
+    expect(r.executableId).toBe('openrouter/anthropic/claude-opus-5.5');
   });
 
   test('user-overridden opus alias does NOT get curated gatewayIds — resolves the user\'s custom target', async () => {
@@ -293,8 +293,8 @@ describe('resolveRouteForLaunch — by-model gatewayIds resolution for ANY alias
   // haiku carries the divergent-form (dash-vs-dot) cases since the opus-5 pin
   // unified opus's two forms; opus still feeds the no-leak negatives below.
   const { toGatewayRoutes } = require('../src/utils/curated-models');
-  const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-5', openrouter: 'openrouter/anthropic/claude-opus-5' }
-  const haikuRoutes = toGatewayRoutes().haiku; // { direct: 'anthropic/claude-haiku-4-5-20251001', openrouter: 'openrouter/anthropic/claude-haiku-4.5' }
+  const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-5-5', openrouter: 'openrouter/anthropic/claude-opus-5.5' }
+  const haikuRoutes = toGatewayRoutes().haiku; // { direct: 'anthropic/claude-haiku-5-5', openrouter: 'openrouter/anthropic/claude-haiku-5.5' }
 
   // (a) A USER vendor alias (not a curated default NAME at all) whose value
   // happens to BE the curated Anthropic direct id must still get the correct
@@ -302,22 +302,22 @@ describe('resolveRouteForLaunch — by-model gatewayIds resolution for ANY alias
   // the alias name — this is exactly what Part 1's name-based guard missed.
   test('user vendor alias "anthropic" -> curated divergent model resolves direct via by-model gatewayIds', async () => {
     const { resolveRouteForLaunch } = loadRouteLaunch({
-      aliases: { ...ALIASES, anthropic: haikuRoutes.direct }, // 'anthropic/claude-haiku-4-5-20251001'
+      aliases: { ...ALIASES, anthropic: haikuRoutes.direct }, // 'anthropic/claude-haiku-5-5'
       apiKeys: { ...ALL_FALSE, anthropic: true },
     });
     const r = await resolveRouteForLaunch({ model: 'anthropic', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: haikuRoutes.direct });
-    expect(r.executableId).toBe('anthropic/claude-haiku-4-5-20251001');
+    expect(r.executableId).toBe('anthropic/claude-haiku-5-5');
   });
 
   test('user vendor alias "anthropic" -> curated divergent model resolves openrouter (dot-form) via by-model gatewayIds', async () => {
     const { resolveRouteForLaunch } = loadRouteLaunch({
-      aliases: { ...ALIASES, anthropic: haikuRoutes.direct }, // 'anthropic/claude-haiku-4-5-20251001'
+      aliases: { ...ALIASES, anthropic: haikuRoutes.direct }, // 'anthropic/claude-haiku-5-5'
       apiKeys: { ...ALL_FALSE, openrouter: true },
     });
     const r = await resolveRouteForLaunch({ model: 'anthropic', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: haikuRoutes.openrouter });
-    expect(r.executableId).toBe('openrouter/anthropic/claude-haiku-4.5');
+    expect(r.executableId).toBe('openrouter/anthropic/claude-haiku-5.5');
   });
 
   // (c) A user override of `opus` pointed at a non-divergent, non-curated
@@ -382,9 +382,9 @@ describe('resolveRouteForLaunch — by-model gatewayIds resolution for ANY alias
   // like `foo -> openrouter/openai/gpt-5.5` must stay on OpenRouter even
   // though a direct id for the same model exists and both keys are present.
   test('alias pinned to an explicit openrouter/... literal for a curated model stays on OpenRouter, even with both keys (Fix 1)', async () => {
-    const gptRoutes = toGatewayRoutes().gpt; // { direct: 'openai/gpt-5.6-terra', openrouter: 'openrouter/openai/gpt-5.6-terra' }
+    const gptRoutes = toGatewayRoutes().gpt; // { direct: 'openai/gpt-6.1-terra', openrouter: 'openrouter/openai/gpt-6.1-terra' }
     const { resolveRouteForLaunch } = loadRouteLaunch({
-      aliases: { ...ALIASES, foo: gptRoutes.openrouter }, // 'openrouter/openai/gpt-5.6-terra'
+      aliases: { ...ALIASES, foo: gptRoutes.openrouter }, // 'openrouter/openai/gpt-6.1-terra'
       apiKeys: { ...ALL_FALSE, openai: true, openrouter: true },
     });
     const r = await resolveRouteForLaunch({ model: 'foo', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
@@ -398,9 +398,9 @@ describe('resolveRouteForLaunch — by-model gatewayIds resolution for ANY alias
   // openrouter/... literal forces OR; this must not regress from the fix
   // above.
   test('alias pinned to a bare direct id for the same curated model still resolves direct (no regression)', async () => {
-    const gptRoutes = toGatewayRoutes().gpt; // { direct: 'openai/gpt-5.6-terra', openrouter: 'openrouter/openai/gpt-5.6-terra' }
+    const gptRoutes = toGatewayRoutes().gpt; // { direct: 'openai/gpt-6.1-terra', openrouter: 'openrouter/openai/gpt-6.1-terra' }
     const { resolveRouteForLaunch } = loadRouteLaunch({
-      aliases: { ...ALIASES, foo: gptRoutes.direct }, // 'openai/gpt-5.6-terra'
+      aliases: { ...ALIASES, foo: gptRoutes.direct }, // 'openai/gpt-6.1-terra'
       apiKeys: { ...ALL_FALSE, openai: true, openrouter: true },
     });
     const r = await resolveRouteForLaunch({ model: 'foo', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });

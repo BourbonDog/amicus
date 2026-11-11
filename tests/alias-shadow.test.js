@@ -278,7 +278,7 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
 
     // The same false-positive class tests/alias-drift.test.js already guards for
     // `findDriftedStoredAliases`: a direct-capable vendor's curated pin is the
-    // BARE canonical form (`openai/gpt-5.6-terra`, policy-routed by the gateway
+    // BARE canonical form (`openai/gpt-6.1-terra`, policy-routed by the gateway
     // router), so a config that pins the explicit OpenRouter form of THE SAME
     // MODEL differs as a string and not as a model. Reporting it would put two
     // spurious lines on every CI council run (gpt and deepseek both hit this in
@@ -286,8 +286,8 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
     // out. Gateway ROUTING has its own audit — `models --check`'s per-gateway
     // section; this notice is only about naming a different MODEL.
     test('the same model in the other gateway form is NOT a shadow', () => {
-      writeConfig({ gpt: 'openrouter/openai/gpt-5.6-terra' });
-      expect(CURATED.gpt).toBe('openai/gpt-5.6-terra'); // guards the premise
+      writeConfig({ gpt: 'openrouter/openai/gpt-6.1-terra' });
+      expect(CURATED.gpt).toBe('openai/gpt-6.1-terra'); // guards the premise
       expect(load().findAliasShadows(['gpt'])).toEqual([]);
     });
 

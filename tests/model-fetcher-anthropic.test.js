@@ -55,15 +55,19 @@ test('anthropic with no key returns the floor without a network call', async () 
 test('ANTHROPIC_MODELS floor is the current Anthropic family, not a stale snapshot', async () => {
   const f = loadFetcher(fakeHttps({ statusCode: 200, body: '{}' }));
   expect(f.ANTHROPIC_MODELS.map(m => m.id)).toEqual([
+    // 2026-11-10 pin refresh: the four new authored direct routes, each listed
+    // by a live /v1/models fetch that day. The rows below them stay served.
+    'anthropic/claude-opus-5-5',
+    'anthropic/claude-sonnet-5-5',
+    'anthropic/claude-fable-5-2',
+    'anthropic/claude-haiku-5-5',
     'anthropic/claude-opus-5',
     'anthropic/claude-opus-4-8',
     'anthropic/claude-sonnet-5',
     'anthropic/claude-fable-5-1',
     'anthropic/claude-haiku-4-5',
-    // The dated snapshot Anthropic's /v1/models actually lists, and the id
-    // curated-models.js authors as `haiku`'s direct route. Without it the
-    // floor reports the shipped `haiku` default stale for every keyless or
-    // OpenRouter-only user (see tests/utils/alias-audit-shipped-defaults).
+    // The dated snapshot Anthropic's /v1/models actually lists; `haiku`'s
+    // authored direct route until the 2026-11-10 refresh, kept for stored aliases.
     'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-sonnet-4-6',
   ]);
