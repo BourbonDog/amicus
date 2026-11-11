@@ -337,7 +337,7 @@ describe('read-merge-write never overwrites a run.json it could not read', () =>
 });
 
 describe('a durably unparseable run.json does not fail every later write', () => {
-  test.each([['corrupt', '{"runId": "abc1'], ['empty', '']])('%s run.json is copied aside and checkpoint proceeds', (_, body) => {
+  test.each([['corrupt', '{"runId": "abc1'], ['empty', ''], ['array', '[1,2]'], ['scalar', '"x"']])('%s run.json is copied aside and checkpoint proceeds', (_, body) => {
     fs.mkdirSync(runDirOf(), { recursive: true });
     fs.writeFileSync(path.join(runDirOf(), 'run.json'), body);
     const err = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);

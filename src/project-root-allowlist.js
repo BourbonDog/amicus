@@ -39,18 +39,33 @@ function realPath(p) {
 }
 
 /**
+ * Whether the volume holding `dir` ignores case. win32: yes. darwin: APFS can be
+ * formatted case-sensitive, so probe — the case-swapped path must be the same inode.
+ * A `dir` that does not exist keeps darwin's default (fold); nothing beneath it exists.
+ */
+function foldsCase(dir) {
+  if (process.platform === 'win32') { return true; }
+  if (process.platform !== 'darwin') { return false; }
+  const swapped = dir.replace(/[a-z]/gi, (ch) => (ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase()));
+  let a;
+  try { a = fs.statSync(dir); } catch { return true; }
+  if (swapped === dir) { return true; }
+  try { const b = fs.statSync(swapped); return a.ino === b.ino && a.dev === b.dev; } catch { return false; }
+}
+
+/**
  * True when `child` is `parent` or lives beneath it. Both are resolved and
  * canonicalized first so `..`, slash/case/trailing-slash differences can't
  * cause false answers.
- * Case-insensitive only on win32/darwin (case-insensitive filesystems by
- * default); elsewhere a case-variant sibling like /tmp/FOO is a different dir.
+ * Case-insensitive on win32, and on darwin when the parent's volume is
+ * (foldsCase); elsewhere a case-variant sibling like /tmp/FOO is a different dir.
  * @param {string} child
  * @param {string} parent
  * @returns {boolean}
  */
 function isPathInside(child, parent) {
   if (!child || !parent) { return false; }
-  const fold = ['win32', 'darwin'].includes(process.platform) ? (s) => s.toLowerCase() : (s) => s;
+  const fold = foldsCase(resolvedPath(parent)) ? (s) => s.toLowerCase() : (s) => s;
   const c = fold(resolvedPath(child));
   const p = fold(resolvedPath(parent));
   if (c === p) { return true; }

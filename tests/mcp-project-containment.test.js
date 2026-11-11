@@ -40,6 +40,25 @@ describe('project-root-allowlist', () => {
       stubPlatform('darwin');
       expect(isPathInside('/Users/ME/repo', '/Users/me')).toBe(true);
     });
+    test('darwin: a case-SENSITIVE volume keeps a case-variant sibling outside', () => {
+      stubPlatform('darwin');
+      const stat = jest.spyOn(fs, 'statSync').mockImplementation((p) => {
+        // path.resolve adds a drive letter when this runs on Windows: match the tail.
+        if (String(p).replace(/\\/g, '/').endsWith('/Volumes/cs/foo')) { return { ino: 7, dev: 1 }; }
+        throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      });
+      try {
+        expect(isPathInside('/Volumes/cs/FOO/repo', '/Volumes/cs/foo')).toBe(false);
+        expect(isPathInside('/Volumes/cs/foo/repo', '/Volumes/cs/foo')).toBe(true);
+      } finally { stat.mockRestore(); }
+    });
+    test('darwin: a case-insensitive volume (both cases are one dir) folds', () => {
+      stubPlatform('darwin');
+      const stat = jest.spyOn(fs, 'statSync').mockReturnValue({ ino: 7, dev: 1 });
+      try {
+        expect(isPathInside('/Volumes/ci/FOO/repo', '/Volumes/ci/foo')).toBe(true);
+      } finally { stat.mockRestore(); }
+    });
     test('linux: a case-variant sibling is NOT inside', () => {
       stubPlatform('linux');
       expect(isPathInside('/tmp/FOO/repo', '/tmp/foo')).toBe(false);

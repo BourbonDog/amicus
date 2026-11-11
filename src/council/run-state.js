@@ -71,7 +71,12 @@ function readRunForWrite(runDir) {
       sleepSync(25 * (i + 1));
       continue;
     }
-    try { return JSON.parse(text) || {}; } catch { /* unparseable: keep a copy below */ }
+    try {
+      const v = JSON.parse(text);
+      if (v === null) { return {}; }
+      if (typeof v === 'object' && !Array.isArray(v)) { return v; }
+    } catch { /* unparseable: keep a copy below */ }
+    // Unparseable, or valid JSON that is not a record (an array or scalar would spread junk keys).
     const backup = `${p}.corrupt-${Date.now()}-${process.pid}-${crypto.randomBytes(3).toString('hex')}`;
     fs.copyFileSync(p, backup, fs.constants.COPYFILE_EXCL);
     try { process.stderr.write(`Warning: ${p} was not valid JSON; saved it to ${backup} and started a new record.\n`); }

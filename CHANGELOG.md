@@ -91,7 +91,7 @@ All notable changes to Amicus are documented here. Format follows
   to a stub.** On Windows, antivirus often holds a just-written file. Only a missing file now
   counts as empty: run-state writes retry a locked file briefly and then throw rather than
   overwrite (keeping `runId`, `status` and an `aborted` status), and the session index skips
-  the write. A `run.json` that is corrupt or empty is copied aside to `run.json.corrupt-<id>`
+  the write. A `run.json` that is corrupt, empty or not a JSON object is copied aside to `run.json.corrupt-<id>`
   with a warning, and the run continues instead of failing every later write.
 - **On Windows, atomic writes retry for about a second** when another process (antivirus,
   indexer) briefly locks the target, instead of failing at once. `verdict.json` and the
@@ -118,13 +118,13 @@ All notable changes to Amicus are documented here. Format follows
   as text and never collapsed `..`, so `<home>/../../Windows` was accepted as a project root and
   became the session-store parent and the child's working directory. Paths are now resolved
   (`..` collapsed, symlinks judged by their target), and the resolved path is what is used.
-  Case is ignored only on Windows and macOS: on Linux, `/tmp/FOO` is no longer inside an
-  allowed `/tmp/foo`.
+  Case is ignored on Windows, and on macOS only when the volume itself ignores case: on Linux
+  or a case-sensitive APFS volume, `/tmp/FOO` is no longer inside an allowed `/tmp/foo`.
 - **`parentSession` is validated as a session id** on `amicus_start` and `amicus_fanout`
   (letters, digits, `_`, `-`, optional `.jsonl`), and session resolution refuses an id that
   escapes the project's session directory, including a `.jsonl` symlink whose target lies
-  outside it. Previously `../other-project/<uuid>` could send another project's transcript to
-  an external model.
+  outside it. A link that cannot be resolved is refused rather than thrown. Previously
+  `../other-project/<uuid>` could send another project's transcript to an external model.
 - **Electron windows no longer open a Chrome DevTools port by default.** The MCP server set
   `AMICUS_DEBUG_PORT=9223` for every child, and interactive mode fell back to 9222, so any
   local process could drive the key-save and key-remove IPC of an open setup window. The port

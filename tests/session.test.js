@@ -152,6 +152,18 @@ describe('Session Resolver', () => {
         } finally { if (spy) { spy.mockRestore(); } }
       });
 
+      it('returns the error shape, not a throw, when the realpath check fails', () => {
+        fs.writeFileSync(path.join(tempProjectDir, 'locked.jsonl'), '{}');
+        const spy = jest.spyOn(fs.realpathSync, 'native').mockImplementation(() => {
+          throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+        });
+        try {
+          const result = resolveSession(tempProjectDir, 'locked');
+          expect(result.path).toBeNull();
+          expect(result.method).toBe('error');
+        } finally { spy.mockRestore(); }
+      });
+
       it('should fall back to most recent if explicit session not found', () => {
         const validSession = path.join(tempProjectDir, 'valid-session.jsonl');
         fs.writeFileSync(validSession, '{}');
