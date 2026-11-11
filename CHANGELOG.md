@@ -61,11 +61,14 @@ All notable changes to Amicus are documented here. Format follows
   64000 `outputBudget` lands unclamped. That is a catalog read, not a fresh measurement.
 - **A council round on a release PR is told it is a release cut.** A release diff can never
   contain work that merged to `main` before the branch was cut, so every round on one objected
-  that the headline feature had no runtime code (PR #296 round 3). When the PR head is
-  this repo's own `release/*` branch (a fork's is ignored), `council-review.yml`'s briefing now opens with a "Release cut" section ahead of
-  the diff. It says that the absence is expected and lists the subjects of the base's commits
-  since the last published release (the newest 80), fenced as data rather than briefing prose.
-  An API failure there is a notice, and the framing still ships.
+  that the headline feature had no runtime code (PR #296 round 3). When the PR head is this
+  repo's own `release/*` branch (a fork's is ignored), `council-review.yml`'s briefing now
+  opens with a "Release cut" section ahead of the diff. It lists the subjects of the base's
+  commits between the last published release and the cut (the release head's merge base, so
+  later work on `main` is excluded; paginated; the newest 80 shown), fenced as data rather than
+  briefing prose. The absence of runtime code is excused only for a CHANGELOG entry that matches
+  a listed commit; any other entry is still a finding. An API failure there is a notice, and the
+  framing still ships.
 - **The briefing step's env-context fetch now reads the base branch it names.** It used
   `?ref=${BASE_REF}`, but `BASE_REF` was scoped to the alias-map step, so the fetch read
   `?ref=`: the default branch. That was harmless only because every PR targets `main`. The

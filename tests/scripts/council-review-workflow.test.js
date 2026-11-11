@@ -736,7 +736,17 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain('No commits on');
       expect(step).toContain('LISTED=0');
       expect(step).toContain('repos/${GH_REPO}/releases/latest');
-      expect(step).toContain('repos/${GH_REPO}/compare/${LAST_TAG}...${BASE_REF}');
+      // PR #297 round 2: list up to the CUT (the release head's merge base), never
+      // the base tip, and paginate, since one compare page caps at 250 oldest-first.
+      expect(step).toContain('compare/${BASE_REF}...${HEAD_SHA}');
+      expect(step).toContain('.merge_base_commit.sha');
+      expect(step).toContain('gh api --paginate "repos/${GH_REPO}/compare/${LAST_TAG}...${CUT}?per_page=100"');
+      expect(step).not.toContain('compare/${LAST_TAG}...${BASE_REF}');
+      // Only entries matching a listed commit are exempt; the rest stay findings.
+      expect(step).toContain('An entry that matches NOTHING below is still a finding.');
+      // Echoed branch names are backtick-stripped like the subjects.
+      expect(step).toContain("SAFE_HEAD=$(printf '%s' \"$HEAD_REF\" | tr -d '`')");
+      expect(step).not.toMatch(/echo .*\$\{HEAD_REF\}/);
       expect(step).toContain('Release cut (context, NOT part of the diff)');
       // An API failure is a notice and the framing still ships, never a dead step.
       expect(step).toContain('could not be listed');
