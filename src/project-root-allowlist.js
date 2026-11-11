@@ -42,16 +42,17 @@ function realPath(p) {
  * True when `child` is `parent` or lives beneath it. Both are resolved and
  * canonicalized first so `..`, slash/case/trailing-slash differences can't
  * cause false answers.
- * Comparison is case-insensitive to match Windows path semantics (and harmless
- * on case-sensitive POSIX for our purposes — a genuine escape still fails).
+ * Case-insensitive only on win32/darwin (case-insensitive filesystems by
+ * default); elsewhere a case-variant sibling like /tmp/FOO is a different dir.
  * @param {string} child
  * @param {string} parent
  * @returns {boolean}
  */
 function isPathInside(child, parent) {
   if (!child || !parent) { return false; }
-  const c = resolvedPath(child).toLowerCase();
-  const p = resolvedPath(parent).toLowerCase();
+  const fold = ['win32', 'darwin'].includes(process.platform) ? (s) => s.toLowerCase() : (s) => s;
+  const c = fold(resolvedPath(child));
+  const p = fold(resolvedPath(parent));
   if (c === p) { return true; }
   // Guard against prefix false-positives: '/foobar' is NOT inside '/foo'.
   const base = p.endsWith('/') ? p : `${p}/`;

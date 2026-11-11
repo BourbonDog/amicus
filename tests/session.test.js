@@ -131,6 +131,27 @@ describe('Session Resolver', () => {
         expect(result.method).toBe('error');
       });
 
+      it('refuses a session file that is a symlink to a transcript outside the directory', () => {
+        const other = path.join(tempDir, '.claude', 'projects', '-other-project');
+        fs.mkdirSync(other, { recursive: true });
+        const secret = path.join(other, 'secret.jsonl');
+        fs.writeFileSync(secret, '{}');
+        const mine = path.join(tempProjectDir, 'mine.jsonl');
+        // File symlinks need privilege on Windows: there, fake the link's target instead.
+        let spy = null;
+        try { fs.symlinkSync(secret, mine, 'file'); } catch {
+          fs.writeFileSync(mine, '{}');
+          const real = fs.realpathSync.native;
+          spy = jest.spyOn(fs.realpathSync, 'native')
+            .mockImplementation((p, ...rest) => (path.resolve(p) === path.resolve(mine) ? real(secret) : real(p, ...rest)));
+        }
+        try {
+          const result = resolveSession(tempProjectDir, 'mine');
+          expect(result.path).toBeNull();
+          expect(result.method).toBe('error');
+        } finally { if (spy) { spy.mockRestore(); } }
+      });
+
       it('should fall back to most recent if explicit session not found', () => {
         const validSession = path.join(tempProjectDir, 'valid-session.jsonl');
         fs.writeFileSync(validSession, '{}');

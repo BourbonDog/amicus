@@ -87,6 +87,14 @@ describe('headless hang bounds', () => {
     expect(String(result.error || '')).not.toMatch(/close boom/);
   });
 
+  test('a post-loop server.close() that never settles still lets runHeadless return', async () => {
+    mockServerClose.mockImplementation(never);
+    const result = await runHeadless('openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      100, 'build', { pollIntervalMs: 5, toolSettleAbortTimeoutMs: 50 });
+    expect(result.timedOut).toBe(true);
+    expect(mockServerClose).toHaveBeenCalled();
+  });
+
   test('waitForServer bounds a health check that never answers', async () => {
     jest.useFakeTimers();
     try {
