@@ -1066,32 +1066,32 @@ describe('v4.9 W13 Task A: the TTFT probe', () => {
    * beside `sessionId`/`watchdog`, outside that try, and the catch-all return
    * carries it emit-when-set like the two sibling returns.
    *
-   * The throw seam is `server.close()` on the success path (src/headless.js:1730
-   * — the one UNGUARDED close, deliberately so per v4.4.1 M2's note on the
-   * guarded one in the handler; RE-DERIVED #251 item 3 — 1343 had rotted onto a
-   * `stuck()` comment): the leg polls, streams 'hello', its message
-   * finalizes so it completes on the stable-finished path (spec 2026-09-11 §3:
-   * with the suite's busy default an unfinalized fixture would now run to the
-   * 2 s leg timeout instead), and only then does the close reject into the outer
+   * The throw seam is the post-loop 'Tool calls summary' log (the post-loop
+   * server.close() used to be the seam until the audit-hangs fix guarded it, so
+   * a close failure no longer discards the result): the leg polls, streams
+   * 'hello' plus one settled tool call, its message finalizes so it completes on
+   * the stable-finished path, and only then does the log throw into the outer
    * catch.
    */
   test('a leg that measured a first token and THEN exploded keeps the measurement', async () => {
     mockGetMessages.mockResolvedValue([{
       info: { role: 'assistant', id: 'm1', time: { created: 1, completed: 2 } },
-      parts: [{ id: 't1', type: 'text', text: 'hello' }],
+      parts: [
+        { id: 't1', type: 'text', text: 'hello' },
+        { id: 'tc1', type: 'tool', tool: 'read', state: { status: 'completed', input: {} } },
+      ],
     }]);
-    mockStartServer.mockResolvedValue({
-      client: {},
-      server: {
-        url: 'http://127.0.0.1:1',
-        close: jest.fn(async () => { throw new Error('close exploded'); }),
-      },
+    mockLogger.info.mockImplementation((msg) => {
+      if (msg === 'Tool calls summary') { throw new Error('summary exploded'); }
     });
 
-    const result = await runHeadless(MODEL, 'sys', 'user', 'ttftboom2', '/proj', 2000, 'build',
-      { ...OPTS, noOutputBackstopMs: 60000 });
+    let result;
+    try {
+      result = await runHeadless(MODEL, 'sys', 'user', 'ttftboom2', '/proj', 2000, 'build',
+        { ...OPTS, noOutputBackstopMs: 60000 });
+    } finally { mockLogger.info.mockImplementation(() => {}); }
 
-    expect(String(result.error)).toContain('close exploded'); // the catch-all return, not a sibling
+    expect(String(result.error)).toContain('summary exploded'); // the catch-all return, not a sibling
     expect(typeof result.ttftMs).toBe('number');
     expect(result.ttftMs).toBeGreaterThanOrEqual(0);
     expect(result.ttftMs).toBeLessThan(2000);
