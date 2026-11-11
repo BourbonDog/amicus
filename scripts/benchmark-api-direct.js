@@ -6,7 +6,7 @@
  * to validate that different thinking levels affect response behavior.
  */
 
-require('dotenv').config();
+try { process.loadEnvFile(); } catch { /* no .env file: use the existing environment */ }
 
 const https = require('https');
 

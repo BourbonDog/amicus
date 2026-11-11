@@ -616,13 +616,14 @@ under the current project's `.claude/amicus_sessions/`); both sweeps only remove
 
 Session data is split across two different roots — don't confuse them:
 
-**1. The session root** (`getSessionRoot()` in `src/environment.js`) — resolved per client, mostly
-relevant for how Claude Code/Cowork discovers *your current conversation's* context to share:
+**1. The session root** (`buildContext()` in `src/sidecar/context-builder.js`) — resolved per client,
+relevant for how Amicus discovers *your current conversation's* context to share. An explicit
+`--session-dir` always wins:
 
 | Client | Root |
 |---|---|
-| `code-local` (default on macOS, or when a `DISPLAY`/`WAYLAND_DISPLAY` is present) | `~/.claude/projects/<encoded-cwd>` — the cwd is encoded by replacing `/`, `\`, the drive-letter colon, and `_` with `-` (matches Claude Code's own scheme). |
-| `cowork` | Platform-specific: macOS `~/Library/Application Support/Claude/local-agent-mode-sessions`, Windows `%APPDATA%\Claude\local-agent-mode-sessions`, Linux `~/.config/Claude/local-agent-mode-sessions`. |
+| `code-local` (the default) | `~/.claude/projects/<encoded-cwd>` (`getSessionDirectory()` in `src/session.js`) — the cwd is encoded by replacing `/`, `\`, the drive-letter colon, and `_` with `-` (matches Claude Code's own scheme). |
+| `cowork` | `~/Library/Application Support/Claude/local-agent-mode-sessions` (Claude Desktop's macOS location). |
 | `code-web` | No default — `--session-dir` is **required**; there's nothing to resolve. |
 
 **2. Amicus's own per-session directories** — where the actual session data (metadata, conversation,

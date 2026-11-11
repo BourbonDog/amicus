@@ -14,7 +14,7 @@
  */
 
 // Load environment variables from .env file
-require('dotenv').config();
+try { process.loadEnvFile(); } catch { /* no .env file: use the existing environment */ }
 
 // Models to test - can be filtered via MODELS env var
 const ALL_MODELS = [

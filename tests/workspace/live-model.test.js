@@ -43,7 +43,7 @@ describe('defaultBlind (spec resolved Q2)', () => {
 
 describe('seatCells', () => {
   // ⚠️ DE-ROT (F36): a LIVE seat's `model` is the RESOLVED executable id (metadata.model,
-  // src/session-manager.js:74), while run.json's labelMap values are the council ALIAS — so
+  // src/sidecar/start-metadata.js :: createSessionMetadata), while run.json's labelMap values are the council ALIAS — so
   // labelOf(seat.model) never matches live and Blind ON leaks the real model id. Fixture now
   // carries both; the alias arrives as `modelInput` (Task 0.5 must stamp it on each leg row,
   // Task 14's seatOf maps it through — normalizeLive is pure and cannot read run.json itself).

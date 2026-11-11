@@ -656,8 +656,7 @@ describe('amicus list --all --limit — the scope note still ends it (round 3, B
  *
  * PRODUCIBILITY, measured: no first-party writer can emit such a row. Every
  * session metadata.json is stamped at creation
- * (`src/session-manager.js :: createSession`,
- * `src/sidecar/fanout.js :: runFanout`,
+ * (`src/sidecar/fanout.js :: runFanout`,
  * `src/sidecar/continue.js :: createContinueSessionMetadata`,
  * `src/sidecar/start-metadata.js :: createSessionMetadata`) and so is every
  * council run.json (`src/council/run-state.js :: initCouncilRun` for a CLI run,

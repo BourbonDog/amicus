@@ -41,10 +41,10 @@ This signal is **gated on real output existing** (the `output.length > 0` check 
 
 | Feature | Why We Need It | Implementation |
 |---------|----------------|----------------|
-| **Context Extraction** | Bridge Claude Code sessions to OpenCode | `context.js` reads `.jsonl` files |
+| **Context Extraction** | Bridge Claude Code sessions to OpenCode | `sidecar/context-builder.js` reads `.jsonl` files |
 | **File Conflict Detection** | Safety feature - OpenCode doesn't track this | `conflict.js` compares mtimes |
-| **Context Drift Detection** | Safety feature - detect stale context | `drift.js` calculates staleness |
-| **Session Persistence** | Custom metadata (briefing, agent, thinking) | `session-manager.js` |
+| **Context Drift Detection** | Safety feature - detect stale context | `sidecar/resume.js` warns on files changed since last activity |
+| **Session Persistence** | Custom metadata (briefing, agent, thinking) | `sidecar/start-metadata.js` |
 | **MCP Config Merging** | CLI overrides + file config | `opencode-client.js` |
 | **Client-aware prompt** | Cowork needs general-purpose, not SE-focused | `prompts/cowork-agent-prompt.js` sets `chat` agent `prompt` field |
 

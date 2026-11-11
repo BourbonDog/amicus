@@ -365,10 +365,6 @@ src/
 ├── cli-template-args.js
 ├── cli.js  # CLI Argument Parser
 ├── conflict.js  # File Conflict Detection Module
-├── context-compression.js  # Context Compression Module
-├── context.js  # Context Filtering Module
-├── drift.js  # Context Drift Detection Module
-├── environment.js  # Environment Detection Module
 ├── headless.js  # Headless Mode Runner
 ├── index.js  # Amicus - Main Module
 ├── jsonl-parser.js  # JSONL Parser
@@ -529,10 +525,6 @@ evals/
 | `cli-template-args.js` |  | `applyTemplateForArgs()`, `NEEDS_TEMPLATE_MSG` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `getCommandNames()`, `getBooleanFlags()` |
 | `conflict.js` | File Conflict Detection Module | `detectConflicts()`, `formatConflictWarning()` |
-| `context-compression.js` | Context Compression Module | `compressContext()`, `estimateTokenCount()`, `buildPreamble()`, `DEFAULT_TOKEN_LIMIT` |
-| `context.js` | Context Filtering Module | `filterContext()`, `parseDuration()`, `estimateTokens()`, `takeLastNTurns()` |
-| `drift.js` | Context Drift Detection Module | `calculateDrift()`, `formatDriftWarning()`, `countTurnsSince()`, `isDriftSignificant()` |
-| `environment.js` | Environment Detection Module | `inferClient()`, `getSessionRoot()`, `detectEnvironment()`, `VALID_CLIENTS` |
 | `headless.js` | Headless Mode Runner | `runHeadless()`, `waitForServer()`, `withTimeout()`, `extractSummary()`, `findTrailingFoldMarker()` |
 | `index.js` | Amicus - Main Module | `startAmicus()`, `listAmicus()`, `resumeAmicus()`, `continueAmicus()`, `readAmicus()` |
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
@@ -549,7 +541,7 @@ evals/
 | `opencode-client.js` | OpenCode SDK Client Wrapper | `INSUFFICIENT_CREDITS_REASON`, `providerErrorReason()`, `parseModelString()`, `createClient()`, `createSession()` |
 | `project-root-allowlist.js` | The MCP `project` / cwd input becomes the session-store parent AND the spawned | `isAllowedProjectRoot()`, `isPathInside()`, `allowedRoots()` |
 | `prompt-builder.js` | System Prompt Builder | `buildSystemPrompt()`, `buildPrompts()`, `buildEnvironmentSection()`, `getSummaryTemplate()`, `SUMMARY_TEMPLATE` |
-| `session-manager.js` | Session Manager Module | `createSession()`, `updateSession()`, `getSession()`, `saveConversation()`, `saveSummary()` |
+| `session-manager.js` | Session Manager Module | `getSessionDir()`, `resolveExistingSessionDir()`, `SESSIONS_DIR`, `SUBAGENTS_DIR` |
 | `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `spend-query.js` |  | `filterRows()`, `groupRows()`, `computeWasted()`, `emptyTokens()`, `addTokens()` |
 | `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS` |

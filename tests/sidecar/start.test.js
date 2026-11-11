@@ -412,3 +412,19 @@ describe('startSidecar includeContext option', () => {
     expect(buildPrompts.mock.calls[0][1]).toContain(PARENT_MARKER);
   });
 });
+
+describe('generateTaskId', () => {
+  const { generateTaskId } = require('../../src/sidecar/start');
+
+  it('should generate an 8-character hex string', () => {
+    expect(generateTaskId()).toMatch(/^[a-f0-9]{8}$/);
+  });
+
+  it('should generate unique IDs', () => {
+    const ids = new Set();
+    for (let i = 0; i < 100; i++) {
+      ids.add(generateTaskId());
+    }
+    expect(ids.size).toBe(100);
+  });
+});

@@ -27,7 +27,8 @@
 
 'use strict';
 
-const { VALID_CLIENTS } = require('../environment');
+/** Valid client types (the session-root clients the MCP server can serve). */
+const VALID_CLIENTS = ['code-local', 'code-web', 'cowork'];
 
 /** claude-code / Claude Code / claude_code / ClaudeCode → 'code-local'. */
 const CODE_LOCAL_RE = /claude[-_ ]?code/i;
