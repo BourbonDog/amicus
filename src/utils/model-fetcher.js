@@ -236,16 +236,6 @@ async function fetchAllModelsDetailed(keys) {
 }
 
 /**
- * Rows-only view of `fetchAllModelsDetailed` — the historical signature, kept
- * so existing callers and their tests are unaffected.
- * @param {Object<string, string>} keys
- * @returns {Promise<Array>} Combined model list
- */
-async function fetchAllModels(keys) {
-  return (await fetchAllModelsDetailed(keys)).rows;
-}
-
-/**
  * Group models by provider family for <optgroup> rendering
  * @param {Array<{id: string, name: string, contextLength: number|null, pricing: {prompt: string|null, completion: string|null}|null}>} models
  * @returns {Array<{family: string, models: Array<{id: string, name: string}>}>}
@@ -272,7 +262,6 @@ function groupModelsByFamily(models) {
 
 module.exports = {
   fetchModelsFromProvider,
-  fetchAllModels,
   fetchAllModelsDetailed,
   fetchModelsFromProviderDetailed,
   providersToFetch,

@@ -535,7 +535,7 @@ evals/
 | `environment.js` | Environment Detection Module | `inferClient()`, `getSessionRoot()`, `detectEnvironment()`, `VALID_CLIENTS` |
 | `headless.js` | Headless Mode Runner | `runHeadless()`, `waitForServer()`, `withTimeout()`, `extractSummary()`, `findTrailingFoldMarker()` |
 | `index.js` | Amicus - Main Module | `startAmicus()`, `listAmicus()`, `resumeAmicus()`, `continueAmicus()`, `readAmicus()` |
-| `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
+| `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `formatMessage()`, `formatContext()` |
 | `mcp-council-awareness.js` |  | `subWaveIds()`, `countWaveLegs()`, `elapsedOf()`, `enginePid()`, `buildCouncilStatusPayload()` |
 | `mcp-council-bench.js` |  | `resolveBenchInput()`, `auditBenchAliases()` |
 | `mcp-council-pack-map.js` | COUNCIL_PACK_PARAM_MAP, split out of mcp-council-run.js for the 300-line size gate (P2-R16). | `COUNCIL_PACK_PARAM_MAP` |
@@ -795,13 +795,13 @@ evals/
 | `utils/model-ceilings-modelsdev.js` | #218 P3 — output ceilings for the direct-provider catalog rows. | `enrichCeilings()`, `fillCeilings()`, `needsFillCount()`, `limitsFromModelsDev()`, `emptyOutcome()` |
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
-| `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()` |
+| `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()`, `groupModelsByFamily()` |
 | `utils/model-id-siblings.js` | The tier-safe sibling comparator (#238 D7). A sibling shares a pin's vendor | `parsePin()`, `compareVersions()`, `newestSibling()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
 | `utils/model-output-limit.js` | Issue #218 — the per-model `limit` descriptor amicus hands opencode. | `normalizeOutputBudget()`, `buildLimitLookup()`, `computeModelLimit()`, `positiveCount()` |
 | `utils/model-shortlist.js` | Vendor model shortlist (#138) -- the family -> model second level. | `buildModelShortlist()`, `compareShortlistRows()`, `SHORTLIST_LIMIT` |
 | `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS`, `TIER_ORDER`, `resolveTier()` |
-| `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
+| `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
 | `utils/no-output-backstop.js` | v4.6.2 PR2 (spec §5, D4): fail a headless leg fast when the model produces | `resolveNoOutputBackstopMs()`, `createNoOutputBackstop()`, `extendWindowMs()`, `decideBackstopExtension()`, `undecidedBackstopRecord()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE` |
 | `utils/openrouter-credit.js` | The OpenRouter credit/limit probe, split out of api-key-validation.js to keep | `checkOpenRouterCredit()`, `checkOpenRouterBalance()`, `OPENROUTER_NO_CREDIT_WARNING`, `OPENROUTER_FREE_TIER_WARNING` |
@@ -815,7 +815,7 @@ evals/
 | `utils/prompt-source.js` |  | `resolvePromptSource()` |
 | `utils/provider-default-picker.js` | Provider-default picker core (Part 2, Task 4). | `buildProviderDefaultChoices()`, `applyProviderDefault()`, `pricePerMInputFrom()`, `directFormIfSafe()`, `directFormIfProven()` |
 | `utils/provider-default-prompt.js` | Provider-default prompt flow (Part 2, Task 6/7 shared helper). | `runProviderDefaultFlow()`, `formatPrice()`, `formatRow()` |
-| `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS`, `getProvider()`, `isDirectProvider()`, `listDirectProviders()`, `PROVIDER_ENV_MAP` |
+| `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS`, `isDirectProvider()`, `listDirectProviders()`, `splitVendorId()`, `PROVIDER_ENV_MAP` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `canonicalRoutesFor()`, `pickCurrent()`, `resolveQuickPicks()`, `toStorableRoute()` |
 | `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES` |
 | `utils/redact-provider-error.js` | #256 item 4: strip key IDENTIFIERS out of a provider's error text before it | `redactProviderError()` |

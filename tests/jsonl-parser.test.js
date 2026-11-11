@@ -14,8 +14,7 @@ const {
   readJSONL,
   parseJSONLLine,
   formatMessage,
-  formatContext,
-  extractTimestamp
+  formatContext
 } = require('../src/jsonl-parser');
 
 describe('JSONL Parser', () => {
@@ -127,27 +126,6 @@ describe('JSONL Parser', () => {
 
       const result = readJSONL(tempFile);
       expect(result).toHaveLength(1);
-    });
-  });
-
-  describe('extractTimestamp', () => {
-    it('should extract timestamp from message object', () => {
-      const message = { timestamp: '2025-01-25T10:30:00Z' };
-      const result = extractTimestamp(message);
-      expect(result).toBeInstanceOf(Date);
-      expect(result.toISOString()).toBe('2025-01-25T10:30:00.000Z');
-    });
-
-    it('should return null for missing timestamp', () => {
-      const message = { type: 'user' };
-      const result = extractTimestamp(message);
-      expect(result).toBeNull();
-    });
-
-    it('should return null for invalid timestamp', () => {
-      const message = { timestamp: 'not-a-date' };
-      const result = extractTimestamp(message);
-      expect(result).toBeNull();
     });
   });
 

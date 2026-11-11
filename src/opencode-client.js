@@ -369,34 +369,6 @@ async function checkHealth(client) {
 }
 
 /**
- * Create a child session with a parent ID
- *
- * @param {import('@opencode-ai/sdk').OpencodeClient} client - SDK client
- * @param {string} parentId - Parent session ID
- * @param {string} [taskId] - Names the session (see sessionTitle)
- * @returns {Promise<string>} Child session ID
- * @throws {Error} If child session creation fails
- */
-async function createChildSession(client, parentId, taskId) {
-  const result = await client.session.create({
-    body: { parentID: parentId, title: sessionTitle(taskId) }
-  });
-
-  if (result.error) {
-    throw new Error(result.error.message || 'Failed to create child session');
-  }
-
-  // Handle both direct ID and nested session.id
-  const sessionId = result.data?.id || result.data?.session?.id;
-
-  if (!sessionId) {
-    throw new Error('No session ID returned');
-  }
-
-  return sessionId;
-}
-
-/**
  * Get child (subagent) sessions for a parent session.
  *
  * ⚠️ v4.4.1 LC-7: this was the ONE per-session call that did not thread
@@ -421,21 +393,6 @@ async function getChildren(client, parentId, directory) {
   });
 
   return result.data || [];
-}
-
-/**
- * List all sessions from the OpenCode server
- *
- * @param {import('@opencode-ai/sdk').OpencodeClient} client - SDK client
- * @returns {Promise<Array>} Array of sessions
- */
-async function listSessions(client) {
-  try {
-    const result = await client.session.list();
-    return result.data || [];
-  } catch (_error) {
-    return [];
-  }
 }
 
 /**
@@ -1044,12 +1001,10 @@ module.exports = {
   parseModelString,
   createClient,
   createSession,
-  createChildSession,
   sendPrompt,
   sendPromptAsync: sendPrompt, // Alias: sendPrompt already uses promptAsync internally
   getMessages,
   getChildren,
-  listSessions,
   getSessionStatus,
   abortSession,
   checkHealth,

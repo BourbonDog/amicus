@@ -1,12 +1,12 @@
 'use strict';
 /**
  * #267 — council #294 round 2, D3: every engine session amicus creates is titled
- * because every create goes through the two titled wrappers in
- * src/opencode-client.js (createSession and createChildSession, whose wire shape
+ * because every create goes through the titled wrapper in
+ * src/opencode-client.js (createSession, whose wire shape
  * tests/opencode-client.test.js pins). An untitled `client.session.create(...)`
  * anywhere else in shipped code would bring back the engine's hidden
- * title-generation request, so this fails on any other call site, and on a third
- * one inside the wrappers' own file.
+ * title-generation request, so this fails on any other call site, and on a second
+ * one inside the wrapper's own file.
  * Named mutant "STRAYSESSIONCREATE": add `client.session.create({})` to any tracked src file.
  *
  * `git ls-files`, not a directory walk: a tracked list cannot name the size gate's
@@ -32,5 +32,5 @@ test('only the titled wrappers in src/opencode-client.js create engine sessions 
     });
   }
   expect(sites.filter((s) => !s.startsWith(`${WRAPPERS}:`))).toEqual([]);
-  expect(sites.filter((s) => s.startsWith(`${WRAPPERS}:`))).toHaveLength(2);
+  expect(sites.filter((s) => s.startsWith(`${WRAPPERS}:`))).toHaveLength(1);
 });

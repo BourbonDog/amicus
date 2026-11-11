@@ -40,26 +40,6 @@ function readJSONL(filePath) {
 }
 
 /**
- * Extract timestamp from a message object
- * @param {object} message - Message object with optional timestamp field
- * @returns {Date|null} Date object or null if invalid/missing
- */
-function extractTimestamp(message) {
-  if (!message || !message.timestamp) {
-    return null;
-  }
-
-  const date = new Date(message.timestamp);
-
-  // Check if date is valid (invalid dates return NaN for getTime())
-  if (isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date;
-}
-
-/**
  * Format a timestamp for display (e.g., "10:30" or "10:30 AM")
  * @param {string} timestamp - ISO timestamp string
  * @returns {string} Formatted time string
@@ -203,7 +183,6 @@ function formatContext(messages) {
 module.exports = {
   parseJSONLLine,
   readJSONL,
-  extractTimestamp,
   formatMessage,
   formatContext
 };

@@ -37,7 +37,7 @@
 
 const {
   createMirrorState, mirrorMessages,
-  TERMINAL_TOOL_STATUSES, LIVE_TOOL_STATUSES, isToolPartSettled, isToolPartLive,
+  TERMINAL_TOOL_STATUSES, LIVE_TOOL_STATUSES, isToolPartSettled,
   toolPartName, getPendingToolCalls, getLiveToolCalls, isSubagentToolCall,
 } = require('../../src/sidecar/conversation-mirror');
 
@@ -210,9 +210,6 @@ describe('mirrorMessages tracks tool status, not a part type that does not exist
     expect(Array.from(LIVE_TOOL_STATUSES).sort()).toEqual(['pending', 'running']);
     // The two sets are disjoint — no status is both live and terminal.
     for (const s of LIVE_TOOL_STATUSES) { expect(TERMINAL_TOOL_STATUSES.has(s)).toBe(false); }
-    expect(isToolPartLive(toolPart('p', 'read', 'running'))).toBe(true);
-    expect(isToolPartLive(toolPart('p', 'read', 'completed'))).toBe(false);
-    expect(isToolPartLive({ id: 'p', type: 'tool_use', name: 'Bash' })).toBe(false);
   });
 
   it('firstSeenAt is captured once and never bumped while the call stays non-terminal', () => {

@@ -19,7 +19,7 @@ function mockHttpsGet(payload = { data: [] }) {
   });
 }
 
-describe('fetchAllModels: local rows', () => {
+describe('fetchAllModelsDetailed: local rows', () => {
   const origToken = process.env.OLLAMA_API_KEY;
   afterEach(() => {
     jest.resetModules();
@@ -50,8 +50,8 @@ describe('fetchAllModels: local rows', () => {
       { id: 'ollama/llama3.3', name: 'llama3.3', contextLength: null, pricing: { prompt: 0, completion: 0 }, authoritative: true, local: true },
     ]);
     jest.doMock('../src/utils/local-probe', () => ({ listLocalModels }));
-    const { fetchAllModels } = require('../src/utils/model-fetcher');
-    const rows = await fetchAllModels({}); // no direct keys → openrouter/anthropic floors (mocked) + local
+    const { fetchAllModelsDetailed } = require('../src/utils/model-fetcher');
+    const { rows } = await fetchAllModelsDetailed({}); // no direct keys → openrouter/anthropic floors (mocked) + local
     const local = rows.filter((r) => r.local === true);
     expect(local).toHaveLength(1);
     expect(local[0].id).toBe('ollama/llama3.3');

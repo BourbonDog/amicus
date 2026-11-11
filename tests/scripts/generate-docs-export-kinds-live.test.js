@@ -78,7 +78,7 @@ describe('the rows that motivated the change', () => {
     ['utils/api-key-validation.js', ['OPENROUTER_NO_CREDIT_WARNING'], ['validateApiKey', 'validateOpenRouterKey']],
     ['utils/openrouter-credit.js', ['OPENROUTER_NO_CREDIT_WARNING', 'OPENROUTER_FREE_TIER_WARNING'], ['checkOpenRouterCredit']],
     // An array literal and an Object.fromEntries over it.
-    ['utils/provider-registry.js', ['PROVIDERS', 'PROVIDER_ENV_MAP'], ['getProvider']],
+    ['utils/provider-registry.js', ['PROVIDERS', 'PROVIDER_ENV_MAP'], ['isDirectProvider']],
     // Prompt text joined from an array literal, and from other joined constants.
     ['council/briefings.js', ['FINDINGS_TWO_PART_FRAMING', 'FINDINGS_CONTRACT'], ['buildSeatBriefing']],
     // Re-exports through a namespace require (`NAME: chair.NAME`).
