@@ -210,6 +210,16 @@ describe('MCP Tool Definitions', () => {
       expect(startTool.inputSchema).toHaveProperty('parentSession');
     });
 
+    test('parentSession rejects a path-traversal id (audit #5)', () => {
+      for (const tool of [startTool, TOOLS.find(t => t.name === 'amicus_fanout')]) {
+        const schema = tool.inputSchema.parentSession;
+        expect(schema.parse('current')).toBe('current');
+        expect(schema.parse('f58f2782-fc8c-41bc-afbc-e0c130b91aaf')).toBe('f58f2782-fc8c-41bc-afbc-e0c130b91aaf');
+        expect(() => schema.parse('../other-project/f58f2782')).toThrow();
+        expect(() => schema.parse('a/b')).toThrow();
+      }
+    });
+
     test('has gateway enum in input schema, not required (#61 Task 7.2)', () => {
       const schema = startTool.inputSchema.gateway;
       expect(schema).toBeDefined();

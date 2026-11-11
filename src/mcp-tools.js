@@ -19,6 +19,12 @@ const safeTaskId = z.string().regex(
   'Task ID must be 1-64 alphanumeric, hyphen, or underscore characters'
 );
 
+/** Zod pattern for a Claude Code session id ('current', a UUID, optionally `.jsonl`) — never a path */
+const safeSessionId = z.string().regex(
+  /^[a-zA-Z0-9_-]{1,128}(\.jsonl)?$/,
+  'Session ID must be 1-128 alphanumeric, hyphen, or underscore characters'
+);
+
 /** Zod pattern for safe model identifiers (must not start with -) */
 const safeModel = z.string().regex(
   /^[a-zA-Z0-9_/.@:][a-zA-Z0-9_/.@:-]{0,199}$/,
@@ -110,7 +116,7 @@ function getTools() {
         'Cowork VM process name (e.g., "modest-laughing-goodall"). ' +
         'Extract from CWD: /sessions/<name>/. Required for parent context loading.'
       ),
-      parentSession: z.string().optional().describe(
+      parentSession: safeSessionId.optional().describe(
         'Claude Code session UUID for exact context matching. ' +
         'Prevents ambiguity when multiple sessions are active in the same project.'
       ),
@@ -364,7 +370,7 @@ function getTools() {
         'Cowork VM process name (e.g., "modest-laughing-goodall"). ' +
         'Extract from CWD: /sessions/<name>/. Required for parent context loading from Cowork.'
       ),
-      parentSession: z.string().optional().describe(
+      parentSession: safeSessionId.optional().describe(
         'Claude Code session UUID for exact context matching. ' +
         'Prevents ambiguity when multiple sessions are active in the same project.'
       ),

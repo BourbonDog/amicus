@@ -1,12 +1,12 @@
 # Electron UI Testing (Chrome DevTools Protocol)
 
-The Electron Amicus window runs with remote debugging enabled via the Chrome DevTools Protocol. This allows programmatic inspection and testing of the UI state.
+The Electron Amicus window can run with remote debugging enabled via the Chrome DevTools Protocol. It is opt-in: no DevTools port is opened unless `AMICUS_DEBUG_PORT` is set. This allows programmatic inspection and testing of the UI state.
 
 ## Prerequisites
 
 ### Debug Port Configuration
 
-The default debug port is 9222, but **Chrome browser also uses port 9222**. If Chrome is running, Electron will silently fail to bind. Use `AMICUS_DEBUG_PORT` to set a different port:
+Set `AMICUS_DEBUG_PORT` to open the port. Avoid 9222: **Chrome browser also uses port 9222**, and if Chrome is running, Electron will silently fail to bind:
 
 ```bash
 # Use port 9223 to avoid conflicts with Chrome
@@ -16,7 +16,7 @@ AMICUS_DEBUG_PORT=9223 amicus start --model gemini --prompt "test"
 Verify it's accessible:
 
 ```bash
-# Use the same port you configured (default: 9222, recommended: 9223)
+# Use the same port you configured (recommended: 9223)
 curl -s http://127.0.0.1:9223/json | python3 -m json.tool
 ```
 

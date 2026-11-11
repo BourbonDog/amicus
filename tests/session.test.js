@@ -13,8 +13,7 @@ const os = require('os');
 const {
   encodeProjectPath,
   getSessionDirectory,
-  resolveSession,
-  getSessionId
+  resolveSession
 } = require('../src/session');
 
 describe('Session Resolver', () => {
@@ -83,20 +82,6 @@ describe('Session Resolver', () => {
     });
   });
 
-  describe('getSessionId', () => {
-    it('should extract session ID from filename', () => {
-      const filename = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890.jsonl';
-      const result = getSessionId(filename);
-      expect(result).toBe('a1b2c3d4-e5f6-7890-abcd-ef1234567890');
-    });
-
-    it('should handle filename without extension', () => {
-      const filename = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
-      const result = getSessionId(filename);
-      expect(result).toBe('a1b2c3d4-e5f6-7890-abcd-ef1234567890');
-    });
-  });
-
   describe('resolveSession', () => {
     let tempDir;
     let tempProjectDir;
@@ -132,6 +117,18 @@ describe('Session Resolver', () => {
         const result = resolveSession(tempProjectDir, sessionId);
         expect(result.path).toBe(sessionFile);
         expect(result.method).toBe('explicit');
+      });
+
+      it('refuses a session id that escapes the session directory (audit #5)', () => {
+        // A sibling project's transcript: `../other/<id>` must never be read.
+        const other = path.join(tempDir, '.claude', 'projects', '-other-project');
+        fs.mkdirSync(other, { recursive: true });
+        fs.writeFileSync(path.join(other, 'secret.jsonl'), '{}');
+        fs.writeFileSync(path.join(tempProjectDir, 'mine.jsonl'), '{}');
+
+        const result = resolveSession(tempProjectDir, '../-other-project/secret');
+        expect(result.path).toBeNull();
+        expect(result.method).toBe('error');
       });
 
       it('should fall back to most recent if explicit session not found', () => {
