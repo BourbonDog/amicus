@@ -23,17 +23,32 @@ const crypto = require('crypto');
  * @param {string|Buffer} data - Content to write.
  * @param {{mode?: number}} [opts] - Write options; `mode` sets file permissions.
  */
+/** Block the thread for `ms` (callers here are all synchronous). */
+function sleepSync(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
+
+const LOCK_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+/** Windows antivirus/indexers briefly hold the target open: retry ~10x within ~1 s there. */
+function renameRetrying(tmp, filePath) {
+  for (let i = 0; ; i++) {
+    try { return fs.renameSync(tmp, filePath); } catch (err) {
+      if (process.platform !== 'win32' || !LOCK_CODES.has(err.code) || i >= 9) { throw err; }
+      sleepSync(20 * (i + 1)); // 20..180 ms, 900 ms total
+    }
+  }
+}
+
 function writeFileAtomic(filePath, data, opts = {}) {
   const dir = path.dirname(filePath);
   const base = path.basename(filePath);
   const tmp = path.join(dir, `.${base}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`);
   try {
     fs.writeFileSync(tmp, data, { mode: opts.mode });
-    fs.renameSync(tmp, filePath); // atomic on a single filesystem
+    renameRetrying(tmp, filePath); // atomic on a single filesystem
   } catch (err) {
     try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort cleanup */ }
     throw err;
   }
 }
 
-module.exports = { writeFileAtomic };
+module.exports = { writeFileAtomic, sleepSync };

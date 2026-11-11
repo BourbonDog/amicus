@@ -728,7 +728,7 @@ evals/
 | `utils/api-key-rejection.js` | Definitive key rejections besides a 401 (google API_KEY_INVALID, malformed keys). | `isMalformedKey()`, `invalidKey()`, `malformedKey()`, `isGoogleKeyInvalid()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `isTestWriteToRealKeyStore()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `redactSecret()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING` |
-| `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
+| `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()`, `sleepSync()` |
 | `utils/auth-json.js` | Auth JSON Reader | `readAuthJsonKeys()`, `importFromAuthJson()`, `checkAuthJson()`, `removeFromAuthJson()`, `AUTH_JSON_PATH()` |
 | `utils/base-url-classify.js` | v4.6.2 PR1 (spec §4, D1/D2): ANTHROPIC_BASE_URL classification, the | `classifyBaseUrl()`, `resolveBaseUrlOverride()`, `announceBaseUrlNormalizationOnce()`, `_resetBaseUrlNotice()` |
 | `utils/claude-register.js` | Registration core for amicus: skill install (chat skill + LLM Council), | `MCP_CONFIG`, `addMcpToConfigFile()`, `installSkill()`, `installCouncilSkill()`, `readPrevClaudeCodeAmicusEntry()` |
