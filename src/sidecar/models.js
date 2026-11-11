@@ -17,12 +17,7 @@ const { getCatalogInfo, refreshCatalog, catalogPath } = require('../utils/model-
 const { collectAliasSources, findStaleAliases, findDriftedStoredAliases, suggestReplacements } = require('../utils/alias-audit');
 const { auditGatewayRoutes } = require('../utils/gateway-route-audit');
 const { buildCatalogDoc, buildAuditDoc } = require('../utils/result-schema');
-const { getFamilies } = require('../utils/curated-models');
-const { pickCurrent } = require('../utils/quick-picks');
-const { gatedCatalogIds } = require('../utils/alias-proposals');
-const { newestSibling } = require('../utils/model-id-siblings');
-const { loadCuratedPins } = require('../utils/curated-pins');
-const { safeFragment } = require('../utils/text-sanitize');
+const { findFallbackDrift, buildFallbackDriftReport } = require('./models-fallback-drift');
 const { probeStoredAliases, selectStoredAliases } = require('./models-probe');
 const { DEFAULT_MAX_LEGS } = require('./fanout-validate');
 const { fmtRow, fmtGatewayFinding, fmtProbeLine, fmtProviderFailure } = require('./models-render');
@@ -123,9 +118,6 @@ async function runRefresh(args) {
 }
 
 
-
-
-
 async function runCheck(args) {
   // v4.9 W13 Task B (BACKLOG C5). FIRST — ahead of the catalog-unavailable return
   // below, exactly when an offline user most needs to know what their aliases bind
@@ -190,7 +182,8 @@ async function runCheck(args) {
 
   if (args.json) {
     process.stdout.write(JSON.stringify(buildAuditDoc({
-      stale, catalogAvailable: true, gatewayFindings, drifted, probe: probeResults, providerFailures
+      stale, catalogAvailable: true, gatewayFindings, drifted, probe: probeResults, providerFailures,
+      fallbackDrift: findFallbackDrift(catalogInfo)
     }), null, 2) + '\n');
     return exitCode;
   }
@@ -237,48 +230,6 @@ async function runCheck(args) {
     for (const f of gatewayFindings) { process.stdout.write(fmtGatewayFinding(f) + '\n'); }
   }
   return exitCode;
-}
-
-/**
- * Non-blocking drift report: pinned family fallbacks vs live resolution, and
- * (#238 Q7) a newer same-tier sibling of each CARDLESS pin. Accepts a
- * catalogInfo (`{models, providerFailures}`) or a bare models array (older
- * callers). Empty catalog → [] (cannot check). #238 §5: when the openrouter
- * namespace itself was REJECTED this run, the catalog is missing the rows that
- * make a pin look current, and a drift line computed from it would propose a
- * downgrade — so the report is empty for that catalog. The sibling lines use
- * the §5-gated ids (authoritative rows, no rejected namespace) — the same gate
- * that keeps the picker from offering a floor row; mutant SIBLINGGATE feeds it
- * every catalog id instead. Never affects the exit code; every line points at
- * owner mode, the flow that moves a shipped pin.
- * @param {{models: Array<{id:string}>, providerFailures?: Array<{provider:string}>}|Array<{id:string}>} catalogOrInfo
- * @returns {string[]} human-readable warning lines
- */
-function buildFallbackDriftReport(catalogOrInfo) {
-  const info = Array.isArray(catalogOrInfo) ? { models: catalogOrInfo } : (catalogOrInfo || { models: [] });
-  const catalog = info.models || [];
-  if (catalog.length === 0) { return []; }
-  const failures = Array.isArray(info.providerFailures) ? info.providerFailures : [];
-  if (failures.some(f => f && f.provider === 'openrouter')) { return []; }
-  const lines = [];
-  const families = getFamilies();
-  for (const f of families) {
-    const live = pickCurrent(catalog, 'openrouter/', f.vendorPath, f.idPattern);
-    if (live && f.fallback.openrouter && live !== f.fallback.openrouter) {
-      // F5: `live` is catalog-derived (third-party); `f.fallback.openrouter` is the shipped pin (house bytes) -- only the former rides the sanitizer.
-      lines.push(`  pinned fallback drift: ${f.alias} → ${f.fallback.openrouter} (live: ${safeFragment(live)}) — amicus aliases --review --owner (a family match is not always a same-tier sibling; when the picker offers nothing, edit src/utils/curated-pins.json by hand)`);
-    }
-  }
-  const familyAliases = new Set(families.map(f => f.alias));
-  const gated = gatedCatalogIds(info);
-  const { pins } = loadCuratedPins();
-  for (const alias of Object.keys(pins)) {
-    if (familyAliases.has(alias)) { continue; } // a family's idPattern rule speaks for it above
-    const pinned = pins[alias].routes.openrouter;
-    const newer = newestSibling(pinned, gated);
-    if (newer) { lines.push(`  newer sibling: ${alias} → ${pinned} (catalog: ${safeFragment(newer)}) — amicus aliases --review --owner`); }
-  }
-  return lines;
 }
 
 /** @param {object} args parsed CLI args @returns {Promise<number>} exit code */

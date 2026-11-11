@@ -17,6 +17,21 @@
     "drifted": { "type": "array", "items": { "type": "object" } },
     "probeCount": { "type": "number" },
     "probe": { "type": "array", "items": { "type": "object" } },
-    "probeSkipped": { "type": ["string", "null"] }
+    "probeSkipped": { "type": ["string", "null"] },
+    "fallbackDriftCount": { "type": "number" },
+    "fallbackDrift": {
+      "description": "Shipped curated pins behind the live catalog (the text path's \"Pinned fallback drift\" block). Distinct from drifted, which covers stored user aliases. Never affects the exit code.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "alias", "pinned", "live"],
+        "properties": {
+          "kind": { "enum": ["family", "sibling"] },
+          "alias": { "type": "string" },
+          "pinned": { "type": "string" },
+          "live": { "type": "string" }
+        }
+      }
+    }
   }
 }

@@ -163,6 +163,7 @@ src/
 │   ├── list-limit.js  # The `--limit` core behind `amicus list` (v4.7 PR3 rider).
 │   ├── list-search.js  # The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5).
 │   ├── models-ceiling-line.js  # The one `Ceilings:` line `amicus models --refresh` prints (#218 P3).
+│   ├── models-fallback-drift.js  # Shipped-pin drift findings for `amicus models --check` text, `--json`, and doctor.
 │   ├── models-probe.js
 │   ├── models-render.js  # Presentation helpers for `amicus models` -- pure string formatting, no I/O.
 │   ├── models.js  # `amicus models` (F5) — list/search the catalog, refresh it, audit aliases.
@@ -679,6 +680,7 @@ evals/
 | `sidecar/list-limit.js` | The `--limit` core behind `amicus list` (v4.7 PR3 rider). | `normalizeLimit()`, `truncationNotice()` |
 | `sidecar/list-search.js` | The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5). | `searchSessions()` |
 | `sidecar/models-ceiling-line.js` | The one `Ceilings:` line `amicus models --refresh` prints (#218 P3). | `fmtCeilingLine()` |
+| `sidecar/models-fallback-drift.js` | Shipped-pin drift findings for `amicus models --check` text, `--json`, and doctor. | `findFallbackDrift()`, `buildFallbackDriftReport()` |
 | `sidecar/models-probe.js` |  | `probeStoredAliases()`, `selectStoredAliases()`, `PROBE_WINDOW_MS`, `PROBE_PROMPT` |
 | `sidecar/models-render.js` | Presentation helpers for `amicus models` -- pure string formatting, no I/O. | `perMtok()`, `fmtRow()`, `fmtGatewayFinding()`, `PROBE_LABELS`, `fmtProbeCost()` |
 | `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |

@@ -81,7 +81,13 @@ describe('runCheck drift wiring', () => {
     jest.restoreAllMocks();
   });
 
-  test('console path prints the drift header; --json path does not', async () => {
+  // The --json doc once dropped these findings entirely: `drifted: 0` while the
+  // text path printed a "Pinned fallback drift" block. Both paths now read
+  // findFallbackDrift; the parity assertion below reddens if either forks.
+  // Named mutant "JSONDRIFT": pass `fallbackDrift: []` to buildAuditDoc in
+  // runCheck. Measured red 2026-11-10 under the full `npm test`: exactly this
+  // test (1 of 11474). Restored after measurement.
+  test('console path prints the drift header; --json carries the same findings as data', async () => {
     const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
     // Re-require after mocks are in place so the mocked modules are used.
@@ -91,6 +97,7 @@ describe('runCheck drift wiring', () => {
     await handleModels({ _: ['models'], check: true });
     const consoleOutput = writeSpy.mock.calls.map(c => c[0]).join('');
     expect(consoleOutput).toContain('Pinned fallback drift:');
+    const textLines = consoleOutput.split('\n').filter(l => /^ {2}(pinned fallback drift|newer sibling): /.test(l));
 
     writeSpy.mockClear();
 
@@ -98,13 +105,55 @@ describe('runCheck drift wiring', () => {
     await handleModels({ _: ['models'], check: true, json: true });
     const jsonOutput = writeSpy.mock.calls.map(c => c[0]).join('');
     expect(jsonOutput).not.toContain('Pinned fallback drift:');
+    const doc = JSON.parse(jsonOutput);
+    expect(doc.fallbackDriftCount).toBe(doc.fallbackDrift.length);
+    expect(doc.fallbackDrift.length).toBe(textLines.length);
+    expect(doc.fallbackDrift).toContainEqual(expect.objectContaining({
+      kind: 'family', alias: 'gemini', live: 'openrouter/google/gemini-9.9-flash',
+    }));
+    // exit code untouched by fallback drift (no stale aliases in this fixture)
+    expect(await handleModels({ _: ['models'], check: true, json: true })).toBe(0);
 
     writeSpy.mockRestore();
   });
 });
 
+// PR #297 council (qwen): the parity test above has no providerFailures, which is
+// where the two paths historically forked. With the openrouter namespace REJECTED
+// (#238 §5), both must be silent: no text block AND an empty fallbackDrift.
+describe('runCheck drift wiring — rejected openrouter namespace', () => {
+  afterEach(() => { jest.resetModules(); jest.restoreAllMocks(); });
+
+  test('text prints no drift block and --json carries fallbackDrift: [] for the same catalog', async () => {
+    jest.resetModules();
+    jest.doMock('../src/utils/model-catalog', () => ({
+      getCatalogInfo: async () => ({
+        models: [{ id: 'openrouter/google/gemini-9.9-flash' }],
+        providerFailures: [{ provider: 'openrouter', reason: 'http-status', status: 403 }],
+        fetchedAt: Date.now(),
+      }),
+      refreshCatalog: async () => [],
+      catalogPath: () => '/mock/path/model-catalog.json',
+    }));
+    jest.doMock('../src/utils/alias-audit', () => ({
+      collectAliasSources: () => [], findStaleAliases: () => [],
+      findDriftedStoredAliases: () => [], suggestReplacements: () => [],
+    }));
+    const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const { handleModels } = require('../src/sidecar/models');
+    await handleModels({ _: ['models'], check: true });
+    expect(writeSpy.mock.calls.map(c => c[0]).join('')).not.toContain('Pinned fallback drift:');
+    writeSpy.mockClear();
+    await handleModels({ _: ['models'], check: true, json: true });
+    const doc = JSON.parse(writeSpy.mock.calls.map(c => c[0]).join(''));
+    expect(doc.fallbackDrift).toEqual([]);
+    expect(doc.fallbackDriftCount).toBe(0);
+    expect(doc.providerFailuresCount).toBe(1); // premise: the rejection reached the doc
+  });
+});
+
 // Named mutant "SIBLINGGATE": replace `const gated = gatedCatalogIds(info);`
-// in buildFallbackDriftReport with `const gated = catalog.map(m => m && m.id)
+// in findFallbackDrift (src/sidecar/models-fallback-drift.js) with `const gated = catalog.map(m => m && m.id)
 // .filter(Boolean);` (feeds the sibling scan every catalog id instead of the
 // §5-gated set). Measured red 2026-09-14: reddens exactly one test — 'a
 // sibling on a non-authoritative row, or in a rejected namespace, is never

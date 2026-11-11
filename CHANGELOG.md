@@ -30,12 +30,6 @@ All notable changes to Amicus are documented here. Format follows
   (`gpt-pro`, `opus`, `gemini-pro`) is unchanged, but note that its "priciest per vendor"
   premise no longer holds: `codex` now out-prices `gpt-pro`, and `fable` out-prices `opus`.
 
-### CI
-
-- **The CI council's `gpt` seat moves from `gpt-5.6-terra` to `gpt-6.1-terra`**
-  (`.github/amicus-ci-aliases.json`, #295). Its catalog output ceiling is still 128000, so the
-  64000 `outputBudget` lands unclamped. That is a catalog read, not a fresh measurement.
-
 ### Fixed
 
 - **Pinning an Anthropic alias to its shipped OpenRouter form no longer reads as "a different
@@ -50,6 +44,35 @@ All notable changes to Amicus are documented here. Format follows
   all five sites use it. It matches a pair only by its exact ids and never rewrites dots to
   dashes, so neither an uncurated id nor a bare dotted id (served by no gateway) is matched by
   guesswork.
+- **`amicus models --check --json` now reports shipped-pin drift.** The text path prints a
+  "Pinned fallback drift" block when a curated pin is behind the live catalog, but the JSON
+  audit document never carried those findings: a script reading `driftedCount: 0` saw a clean
+  audit while the terminal warned. (`drifted` covers STORED user aliases, a different finding.)
+  The document gains two additive fields, `fallbackDrift` (one row per finding: `kind`
+  `family` or `sibling`, `alias`, `pinned`, `live`) and `fallbackDriftCount`, declared in
+  `schemas/alias-audit.schema.json`. Both paths now read one function
+  (`src/sidecar/models-fallback-drift.js`), so they cannot fork again. As in the text path,
+  this drift never changes the exit code.
+
+### CI
+
+- **The CI council's `gpt` seat moves from `gpt-5.6-terra` to `gpt-6.1-terra`**
+  (`.github/amicus-ci-aliases.json`, #295). Its catalog output ceiling is still 128000, so the
+  64000 `outputBudget` lands unclamped. That is a catalog read, not a fresh measurement.
+- **A council round on a release PR is told it is a release cut.** A release diff can never
+  contain work that merged to `main` before the branch was cut, so every round on one objected
+  that the headline feature had no runtime code (PR #296 round 3). When the PR head is this
+  repo's own `release/*` branch (a fork's is ignored), `council-review.yml`'s briefing now
+  opens with a "Release cut" section ahead of the diff. It lists the subjects of the base's
+  commits between the last published release and the cut (the release head's merge base, so
+  later work on `main` is excluded; paginated; the newest 80 shown), fenced as data rather than
+  briefing prose. The absence of runtime code is excused only for a CHANGELOG entry that matches
+  a listed commit; any other entry is still a finding. An API failure there is a notice, and the
+  framing still ships.
+- **The briefing step's env-context fetch now reads the base branch it names.** It used
+  `?ref=${BASE_REF}`, but `BASE_REF` was scoped to the alias-map step, so the fetch read
+  `?ref=`: the default branch. That was harmless only because every PR targets `main`. The
+  step now declares its own `BASE_REF`.
 
 ## [4.15.0] - 2026-11-10
 
