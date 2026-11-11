@@ -26,7 +26,7 @@ Eval System: Agentic Evals           ~3 scenarios, ~5 min each
 
 ```bash
 npm test                                    # Unit tests only (*.integration.test.js excluded by jest.config.js)
-npm test tests/context.test.js              # Single file (preferred during dev)
+npm test tests/session.test.js              # Single file (preferred during dev)
 npm test -- --coverage                      # Coverage report
 npm test -- -t "should extract"             # Run tests matching pattern
 
@@ -57,11 +57,9 @@ Unit tests mock all external dependencies (OpenCode SDK, filesystem, network) an
 | Area | Example Files | Focus |
 |------|--------------|-------|
 | CLI parsing | `cli.test.js` | Command validation, flag handling, error messages |
-| Context filtering | `context.test.js` | Turn extraction, token estimation, JSONL parsing |
-| Session management | `session-manager.test.js` | CRUD operations, metadata persistence |
+| Session management | `session-manager.test.js` | Session dir paths, path-traversal guard |
 | Prompt construction | `prompt-builder.test.js` | Template assembly, mode-specific prompts |
 | Conflict detection | `conflict.test.js` | mtime comparison, warning formatting |
-| Drift calculation | `drift.test.js` | Staleness scoring, turn counting |
 | Headless mode | `headless.test.js` | Polling logic, fold marker detection, timeout |
 | MCP tools | `mcp-tools.test.js`, `mcp-server.test.js` | Zod schemas, tool handlers |
 | Session operations | `sidecar/*.test.js` | Start, resume, continue, read, context-builder |
@@ -304,7 +302,7 @@ apt-get install -y xvfb libgtk-3-0 libnotify4 libnss3 libxss1 libasound2
 
 The unit suite runs fully green on Windows (verified F2). A few platform-specific details:
 
-**Path encoding (`src/session.js`, `src/environment.js`):** `encodeProjectPath` / `encodePath` replace `/`, `\`, `:`, and `_` with dashes. On Windows, `C:\Users\x` encodes to `C--Users-x` — the drive-colon and both backslashes each become a dash. This matches Claude Code's directory naming behavior.
+**Path encoding (`src/session.js`):** `encodeProjectPath` replaces `/`, `\`, `:`, and `_` with dashes. On Windows, `C:\Users\x` encodes to `C--Users-x` — the drive-colon and both backslashes each become a dash. This matches Claude Code's directory naming behavior.
 
 **OpenCode binary on PATH (`src/utils/path-setup.js`):** Node's `spawn()` without `shell: true` cannot run `.cmd` shims. `ensureNodeModulesBinInPath()` adds `opencode-windows-x64/bin` and `opencode-windows-x64-baseline/bin` to `PATH` before spawning, so `opencode.exe` resolves directly. The baseline variant supports pre-AVX2 CPUs; normal-before-baseline order in `PATH` is intentional.
 
@@ -487,14 +485,11 @@ Complete mapping of test files to their targets and focus areas.
 | Test File | Target Module | Focus |
 |-----------|--------------|-------|
 | `cli.test.js` | Argument parsing | Command validation, flag handling |
-| `context.test.js` | Context filtering | Turn extraction, token estimation |
 | `session.test.js` | Session resolution | Primary/fallback paths |
-| `session-manager.test.js` | Persistence layer | CRUD operations, metadata |
+| `session-manager.test.js` | Session dir paths | Path layout, path-traversal guard |
 | `conflict.test.js` | File conflicts | mtime comparison, warning format |
-| `drift.test.js` | Drift calculation | Age, turn count, significance |
 | `headless.test.js` | OpenCode HTTP API | Spawn, polling, timeout |
 | `prompt-builder.test.js` | System prompts | Template construction |
-| `index.test.js` | Main API | Re-export smoke tests, generateTaskId |
 | `e2e.test.js` | End-to-end | Full workflow |
 | `sidecar/start.test.js` | Session starting | Task ID generation, metadata creation, MCP config |
 | `sidecar/resume.test.js` | Session resumption | Drift detection, metadata loading |

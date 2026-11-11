@@ -30,9 +30,8 @@
     "amicus": "./bin/amicus.js",
     "am": "./bin/amicus.js"
   },
-  "main": "src/index.js",
   "exports": {
-    "./opencode-client": "./src/opencode-client.mjs"
+    "./package.json": "./package.json"
   },
   "files": [
     "bin/",
@@ -79,7 +78,6 @@
     "@electron/get": "^5.0.0",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "@opencode-ai/sdk": "1.18.15",
-    "dotenv": "^17.2.3",
     "opencode-ai": "1.18.15",
     "update-notifier": "^7.3.1",
     "yauzl": "^2.10.0",

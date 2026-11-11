@@ -128,71 +128,6 @@ function outputSummary(summary) {
 }
 
 /**
- * Execute sidecar in either headless or interactive mode
- * Consolidates the if/else pattern duplicated across start, resume, continue
- */
-async function executeMode(options) {
-  const {
-    headless,
-    runHeadless,
-    runInteractive,
-    model,
-    systemPrompt,
-    userMessage,
-    taskId,
-    project,
-    timeout,
-    agent,
-    extraOptions = {},
-    defaultSummary = '## Sidecar Results: No Output\n\nSession completed without summary.',
-    operationType = 'task'
-  } = options;
-
-  let result;
-
-  if (headless) {
-    result = await runHeadless(
-      model,
-      systemPrompt,
-      userMessage,
-      taskId,
-      project,
-      timeout * 60 * 1000,
-      agent,
-      extraOptions
-    );
-
-    result.summary = result.summary || defaultSummary;
-
-    if (result.timedOut) {
-      logger.warn(`${operationType} timed out`, { taskId });
-    }
-    if (result.error) {
-      logger.error(`${operationType} error`, { taskId, error: result.error });
-    }
-  } else {
-    logger.info(`Launching interactive ${operationType}`, { taskId, model, agent });
-
-    result = await runInteractive(
-      model,
-      systemPrompt,
-      userMessage,
-      taskId,
-      project,
-      { agent, ...extraOptions }
-    );
-
-    result.summary = result.summary || '';
-
-    if (result.error) {
-      logger.error(`Interactive ${operationType} error`, { taskId, error: result.error });
-    }
-  }
-
-  return result;
-}
-
-/**
  * Start OpenCode server, wait for health, return client+server.
  * Shared by headless and interactive modes.
  *
@@ -269,7 +204,6 @@ module.exports = {
   finalizeSession,
   outputSummary,
   createHeartbeat,
-  executeMode,
   startOpenCodeServer,
   isProcessAlive,
   checkSessionLiveness
