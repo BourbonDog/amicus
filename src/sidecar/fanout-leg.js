@@ -165,9 +165,11 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
   // report itself inexact). The proxy survives only as the fallback for a leg
   // where the walk could not run at all.
   const walked = result && result.subtree;
-  const subtreeUnknown = walked
+  // A leg completed at the tool-settle ceiling still had live tool calls, so its
+  // cost is a floor (headless.js B4) and must not count toward costExact.
+  const subtreeUnknown = (walked
     ? !!walked.unknown
-    : !!(result && result.subagentToolCalls > 0);
+    : !!(result && result.subagentToolCalls > 0)) || !!(result && result.toolSettleTimedOut);
   const usage = result && result.usage
     ? resolveUsage({ model: leg.model, usageTotals: result.usage, subtreeUnknown, subtree: walked || undefined })
     : null;

@@ -51,4 +51,12 @@ describe('listEngineToolIds', () => {
     expect(await listEngineToolIds({ serverClient: { tool: { ids: async () => { throw new Error('404'); } } } }, '/p')).toBeNull();
     expect(await listEngineToolIds({ serverClient: { tool: { ids: async () => ({ data: 'nope' }) } } }, '/p')).toBeNull();
   });
+  test('returns null when the engine never answers (bounded, not a hang)', async () => {
+    jest.useFakeTimers();
+    try {
+      const p = listEngineToolIds({ serverClient: { tool: { ids: () => new Promise(() => {}) } } }, '/p');
+      await jest.advanceTimersByTimeAsync(5001);
+      expect(await p).toBeNull();
+    } finally { jest.useRealTimers(); }
+  });
 });

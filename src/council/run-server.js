@@ -288,7 +288,7 @@ async function listEngineToolIds(shared, directory) {
   const client = shared && shared.serverClient;
   if (!client || !client.tool || typeof client.tool.ids !== 'function') { return null; }
   try {
-    const res = await client.tool.ids({ query: { directory } });
+    const res = await require('../headless').withTimeout(client.tool.ids({ query: { directory } }), 5000, 'tool.ids');
     return (res && Array.isArray(res.data)) ? res.data.slice() : null;
   } catch (err) {
     const { logger } = require('../utils/logger');
