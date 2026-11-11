@@ -512,7 +512,6 @@ Complete mapping of test files to their targets and focus areas.
 | `opencode-client-cowork.test.js` | OpenCode client config | Client-aware prompt, systemPrompt, port handling, provider model sync |
 | `config.test.js` | Config core | Config I/O, aliases, getEffectiveAliases, tryResolveModel, buildProviderModels |
 | `config-fallback.test.js` | Config fallback | Direct API fallback with persisted keys |
-| `config-hash.test.js` | Config hashing | Config hashing, alias table, change detection |
 | `config-null-alias.test.js` | Config null alias | Null alias protection and auto-repair |
 | `config-resolve.test.js` | Config resolution | Model resolution, default aliases, direct API fallback, detectFallback |
 | `model-validator.test.js` | Model validator | Validation, filtering, interactive prompting, headless errors |

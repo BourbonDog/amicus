@@ -40,7 +40,7 @@ function realDeps() {
 function runStep(steps, key, fn) {
   try {
     steps[key] = fn() || 'done';
-    return true;
+    return steps[key] !== 'unreadable'; // config file unparseable — left untouched, not registered
   } catch (e) {
     steps[key] = `failed: ${e.message}`;
     return false;

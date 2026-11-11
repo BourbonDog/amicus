@@ -773,18 +773,6 @@ The summary includes:
 - Don't repeat failed approaches
 - Review files with conflict warnings carefully
 
-### Handling Config Update Notices
-
-When amicus emits `[AMICUS_CONFIG_UPDATE]` on stderr, the user's model aliases have changed (via `amicus setup`). The message contains a hash comment and a markdown alias table.
-
-**Action required:**
-1. Find the "Model Aliases" section in the project's CLAUDE.md
-2. Replace that section's content with the block provided in the message
-3. If no "Model Aliases" section exists, add one after the title line
-4. Do **not** remove the `<!-- amicus-config-hash: ... -->` comment — it tracks config changes and prevents duplicate notifications
-
-The update is purely informational (alias mappings) and safe to apply without user confirmation.
-
 ---
 
 ## Checking for Existing Sidecars

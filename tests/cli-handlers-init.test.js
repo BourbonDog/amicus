@@ -33,6 +33,22 @@ describe('handleInit', () => {
     expect(out[0].ok).toBe(true);
   });
 
+  test('an unreadable target config is reported and fails init', async () => {
+    jest.resetModules();
+    jest.doMock('../src/utils/claude-register', () => ({
+      installSkill: () => {}, installCouncilSkill: () => {},
+      registerClaudeCode: () => 'added', registerClaudeDesktop: () => 'unreadable',
+      migrateLegacyMcp: () => {}, MCP_CONFIG: {},
+    }));
+    jest.doMock('../src/cli-handlers-doctor', () => ({ runDoctorChecks: async () => [] }));
+    jest.doMock('../src/utils/doctor-summary', () => ({ summarizeDoctor: () => '' }));
+    const out = [];
+    const { handleInit } = require('../src/cli-handlers-init');
+    const code = await handleInit({ _: ['init'], json: true }, { emitJson: (o) => out.push(o), print: () => {} });
+    expect(out[0].steps.claudeDesktop).toBe('unreadable');
+    expect(code).toBe(1);
+  });
+
   test('--claude narrows to Claude Code only (desktop not called)', async () => {
     jest.resetModules();
     const calls = [];

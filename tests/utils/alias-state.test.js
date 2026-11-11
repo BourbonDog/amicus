@@ -112,15 +112,4 @@ describe('saveConfig normalizes (#238 D6) — hermetic config dir', () => {
     expect(cfgMod.resolveModel('gemini')).toBe(shipped.gemini);
     err.mockRestore();
   });
-  test('buildAliasTable lists following aliases', () => {
-    jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    cfgMod.saveConfig({ default: 'gemini', aliases: { custom: 'openrouter/a/b-1' } });
-    const table = cfgMod.buildAliasTable();
-    expect(table).toContain('| gemini (default) | ');
-    expect(table).toContain('| custom | openrouter/a/b-1 |');
-    process.stderr.write.mockRestore();
-  });
-  test('buildAliasTable is empty with no config file', () => {
-    expect(cfgMod.buildAliasTable()).toBe('');
-  });
 });
