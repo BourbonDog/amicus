@@ -48,7 +48,6 @@ npm test                           # Unit tests (excludes *.integration.test.js)
 npm run test:integration           # Integration tier, KEYLESS: credentials scrubbed, paid suites skip (free, ~10s plus the ~15s engine-flag canary)
 npm run test:integration:live      # Integration tier with real keys -- SPENDS MONEY (release ritual only)
 npm run test:all                   # Unit + integration with real keys -- SPENDS MONEY (not a gate anywhere)
-npm test tests/session.test.js     # Single file (preferred during dev)
 npm test -- --coverage             # Coverage report
 ```
 
