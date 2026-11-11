@@ -17,6 +17,19 @@ All notable changes to Amicus are documented here. Format follows
   (`src/sidecar/models-fallback-drift.js`), so they cannot fork again. As in the text path,
   this drift never changes the exit code.
 
+### CI
+
+- **A council round on a release PR is told it is a release cut.** A release diff can never
+  contain work that merged to `main` before the branch was cut, so every round on one objected
+  that the headline feature had no runtime code (PR #296 round 3). When the PR head is
+  `release/*`, `council-review.yml`'s briefing now opens with a "Release cut" section ahead of
+  the diff. It says that the absence is expected and lists the subjects of the base's commits
+  since the last published release. An API failure there is a notice, and the framing still ships.
+- **The briefing step's env-context fetch now reads the base branch it names.** It used
+  `?ref=${BASE_REF}`, but `BASE_REF` was scoped to the alias-map step, so the fetch read
+  `?ref=`: the default branch. That was harmless only because every PR targets `main`. The
+  step now declares its own `BASE_REF`.
+
 ## [4.15.0] - 2026-11-10
 
 ### Security

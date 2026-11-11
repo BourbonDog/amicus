@@ -702,6 +702,38 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain('ref=${HEAD_SHA}');
     });
 
+    // The provision step's BASE_REF is STEP-scoped, so the briefing step's
+    // `?ref=${BASE_REF}` above read `?ref=` and fell back to the default branch.
+    test('the briefing step declares its own BASE_REF', () => {
+      const step = stepFor('Build council briefing', 'Run the adjudicated council');
+      const envBlock = step.slice(step.indexOf('env:'), step.indexOf('run: |'));
+      expect(envBlock).toContain('BASE_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}');
+    });
+
+    // PR #296 round 3 (deepseek D2): a release PR's diff can never contain work
+    // that merged to the base before the cut, so every round objected that the
+    // headline feature had no runtime code. The briefing now names the cut.
+    test('a release/* head gets release-cut framing naming what already landed, ahead of the diff', () => {
+      const step = stepFor('Build council briefing', 'Run the adjudicated council');
+      const envBlock = step.slice(step.indexOf('env:'), step.indexOf('run: |'));
+      expect(envBlock).toContain('HEAD_REF: ${{ github.event.pull_request.head.ref }}');
+      // PR-controlled: referenced through env, never interpolated into the script.
+      expect(step.slice(step.indexOf('run: |'))).not.toContain('${{ github.event.pull_request.head.ref }}');
+      expect(step).toContain('case "$HEAD_REF" in');
+      expect(step).toContain('release/*)');
+      expect(step).toContain('repos/${GH_REPO}/releases/latest');
+      expect(step).toContain('repos/${GH_REPO}/compare/${LAST_TAG}...${BASE_REF}');
+      expect(step).toContain('Release cut (context, NOT part of the diff)');
+      // An API failure is a notice and the framing still ships, never a dead step.
+      expect(step).toContain('could not be listed');
+      expect(step).toContain("--jq '.tag_name' 2>/dev/null || true");
+      // Framing comes BEFORE the diff, inside the briefing.
+      const cat = step.indexOf('cat release-context.md');
+      expect(cat).toBeGreaterThan(-1);
+      expect(cat).toBeLessThan(step.indexOf('echo "## Diff"'));
+      expect(step.indexOf(': > release-context.md')).toBeLessThan(cat);
+    });
+
     test('every pin in the map is a fully-qualified, non-floating model id', () => {
       const map = JSON.parse(fs.readFileSync(
         path.join(__dirname, '..', '..', '.github', 'amicus-ci-aliases.json'), 'utf-8'));
