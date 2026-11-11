@@ -90,21 +90,6 @@ function isHeadlessSafe(agent) {
 }
 
 /**
- * Check if an agent name is valid for primary sessions
- *
- * @param {string} agent - Agent name to validate
- * @returns {boolean} True if valid primary agent or custom agent
- */
-function isValidPrimaryAgent(agent) {
-  if (!isValidAgent(agent)) {
-    return false;
-  }
-
-  // All non-empty strings are valid (custom agents allowed)
-  return true;
-}
-
-/**
  * Check if an agent name is valid (non-empty string)
  *
  * All non-empty agent names are considered valid because:
@@ -133,6 +118,5 @@ module.exports = {
   HEADLESS_SAFE_AGENTS,
   mapAgentToOpenCode,
   isValidAgent,
-  isHeadlessSafe,
-  isValidPrimaryAgent
+  isHeadlessSafe
 };

@@ -6,6 +6,7 @@ const { parseChairTerminal, CHAIR_VERDICTS, CHAIR_ANSWERS } = require('./parse-s
 // v4.9 PR #200 fix round 3: the seat-loss pair lives in its own leaf module (the
 // 300-line gate), re-exported below so every existing caller and pin is unchanged.
 const { summarizeSeatLoss, deriveSeatLoss } = require('./verdict-seat-loss');
+const { writeFileAtomic } = require('../utils/atomic-write');
 
 // v4.0 §7: council family v2 — verdict docs carry {schemaVersion, type} and a
 // nullable overallVerdict (the chair's terminal line — `VERDICT:` on a review
@@ -279,11 +280,9 @@ function readPriorVerdictIntent(runDir, runId) {
   return null;
 }
 
-/** Atomic write: tmp + rename (matches the repo's wave.json convention). */
+/** Atomic write: unique tmp + rename, tmp removed on failure. */
 function writeVerdictAtomic(filePath, verdict) {
-  const tmp = `${filePath}.tmp-${process.pid}`;
-  fs.writeFileSync(tmp, JSON.stringify(verdict, null, 2));
-  fs.renameSync(tmp, filePath);
+  writeFileAtomic(filePath, JSON.stringify(verdict, null, 2));
 }
 
 module.exports = {

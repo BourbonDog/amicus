@@ -129,17 +129,6 @@ function toolPartStatus(part) {
 }
 
 /**
- * Is this tool call POSITIVELY observed as still executing? See
- * LIVE_TOOL_STATUSES for why this is not simply `!isToolPartSettled`.
- * @param {object} part
- * @returns {boolean}
- */
-function isToolPartLive(part) {
-  const status = toolPartStatus(part);
-  return status !== undefined && LIVE_TOOL_STATUSES.has(status);
-}
-
-/**
  * Is this a SUBAGENT (child-session) tool call? OpenCode names it `task`
  * (lowercase — the pre-existing `t.name === 'Task'` comparison in headless.js
  * could never match, a second bug on top of the missing `part.tool` read).
@@ -191,6 +180,6 @@ function getLiveToolCalls(state) {
 
 module.exports = {
   TERMINAL_TOOL_STATUSES, LIVE_TOOL_STATUSES, isToolPart, toolPartName, toolPartInput,
-  toolPartStatus, isToolPartSettled, isToolPartLive, isSubagentToolCall,
+  toolPartStatus, isToolPartSettled, isSubagentToolCall,
   getPendingToolCalls, getLiveToolCalls,
 };

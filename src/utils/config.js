@@ -2,12 +2,11 @@
  * Amicus Config Module
  *
  * Config directory resolution, file I/O, model alias resolution,
- * config hashing, and alias table formatting.
+ * and cost-tier / routing preferences.
  */
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { autoRepairAlias } = require('./alias-resolver');
 const { isDirectProvider } = require('./provider-registry');
 const { writeFileAtomic } = require('./atomic-write');
@@ -54,6 +53,31 @@ function loadConfig() {
   } catch (_err) {
     return null;
   }
+}
+
+/**
+ * loadConfig() returns null for an unparseable file and callers do
+ * `loadConfig() || {}` then saveConfig — so before overwriting, copy a
+ * non-empty file that fails JSON.parse to config.json.corrupt-<ms>-<pid>-<hex>. Throws
+ * (refusing the write) if the file exists but cannot be read or copied.
+ * Same idea as model-validator.js's malformed-config refusal, in one place.
+ */
+function preserveUnparseableConfig(filePath) {
+  let content;
+  try {
+    content = fs.readFileSync(filePath, 'utf-8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') { return; }
+    throw new Error(`Refusing to overwrite ${filePath}: it could not be read (${err.message})`);
+  }
+  if (!content.trim()) { return; }
+  try { JSON.parse(content); return; } catch { /* unparseable — keep a copy below */ }
+  // pid + random suffix: two saves in the same ms must not collide under COPYFILE_EXCL.
+  const backup = `${filePath}.corrupt-${Date.now()}-${process.pid}-${require('crypto').randomBytes(3).toString('hex')}`;
+  fs.copyFileSync(filePath, backup, fs.constants.COPYFILE_EXCL);
+  try {
+    process.stderr.write(`Warning: ${filePath} was not valid JSON; saved the original to ${backup} before writing a new config.\n`);
+  } catch { /* a dead stderr must not block the save; the copy is already on disk */ }
 }
 
 /** Save config data to disk, creating the directory if needed. Strips invalid aliases. */
@@ -116,6 +140,7 @@ function saveConfig(configData) {
   // the directory is fsync'd, so an OS-level power failure can still lose or
   // truncate the write (#261 r1 D4).
   const payload = normalized ? { ...configData, aliases: normalized } : configData;
+  preserveUnparseableConfig(writePath);
   writeFileAtomic(writePath, JSON.stringify(payload, null, 2), { mode: 0o600 });
   // The rename landed — only now is any of this true, in memory or out loud.
   if (normalized) { configData.aliases = normalized; }
@@ -207,63 +232,6 @@ function resolveModel(modelArg) {
   throw new Error(
     `Default alias '${defaultValue}' not found in aliases. Run 'amicus setup' to fix configuration.`
   );
-}
-
-/** @returns {string|null} 8-char hex hash of config file, or null if missing */
-function computeConfigHash() {
-  const configPath = getConfigPath();
-  try {
-    if (!fs.existsSync(configPath)) {
-      return null;
-    }
-    const content = fs.readFileSync(configPath, 'utf-8');
-    return crypto.createHash('sha256').update(content).digest('hex').slice(0, 8);
-  } catch (_err) {
-    return null;
-  }
-}
-
-/** @returns {string} Markdown alias table with (default) marker, or empty string */
-function buildAliasTable() {
-  const config = loadConfig();
-  if (!config) { return ''; }
-  // #238 D6: EFFECTIVE aliases — a following alias is absent from config.aliases
-  // but is still an alias the project's CLAUDE.md block must list.
-  const aliases = getEffectiveAliases();
-  if (Object.keys(aliases).length === 0) { return ''; }
-
-  const defaultAlias = config.default || null;
-  const lines = [];
-
-  lines.push('| Alias | Model |');
-  lines.push('|-------|-------|');
-
-  for (const [alias, model] of Object.entries(aliases)) {
-    const marker = (alias === defaultAlias) ? ' (default)' : '';
-    lines.push(`| ${alias}${marker} | ${model} |`);
-  }
-
-  return lines.join('\n');
-}
-
-/** Check whether the config file has changed compared to a known hash */
-function checkConfigChanged(currentHash) {
-  const newHash = computeConfigHash();
-
-  if (currentHash === newHash) {
-    return { changed: false, newHash };
-  }
-
-  // Config has changed (or was created/removed)
-  const aliasTable = buildAliasTable();
-  const hashComment = newHash ? `<!-- amicus-config-hash: ${newHash} -->` : '';
-  const updateData = [hashComment, aliasTable].filter(Boolean).join('\n');
-
-  return {
-    changed: true,
-    newHash,
-    updateData: updateData || undefined,
-  };
 }
 
 /**
@@ -784,21 +752,6 @@ function getCostTier() {
   return COST_TIERS.includes(tier) ? tier : 'balanced';
 }
 
-/**
- * Persist the global cost-tier preference under routing.tier, preserving any
- * other routing keys (prefer, migration_notified).
- * @param {string} tier one of COST_TIERS
- * @throws {Error} when tier is not a recognized cost tier
- */
-function setCostTier(tier) {
-  if (!COST_TIERS.includes(tier)) {
-    throw new Error(`Invalid cost tier '${tier}'. Must be one of: ${COST_TIERS.join(', ')}`);
-  }
-  const config = loadConfig() || {};
-  config.routing = { ...(config.routing || {}), tier };
-  saveConfig(config);
-}
-
 module.exports = {
   getConfigDir,
   getConfigPath,
@@ -806,9 +759,6 @@ module.exports = {
   saveConfig,
   getDefaultAliases,
   resolveModel,
-  computeConfigHash,
-  buildAliasTable,
-  checkConfigChanged,
   getEffectiveAliases,
   formatAliasNames,
   tryResolveModel,
@@ -824,7 +774,6 @@ module.exports = {
   markMigrationNotified,
   COST_TIERS,
   getCostTier,
-  setCostTier,
   hasTierOnboarded,
   markTierOnboarded,
   getWorkspaceAutoOpen,

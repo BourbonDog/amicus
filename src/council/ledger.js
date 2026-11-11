@@ -232,8 +232,22 @@ function appendRun(record, opts = {}) {
   const dir = opts.dir || getConfigDir();
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, LEDGER_FILE);
-  const rows = buildLedgerRows(record);
-  for (const row of rows) { fs.appendFileSync(file, JSON.stringify(row) + '\n'); }
+  // Idempotent per ROW, not per run: a re-tally must not double-weight rows already in the
+  // ledger, but a retry after a torn append must still write the rows that never landed.
+  // buildLedgerRows emits one row per (model, resolvedModel), so that pair names a row in a run.
+  const runId = record && record.meta && record.meta.runId;
+  const keyOf = r => JSON.stringify([r.runId, r.model, r.resolvedModel || '']);
+  let text = '';
+  try { text = fs.readFileSync(file, 'utf-8'); } catch (e) { if (e.code !== 'ENOENT') { throw e; } }
+  // shortcut: reads the whole ledger on every append (one append per run, ledger small), upgrade to an index if it grows large.
+  const have = new Set(typeof runId === 'string' && runId ? text.split('\n').map(l => {
+    try { return keyOf(JSON.parse(l)); } catch { return null; }
+  }) : []);
+  // shortcut: check-then-append is not atomic, so two processes tallying one run at once can both append; add a lock if concurrent tallies of one run become real.
+  const rows = buildLedgerRows(record).filter(r => !have.has(keyOf(r)));
+  // A torn last line has no newline; start on a fresh line so the first new row stays parseable.
+  const lead = text && !text.endsWith('\n') ? '\n' : '';
+  if (rows.length) { fs.appendFileSync(file, lead + rows.map(r => JSON.stringify(r) + '\n').join('')); }
   return rows;
 }
 

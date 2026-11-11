@@ -10,7 +10,7 @@
 
 const { readApiKeys } = require('./api-key-store');
 const { readAuthJsonKeys } = require('./auth-json');
-const { KNOWN_PROVIDERS } = require('./provider-registry');
+const { KNOWN_PROVIDERS, splitVendorId } = require('./provider-registry');
 const { buildSuggestions, applySuggestions } = require('./route-suggestions');
 
 /**
@@ -127,11 +127,9 @@ function buildGatewayRoutesByModel() {
  * @returns {{vendor:string, bareModel:string}|null}
  */
 function splitVendorAndModel(resolvedId) {
-  if (typeof resolvedId !== 'string') { return null; }
-  const rest = resolvedId.startsWith('openrouter/') ? resolvedId.slice('openrouter/'.length) : resolvedId;
-  const idx = rest.indexOf('/');
-  if (idx <= 0 || idx === rest.length - 1) { return null; }
-  return { vendor: rest.slice(0, idx), bareModel: rest.slice(idx + 1) };
+  const { vendor, rest } = splitVendorId(resolvedId);
+  const bareModel = rest.slice(vendor.length + 1);
+  return vendor && bareModel ? { vendor, bareModel } : null;
 }
 
 /**

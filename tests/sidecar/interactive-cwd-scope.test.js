@@ -61,9 +61,11 @@ jest.mock('../../src/utils/activity-poller', () => ({
 
 // --- electron spawn: capture the env handed to the child, then "exit" cleanly ---
 let mockSpawnEnv = null;
+let mockSpawnArgs = null;
 jest.mock('child_process', () => ({
-  spawn: jest.fn((_bin, _args, opts) => {
+  spawn: jest.fn((_bin, args, opts) => {
     mockSpawnEnv = opts.env;
+    mockSpawnArgs = args;
     const handlers = {};
     const proc = {
       stdout: { on: (ev, cb) => { handlers[`stdout:${ev}`] = cb; } },
@@ -118,5 +120,19 @@ describe('runInteractive scopes session + route to --cwd (#45)', () => {
   it('threads the session directory to Electron so the route matches the create scope', async () => {
     await runInteractive('m', 'sys', 'hi', 'task-1', PROJECT, {});
     expect(mockSpawnEnv.AMICUS_SESSION_DIRECTORY).toBe(EXPECTED_DIR);
+  });
+
+  it('opens a DevTools port only when AMICUS_DEBUG_PORT is set (audit #6)', async () => {
+    const prev = process.env.AMICUS_DEBUG_PORT;
+    try {
+      delete process.env.AMICUS_DEBUG_PORT;
+      await runInteractive('m', 'sys', 'hi', 'task-1', PROJECT, {});
+      expect(mockSpawnArgs.some(a => a.startsWith('--remote-debugging-port'))).toBe(false);
+      process.env.AMICUS_DEBUG_PORT = '9333';
+      await runInteractive('m', 'sys', 'hi', 'task-1', PROJECT, {});
+      expect(mockSpawnArgs[0]).toBe('--remote-debugging-port=9333');
+    } finally {
+      if (prev === undefined) { delete process.env.AMICUS_DEBUG_PORT; } else { process.env.AMICUS_DEBUG_PORT = prev; }
+    }
   });
 });

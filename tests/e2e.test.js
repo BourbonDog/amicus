@@ -464,46 +464,4 @@ describe('End-to-End Sidecar Flow', () => {
       fs.rmSync(webSessionDir, { recursive: true, force: true });
     });
   });
-
-  describe('V3 Module Exports', () => {
-    it('should export environment detection functions', () => {
-      const index = require('../src/index');
-      expect(typeof index.detectEnvironment).toBe('function');
-      expect(typeof index.inferClient).toBe('function');
-      expect(typeof index.getSessionRoot).toBe('function');
-    });
-
-    it('should export context compression functions', () => {
-      const index = require('../src/index');
-      expect(typeof index.compressContext).toBe('function');
-      expect(typeof index.estimateTokenCount).toBe('function');
-      expect(typeof index.buildPreamble).toBe('function');
-    });
-
-    it('should export FOLD_MARKER as [SIDECAR_FOLD]', () => {
-      const index = require('../src/index');
-      expect(index.FOLD_MARKER).toBe('[SIDECAR_FOLD]');
-      expect(index.COMPLETE_MARKER).toBe('[SIDECAR_FOLD]');
-    });
-
-    it('should export formatFoldOutput (nonce now required — v4.0 §9)', () => {
-      const index = require('../src/index');
-      expect(typeof index.formatFoldOutput).toBe('function');
-
-      const output = index.formatFoldOutput({
-        model: 'test-model',
-        sessionId: 'test-123',
-        client: 'code-local',
-        cwd: '/test',
-        mode: 'headless',
-        summary: 'Test summary',
-        nonce: 'e2etestnonce1234'
-      });
-      expect(output).toContain('[SIDECAR_FOLD:e2etestnonce1234]');
-      expect(output).toContain('Client: code-local');
-      expect(output).toContain('CWD: /test');
-      expect(() => index.formatFoldOutput({ model: 'm', sessionId: 's', summary: 'x' }))
-        .toThrow(/requires a per-run nonce/);
-    });
-  });
 });

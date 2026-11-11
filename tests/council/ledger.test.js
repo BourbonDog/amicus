@@ -113,7 +113,8 @@ test('peersOnly:null rows are excluded from the average', () => {
   const r2 = { ...record, streetCred: record.streetCred.map(s =>
     s.model === 'gpt' ? { ...s, peersOnly: null } : s) };
   appendRun(record, { dir });   // gpt peersOnly 1.0
-  appendRun(r2, { dir });       // gpt peersOnly null → ignored
+  // a distinct runId: appendRun skips a runId already in the ledger
+  appendRun({ ...r2, meta: { ...r2.meta, runId: 'av-receiver-council-2' } }, { dir }); // gpt peersOnly null → ignored
   const gpt = deriveReliability({ dir }).find(a => a.model === 'gpt');
   expect(gpt.avgStreetCredPeersOnly).toBeCloseTo(1.0);
 });
@@ -1479,4 +1480,27 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     expect(rows[1]).toMatchObject({ model: 'ds', resolvedModel: 'v/ds-turbo', wasChair: true, role: 'chair' });
     expect(rows[2]).toMatchObject({ model: 'gpt', resolvedModel: 'v/gpt', wasChair: false, role: 'seat' });
   });
+});
+
+test('appendRun is idempotent per runId: a re-tally of the same run appends nothing', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-'));
+  const first = appendRun(record, { dir });
+  const file = path.join(dir, 'council-ledger.jsonl');
+  const before = fs.readFileSync(file, 'utf-8');
+  expect(first.length).toBeGreaterThan(0);
+  expect(appendRun(record, { dir })).toEqual([]);
+  expect(fs.readFileSync(file, 'utf-8')).toBe(before);
+});
+
+test('appendRun after a torn first append writes only the rows that never landed', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-'));
+  const file = path.join(dir, 'council-ledger.jsonl');
+  const all = buildLedgerRows(record).map(r => JSON.stringify(r));
+  expect(all.length).toBeGreaterThan(1);
+  // A crash mid-write: the first row landed whole, the second is cut off with no newline.
+  fs.writeFileSync(file, all[0] + '\n' + all[1].slice(0, 20));
+  const added = appendRun(record, { dir });
+  expect(added.map(r => JSON.stringify(r))).toEqual(all.slice(1));
+  const lines = fs.readFileSync(file, 'utf-8').split('\n').filter(Boolean);
+  expect(lines.filter(l => all.includes(l))).toEqual(all);
 });

@@ -23,17 +23,33 @@ const crypto = require('crypto');
  * @param {string|Buffer} data - Content to write.
  * @param {{mode?: number}} [opts] - Write options; `mode` sets file permissions.
  */
+/** Block the thread for `ms` (callers here are all synchronous). */
+// shortcut: blocks the whole event loop (the MCP server's too) for up to ~0.9 s of win32 rename retries, make the write path async if that stall is ever seen.
+function sleepSync(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
+
+const LOCK_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+/** Windows antivirus/indexers briefly hold the target open: retry ~10x within ~1 s there. */
+function renameRetrying(tmp, filePath) {
+  for (let i = 0; ; i++) {
+    try { return fs.renameSync(tmp, filePath); } catch (err) {
+      if (process.platform !== 'win32' || !LOCK_CODES.has(err.code) || i >= 9) { throw err; }
+      sleepSync(20 * (i + 1)); // 20..180 ms, 900 ms total
+    }
+  }
+}
+
 function writeFileAtomic(filePath, data, opts = {}) {
   const dir = path.dirname(filePath);
   const base = path.basename(filePath);
   const tmp = path.join(dir, `.${base}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`);
   try {
     fs.writeFileSync(tmp, data, { mode: opts.mode });
-    fs.renameSync(tmp, filePath); // atomic on a single filesystem
+    renameRetrying(tmp, filePath); // atomic on a single filesystem
   } catch (err) {
     try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort cleanup */ }
     throw err;
   }
 }
 
-module.exports = { writeFileAtomic };
+module.exports = { writeFileAtomic, sleepSync, LOCK_CODES };

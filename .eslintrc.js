@@ -109,34 +109,25 @@ module.exports = {
       // issue 214 allowlist for the `openrouter/` prefix-stripping ban above.
       // Each entry was READ before being listed, not grandfathered wholesale:
       //
-      //  - curated-models.js: OWNS the operation. :129 is stripGatewayPrefix
-      //    itself (the primitive the ban points callers away from); :173 is
-      //    vendorOf. This is the one file that legitimately derives an
+      //  - curated-models.js: OWNS the operation. stripGatewayPrefix is the
+      //    primitive the ban points callers away from; vendorOf parses its
+      //    pinned routes. This is the one file that legitimately derives an
       //    executable id by stripping.
-      //  - fallback-chains.js :36 (vendorOf), model-tiers.js :83
-      //    (buildGatewayOnlyAliasMap), route-launch.js :100
-      //    (normalizeForModelIndex) and :131 (splitVendorAndModel): all four
-      //    strip in order to PARSE -- they return a vendor segment, an index
-      //    key, or a {vendor, bareModel} pair. None emits a model id that is
-      //    ever sent to a provider, which is the failure the ban exists to
-      //    prevent.
+      //  - provider-registry.js (splitVendorId) and route-launch.js
+      //    (normalizeForModelIndex): both strip in order to PARSE -- they
+      //    return a vendor segment or an index key. None emits a model id that
+      //    is ever sent to a provider, which is the failure the ban exists to
+      //    prevent. splitVendorId is the one shared vendor-from-id parse
+      //    (fallback-chains, model-tiers, route-launch, model-canonicalization
+      //    and curated-models call it).
       //
       // A NEW file reaching for this idiom should not be added here without the
       // same check: if it produces an id that gets CALLED, it belongs behind
       // directFormIfSafe/directFormIfProven instead.
       files: [
         'src/utils/curated-models.js',
-        'src/sidecar/fallback-chains.js',
-        'src/utils/model-tiers.js',
+        'src/utils/provider-registry.js',
         'src/utils/route-launch.js',
-        // Added for council #216 A2/B1's fix: `vendorOfId` parses the vendor
-        // segment so both guards stop trusting a caller-supplied vendor that
-        // the JSDoc marks optional. Same PARSE-not-derive test as the four
-        // above -- it returns a vendor segment, never an id that is called.
-        // NOTE: vendor-from-id parsing now exists here, in fallback-chains,
-        // route-launch and model-classification. That duplication deserves one
-        // low-level home; deliberately not done in a review-fix commit.
-        'src/utils/model-canonicalization.js',
       ],
       rules: {
         'no-restricted-syntax': 'off'

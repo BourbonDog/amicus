@@ -520,6 +520,8 @@ describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize 
     const meta = JSON.parse(fs.readFileSync(path.join(getSessionDir(project, 'w7-1'), 'metadata.json'), 'utf-8'));
     expect(meta.toolSettleTimedOut).toBe(true);
     expect(meta.status).toBe('complete'); // completed, not failed — fail loud, not closed
+    // Its cost is a floor (live tool calls at the ceiling), so it must not read as exact.
+    expect(meta.usage.subtreeUnknown).toBe(true);
 
     // …and the default mocked result (no flags) leaves both fields off entirely.
     fs.mkdirSync(getSessionDir(project, 'w6'), { recursive: true });

@@ -365,10 +365,6 @@ src/
 ├── cli-template-args.js
 ├── cli.js  # CLI Argument Parser
 ├── conflict.js  # File Conflict Detection Module
-├── context-compression.js  # Context Compression Module
-├── context.js  # Context Filtering Module
-├── drift.js  # Context Drift Detection Module
-├── environment.js  # Environment Detection Module
 ├── headless.js  # Headless Mode Runner
 ├── index.js  # Amicus - Main Module
 ├── jsonl-parser.js  # JSONL Parser
@@ -529,13 +525,9 @@ evals/
 | `cli-template-args.js` |  | `applyTemplateForArgs()`, `NEEDS_TEMPLATE_MSG` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `getCommandNames()`, `getBooleanFlags()` |
 | `conflict.js` | File Conflict Detection Module | `detectConflicts()`, `formatConflictWarning()` |
-| `context-compression.js` | Context Compression Module | `compressContext()`, `estimateTokenCount()`, `buildPreamble()`, `DEFAULT_TOKEN_LIMIT` |
-| `context.js` | Context Filtering Module | `filterContext()`, `parseDuration()`, `estimateTokens()`, `takeLastNTurns()` |
-| `drift.js` | Context Drift Detection Module | `calculateDrift()`, `formatDriftWarning()`, `countTurnsSince()`, `isDriftSignificant()` |
-| `environment.js` | Environment Detection Module | `inferClient()`, `getSessionRoot()`, `detectEnvironment()`, `VALID_CLIENTS` |
 | `headless.js` | Headless Mode Runner | `runHeadless()`, `waitForServer()`, `withTimeout()`, `extractSummary()`, `findTrailingFoldMarker()` |
 | `index.js` | Amicus - Main Module | `startAmicus()`, `listAmicus()`, `resumeAmicus()`, `continueAmicus()`, `readAmicus()` |
-| `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
+| `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `formatMessage()`, `formatContext()` |
 | `mcp-council-awareness.js` |  | `subWaveIds()`, `countWaveLegs()`, `elapsedOf()`, `enginePid()`, `buildCouncilStatusPayload()` |
 | `mcp-council-bench.js` |  | `resolveBenchInput()`, `auditBenchAliases()` |
 | `mcp-council-pack-map.js` | COUNCIL_PACK_PARAM_MAP, split out of mcp-council-run.js for the 300-line size gate (P2-R16). | `COUNCIL_PACK_PARAM_MAP` |
@@ -547,10 +539,10 @@ evals/
 | `mcp-tools.js` | MCP Tool Definitions for Amicus | `getTools()`, `getGuideText()`, `safeTaskId()`, `safeModel()` |
 | `mcp-wait.js` | Engine for the amicus_wait MCP tool: blocks inside one tool call until a session/wave reaches a terminal state or the wait window closes. | `runWait()`, `registerInProcessRun()`, `settleInProcessRun()`, `hasInProcessRun()`, `clampTimeout()` |
 | `opencode-client.js` | OpenCode SDK Client Wrapper | `INSUFFICIENT_CREDITS_REASON`, `providerErrorReason()`, `parseModelString()`, `createClient()`, `createSession()` |
-| `project-root-allowlist.js` | The MCP `project` / cwd input becomes the session-store parent AND the spawned | `isAllowedProjectRoot()`, `isPathInside()`, `allowedRoots()` |
+| `project-root-allowlist.js` | The MCP `project` / cwd input becomes the session-store parent AND the spawned | `isAllowedProjectRoot()`, `isPathInside()`, `allowedRoots()`, `resolvedPath()` |
 | `prompt-builder.js` | System Prompt Builder | `buildSystemPrompt()`, `buildPrompts()`, `buildEnvironmentSection()`, `getSummaryTemplate()`, `SUMMARY_TEMPLATE` |
-| `session-manager.js` | Session Manager Module | `createSession()`, `updateSession()`, `getSession()`, `saveConversation()`, `saveSummary()` |
-| `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
+| `session-manager.js` | Session Manager Module | `getSessionDir()`, `resolveExistingSessionDir()`, `SESSIONS_DIR`, `SUBAGENTS_DIR` |
+| `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `resolveSession()` |
 | `spend-query.js` |  | `filterRows()`, `groupRows()`, `computeWasted()`, `emptyTokens()`, `addTokens()` |
 | `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS` |
 | `council/briefings-chair-task.js` |  | `CHAIR_ANSWER_VALUES`, `ANSWER_SCALE_ADDENDUM`, `TASK_CHAIR_SYNTHESIS`, `TASK_CHAIR_SYNTHESIS_NO_CLAIMS`, `TASK_CONCURRENCE_CAVEAT` |
@@ -728,7 +720,7 @@ evals/
 | `utils/api-key-rejection.js` | Definitive key rejections besides a 401 (google API_KEY_INVALID, malformed keys). | `isMalformedKey()`, `invalidKey()`, `malformedKey()`, `isGoogleKeyInvalid()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `isTestWriteToRealKeyStore()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `redactSecret()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING` |
-| `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
+| `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()`, `sleepSync()`, `LOCK_CODES` |
 | `utils/auth-json.js` | Auth JSON Reader | `readAuthJsonKeys()`, `importFromAuthJson()`, `checkAuthJson()`, `removeFromAuthJson()`, `AUTH_JSON_PATH()` |
 | `utils/base-url-classify.js` | v4.6.2 PR1 (spec §4, D1/D2): ANTHROPIC_BASE_URL classification, the | `classifyBaseUrl()`, `resolveBaseUrlOverride()`, `announceBaseUrlNormalizationOnce()`, `_resetBaseUrlNotice()` |
 | `utils/claude-register.js` | Registration core for amicus: skill install (chat skill + LLM Council), | `MCP_CONFIG`, `addMcpToConfigFile()`, `installSkill()`, `installCouncilSkill()`, `readPrevClaudeCodeAmicusEntry()` |
@@ -795,13 +787,13 @@ evals/
 | `utils/model-ceilings-modelsdev.js` | #218 P3 — output ceilings for the direct-provider catalog rows. | `enrichCeilings()`, `fillCeilings()`, `needsFillCount()`, `limitsFromModelsDev()`, `emptyOutcome()` |
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
-| `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()` |
+| `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()`, `groupModelsByFamily()` |
 | `utils/model-id-siblings.js` | The tier-safe sibling comparator (#238 D7). A sibling shares a pin's vendor | `parsePin()`, `compareVersions()`, `newestSibling()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
 | `utils/model-output-limit.js` | Issue #218 — the per-model `limit` descriptor amicus hands opencode. | `normalizeOutputBudget()`, `buildLimitLookup()`, `computeModelLimit()`, `positiveCount()` |
 | `utils/model-shortlist.js` | Vendor model shortlist (#138) -- the family -> model second level. | `buildModelShortlist()`, `compareShortlistRows()`, `SHORTLIST_LIMIT` |
 | `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS`, `TIER_ORDER`, `resolveTier()` |
-| `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
+| `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
 | `utils/no-output-backstop.js` | v4.6.2 PR2 (spec §5, D4): fail a headless leg fast when the model produces | `resolveNoOutputBackstopMs()`, `createNoOutputBackstop()`, `extendWindowMs()`, `decideBackstopExtension()`, `undecidedBackstopRecord()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE` |
 | `utils/openrouter-credit.js` | The OpenRouter credit/limit probe, split out of api-key-validation.js to keep | `checkOpenRouterCredit()`, `checkOpenRouterBalance()`, `OPENROUTER_NO_CREDIT_WARNING`, `OPENROUTER_FREE_TIER_WARNING` |
@@ -815,7 +807,7 @@ evals/
 | `utils/prompt-source.js` |  | `resolvePromptSource()` |
 | `utils/provider-default-picker.js` | Provider-default picker core (Part 2, Task 4). | `buildProviderDefaultChoices()`, `applyProviderDefault()`, `pricePerMInputFrom()`, `directFormIfSafe()`, `directFormIfProven()` |
 | `utils/provider-default-prompt.js` | Provider-default prompt flow (Part 2, Task 6/7 shared helper). | `runProviderDefaultFlow()`, `formatPrice()`, `formatRow()` |
-| `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS`, `getProvider()`, `isDirectProvider()`, `listDirectProviders()`, `PROVIDER_ENV_MAP` |
+| `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS`, `isDirectProvider()`, `listDirectProviders()`, `splitVendorId()`, `PROVIDER_ENV_MAP` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `canonicalRoutesFor()`, `pickCurrent()`, `resolveQuickPicks()`, `toStorableRoute()` |
 | `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES` |
 | `utils/redact-provider-error.js` | #256 item 4: strip key IDENTIFIERS out of a provider's error text before it | `redactProviderError()` |

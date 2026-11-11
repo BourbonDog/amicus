@@ -13,7 +13,7 @@ const { deriveStage, sanitizePreview } = require('./sidecar/progress-fields');
 const { SharedServerManager } = require('./utils/shared-server');
 const { durationBetween } = require('./utils/result-schema');
 const { canonicalProjectPath } = require('./utils/project-path');
-const { isAllowedProjectRoot, isPathInside } = require('./project-root-allowlist');
+const { isAllowedProjectRoot, isPathInside, resolvedPath } = require('./project-root-allowlist');
 const { recordSession } = require('./utils/session-index');
 const { fileURLToPath } = require('url');
 const { RUNNING_VERSION, versionWarning } = require('./utils/version-info');
@@ -74,7 +74,7 @@ function getProjectDir(explicitProject) {
   // its string contract. resolveProjectDir() (the MCP dispatch path) rejects
   // loudly instead.
   if (explicitProject && fs.existsSync(explicitProject) && isAllowedProjectRoot(explicitProject)) {
-    return canonicalProjectPath(explicitProject);
+    return resolvedPath(explicitProject);
   }
   if (explicitProject && fs.existsSync(explicitProject)) {
     logger.warn('explicit project outside allowed roots, ignoring', { project: explicitProject });
@@ -160,7 +160,7 @@ async function resolveProjectDir(explicitProject, mcpServer) {
         );
       }
     }
-    return canonicalProjectPath(explicitProject);
+    return resolvedPath(explicitProject);
   }
   const envProject = process.env.AMICUS_PROJECT_DIR;
   if (envProject && fs.existsSync(envProject)) {
@@ -259,7 +259,7 @@ function spawnSidecarProcess(args, sessionDir) {
   const child = spawn('node', [sidecarBin, ...args], {
     cwd: getProjectDir(),
     stdio: ['ignore', 'ignore', stderrFd],
-    env: { ...process.env, AMICUS_DEBUG_PORT: '9223', LOG_LEVEL: process.env.LOG_LEVEL || 'info' },
+    env: { ...process.env, LOG_LEVEL: process.env.LOG_LEVEL || 'info' },
   });
   // The child inherited its own copy of the stderr fd during spawn; close the
   // parent's copy so we don't leak a descriptor. On Windows an open fd also

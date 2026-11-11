@@ -352,7 +352,7 @@ These variables control the polling loop that drives headless sessions. The defa
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `AMICUS_GUI_LOAD_TIMEOUT_MS` | Maximum wait in milliseconds for the Electron UI to load before the load-failsafe fires. If the OpenCode web UI fails to respond within this window, Amicus shows a load-error page instead of hanging invisibly. | `15000` |
-| `AMICUS_DEBUG_PORT` | Chrome DevTools Protocol port for the Electron window. Increment (e.g. `9223`) to avoid conflicts with a running Chrome or another Amicus window. | `9222` |
+| `AMICUS_DEBUG_PORT` | Opt-in Chrome DevTools Protocol port for the Electron windows. Unset = no DevTools port is opened (any local process could drive an open one). Set it only for CDP testing, e.g. `9223` to avoid a running Chrome on 9222. | unset (disabled) |
 | `AMICUS_MOCK_UPDATE` | Mock the update-notification state for UI development. Values: `available` \| `updating` \| `success` \| `error`. Has no effect outside development. | *(unset)* |
 | `AMICUS_ALLOW_UNVERIFIED_ELECTRON` | Accept an Electron artifact whose sha256 does **not** match the digest Electron publishes for it, with a loud warning on every use instead of a refusal, **and** arm the native-extractor rescue for an archive amicus cannot read (below). On a **cached** artifact it downgrades the refusal to a warning; on a **download** it also drops the published-digest pin, so `@electron/get` falls back to the `SHASUMS256.txt` of whatever mirror you pointed it at — without that, a legitimately rebuilt Electron could never be fetched at all, only accepted if it was already in a cache root. It also accepts an artifact that the `checksums.json` amicus trusts lists **no** sha256 for (an npx-cache copy installed with a different Electron than the amicus repairing it, say), marked `unverified`; without it, that artifact is refused before anything is downloaded. For three cases only: you deliberately run a **rebuilt** Electron whose bytes legitimately differ, amicus cannot read an archive at all and you have no other copy of it, or the trusted table lists no sha256 for an artifact and repairing that copy with its own amicus is not an option. True for the exact string `1` — `true`, `yes` and ` 1` are all false, because a hatch that fails open on a typo is not a hatch. | *(unset)* |
 
@@ -616,13 +616,14 @@ under the current project's `.claude/amicus_sessions/`); both sweeps only remove
 
 Session data is split across two different roots — don't confuse them:
 
-**1. The session root** (`getSessionRoot()` in `src/environment.js`) — resolved per client, mostly
-relevant for how Claude Code/Cowork discovers *your current conversation's* context to share:
+**1. The session root** (`buildContext()` in `src/sidecar/context-builder.js`) — resolved per client,
+relevant for how Amicus discovers *your current conversation's* context to share. An explicit
+`--session-dir` always wins:
 
 | Client | Root |
 |---|---|
-| `code-local` (default on macOS, or when a `DISPLAY`/`WAYLAND_DISPLAY` is present) | `~/.claude/projects/<encoded-cwd>` — the cwd is encoded by replacing `/`, `\`, the drive-letter colon, and `_` with `-` (matches Claude Code's own scheme). |
-| `cowork` | Platform-specific: macOS `~/Library/Application Support/Claude/local-agent-mode-sessions`, Windows `%APPDATA%\Claude\local-agent-mode-sessions`, Linux `~/.config/Claude/local-agent-mode-sessions`. |
+| `code-local` (the default) | `~/.claude/projects/<encoded-cwd>` (`getSessionDirectory()` in `src/session.js`) — the cwd is encoded by replacing `/`, `\`, the drive-letter colon, and `_` with `-` (matches Claude Code's own scheme). |
+| `cowork` | `~/Library/Application Support/Claude/local-agent-mode-sessions` (Claude Desktop's macOS location). |
 | `code-web` | No default — `--session-dir` is **required**; there's nothing to resolve. |
 
 **2. Amicus's own per-session directories** — where the actual session data (metadata, conversation,

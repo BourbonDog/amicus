@@ -16,7 +16,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { writeFileAtomic } = require('../utils/atomic-write');
+const crypto = require('crypto');
+const { writeFileAtomic, sleepSync, LOCK_CODES } = require('../utils/atomic-write');
 const { SESSIONS_DIR } = require('../session-manager');
 
 const RUN_FILE = 'run.json';
@@ -52,6 +53,38 @@ function readRun(runDir) {
   catch { return null; }
 }
 
+/**
+ * run.json for a read-merge-write: {} when the file is missing. A lock-type read
+ * error (e.g. Windows antivirus holding the file) is retried briefly, then
+ * thrown — merging a patch into {} would shrink run.json to a stub and lose
+ * runId/bench and an 'aborted' status. Content that does not parse (or is empty)
+ * is already lost: it is copied aside to run.json.corrupt-<id> and {} is used, so
+ * one bad write cannot fail every later checkpoint forever.
+ */
+function readRunForWrite(runDir) {
+  const p = runPath(runDir);
+  for (let i = 0; ; i++) {
+    let text;
+    try { text = fs.readFileSync(p, 'utf-8'); } catch (err) {
+      if (err.code === 'ENOENT') { return {}; }
+      if (!LOCK_CODES.has(err.code) || i >= 4) { throw err; }
+      sleepSync(25 * (i + 1));
+      continue;
+    }
+    try {
+      const v = JSON.parse(text);
+      if (v === null) { return {}; }
+      if (typeof v === 'object' && !Array.isArray(v)) { return v; }
+    } catch { /* unparseable: keep a copy below */ }
+    // Unparseable, or valid JSON that is not a record (an array or scalar would spread junk keys).
+    const backup = `${p}.corrupt-${Date.now()}-${process.pid}-${crypto.randomBytes(3).toString('hex')}`;
+    fs.copyFileSync(p, backup, fs.constants.COPYFILE_EXCL);
+    try { process.stderr.write(`Warning: ${p} was not valid JSON; saved it to ${backup} and started a new record.\n`); }
+    catch { /* a dead stderr must not block the write; the copy is already on disk */ }
+    return {};
+  }
+}
+
 /** Abort-wins merge: once status is 'aborted', it cannot change to anything else. */
 function mergeRun(existing, patch) {
   const merged = { ...existing, ...patch };
@@ -77,7 +110,7 @@ function writeRun(runDir, run) {
 /** Create (or merge into) run.json; preserves an existing createdAt. */
 function initRun(runDir, seed) {
   fs.mkdirSync(runDir, { recursive: true, mode: 0o700 });
-  const existing = readRun(runDir) || {};
+  const existing = readRunForWrite(runDir);
   const run = mergeRun(existing, {
     ...seed,
     createdAt: existing.createdAt || seed.createdAt,
@@ -134,13 +167,13 @@ function initCouncilRun(o) {
 
 /** Read-merge-write checkpoint (atomic; abort-wins on status). */
 function checkpoint(runDir, patch) {
-  const existing = readRun(runDir) || {};
+  const existing = readRunForWrite(runDir);
   return writeRun(runDir, mergeRun(existing, patch));
 }
 
 /** Upsert one stages[] entry by name; other stages and order preserved. */
 function updateStage(runDir, name, patch) {
-  const existing = readRun(runDir) || {};
+  const existing = readRunForWrite(runDir);
   const stages = Array.isArray(existing.stages) ? existing.stages.slice() : [];
   const i = stages.findIndex(s => s && s.name === name);
   if (i === -1) { stages.push({ name, ...patch }); }
@@ -156,7 +189,7 @@ function updateStage(runDir, name, patch) {
  * this list to mark every in-flight leg instead of relying on the pid kill.
  */
 function appendStageWave(runDir, name, waveId) {
-  const existing = readRun(runDir) || {};
+  const existing = readRunForWrite(runDir);
   const stage = (existing.stages || []).find(s => s && s.name === name) || {};
   const waveIds = Array.isArray(stage.waveIds) ? stage.waveIds : [];
   if (waveIds.includes(waveId)) { return existing; }

@@ -136,6 +136,7 @@ mint ids as `B-<theme>-<n>`; cite symbols, not line numbers; no size tables (the
 - [ ] **B-IO-6** — Stop a POSIX filename containing a literal backslash splitting into pseudo-segments. (was L8923a; PR #262) — src/utils/env-write-guard.js:72-74.
 - [ ] **B-IO-7** — Stop `saveApiKey(provider, key, null)` throwing a TypeError. (was L8923b; PR #262) — src/utils/api-key-store.js:195 → src/utils/env-raw-store.js:54 → src/utils/env-write-guard.js:139-140 (the `= {}` default does not replace `null`).
 - [ ] **N-14** (new 2026-09-27) — Reword the two comments that cite ruling "R16-1", which is defined nowhere, to cite the R16 prune record by title (the owner's ruling R16 of 2026-08-16; its R16-2/R16-3 calls are at BACKLOG-ARCHIVE.md L1685 and L6551). (was: no BACKLOG row; —) — src/utils/session-index-prune.js:15, :176; "R16-1" has 0 hits in BACKLOG-ARCHIVE.md and docs/.
+- [ ] **B-IO-8** (new 2026-11-11) — `doctor --fix` could prune finished session folders (`<project>/.claude/amicus_sessions/<id>/`) older than N days; they only grow (~21k measured). Owner deferred 2026-11-11 — deletes transcripts, needs an age rule. (was: no BACKLOG row; —) — `session-manager.js :: SESSIONS_DIR`; nothing in src/cli-handlers-doctor.js removes a session folder.
 
 ### gui-electron
 

@@ -2,7 +2,7 @@
  * Session Utils Tests
  *
  * Tests for shared session utilities: SessionPaths, saveInitialContext,
- * finalizeSession, createHeartbeat, outputSummary, executeMode.
+ * finalizeSession, createHeartbeat, outputSummary.
  */
 
 const path = require('path');
@@ -28,8 +28,7 @@ const {
   saveInitialContext,
   finalizeSession,
   outputSummary,
-  createHeartbeat,
-  executeMode
+  createHeartbeat
 } = require('../../src/sidecar/session-utils');
 
 const { detectConflicts } = require('../../src/conflict');
@@ -555,111 +554,6 @@ describe('Session Utils', () => {
       expect(output).toContain('still running');
 
       heartbeat.stop();
-    });
-  });
-
-  describe('executeMode', () => {
-    it('should call runHeadless in headless mode', async () => {
-      const mockRunHeadless = jest.fn().mockResolvedValue({
-        summary: 'headless result',
-        timedOut: false,
-        error: null
-      });
-
-      const result = await executeMode({
-        headless: true,
-        runHeadless: mockRunHeadless,
-        runInteractive: jest.fn(),
-        model: 'test-model',
-        systemPrompt: 'system',
-        userMessage: 'user msg',
-        taskId: 'task-1',
-        project: '/project',
-        timeout: 15,
-        agent: 'Build'
-      });
-
-      expect(mockRunHeadless).toHaveBeenCalledWith(
-        'test-model', 'system', 'user msg', 'task-1', '/project',
-        15 * 60 * 1000, 'Build', {}
-      );
-      expect(result.summary).toBe('headless result');
-    });
-
-    it('should call runInteractive in interactive mode', async () => {
-      const mockRunInteractive = jest.fn().mockResolvedValue({
-        summary: 'interactive result',
-        error: null
-      });
-
-      const result = await executeMode({
-        headless: false,
-        runHeadless: jest.fn(),
-        runInteractive: mockRunInteractive,
-        model: 'test-model',
-        systemPrompt: 'system',
-        userMessage: 'user msg',
-        taskId: 'task-1',
-        project: '/project',
-        timeout: 15,
-        agent: 'Plan'
-      });
-
-      expect(mockRunInteractive).toHaveBeenCalledWith(
-        'test-model', 'system', 'user msg', 'task-1', '/project',
-        { agent: 'Plan' }
-      );
-      expect(result.summary).toBe('interactive result');
-    });
-
-    it('should provide default summary when headless returns none', async () => {
-      const mockRunHeadless = jest.fn().mockResolvedValue({
-        summary: '',
-        timedOut: false,
-        error: null
-      });
-
-      const result = await executeMode({
-        headless: true,
-        runHeadless: mockRunHeadless,
-        runInteractive: jest.fn(),
-        model: 'test-model',
-        systemPrompt: 'system',
-        userMessage: 'msg',
-        taskId: 'task-1',
-        project: '/p',
-        timeout: 15,
-        agent: null
-      });
-
-      expect(result.summary).toContain('No Output');
-    });
-
-    it('should pass extraOptions to headless runner', async () => {
-      const mockRunHeadless = jest.fn().mockResolvedValue({
-        summary: 'ok',
-        timedOut: false
-      });
-
-      await executeMode({
-        headless: true,
-        runHeadless: mockRunHeadless,
-        runInteractive: jest.fn(),
-        model: 'm',
-        systemPrompt: 's',
-        userMessage: 'u',
-        taskId: 't',
-        project: '/p',
-        timeout: 10,
-        agent: 'Build',
-        extraOptions: { mcp: { server: {} }, summaryLength: 'verbose' }
-      });
-
-      expect(mockRunHeadless).toHaveBeenCalledWith(
-        'm', 's', 'u', 't', '/p',
-        10 * 60 * 1000, 'Build',
-        { mcp: { server: {} }, summaryLength: 'verbose' }
-      );
     });
   });
 });

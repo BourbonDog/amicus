@@ -12,6 +12,16 @@ describe('package.json launch identity', () => {
     expect(pkg.homepage).toBe('https://bourbondog.github.io/amicus/');
     expect(pkg.author).toBe('Christian Wagner');
   });
+  test('CLI only: every exports target exists, no main, and require("amicus") stays blocked', () => {
+    const fs = require('fs');
+    const path = require('path');
+    for (const target of Object.values(pkg.exports)) {
+      expect(fs.existsSync(path.join(__dirname, '..', '..', target))).toBe(true);
+    }
+    expect(pkg.exports['.']).toBeUndefined();
+    expect(pkg.main).toBeUndefined();
+    expect(pkg.dependencies.dotenv).toBeUndefined();
+  });
   test('keywords carry the council positioning', () => {
     for (const k of ['council', 'second-opinion', 'fanout']) {
       expect(pkg.keywords).toContain(k);

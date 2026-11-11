@@ -147,6 +147,37 @@ describe('Sidecar Config Module', () => {
       const raw = fs.readFileSync(path.join(tempDir, 'config.json'), 'utf-8');
       expect(raw).toBe(JSON.stringify(data, null, 2));
     });
+
+    it('should keep a copy of an unparseable config before overwriting it', () => {
+      const broken = '{ "default": "gemini", "aliases": { "gemini": "x" }, }';
+      fs.writeFileSync(path.join(tempDir, 'config.json'), broken);
+      const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const config = loadModule();
+      config.saveConfig({ ...(config.loadConfig() || {}), routing: { tier_onboarded: true } });
+      stderrSpy.mockRestore();
+
+      const backups = fs.readdirSync(tempDir).filter((f) => f.startsWith('config.json.corrupt-'));
+      expect(backups).toHaveLength(1);
+      expect(fs.readFileSync(path.join(tempDir, backups[0]), 'utf-8')).toBe(broken);
+    });
+
+    it('should keep two corrupt copies made in the same millisecond', () => {
+      const broken = '{ "default": "gemini", }';
+      const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1700000000000);
+      const config = loadModule();
+      try {
+        for (let i = 0; i < 2; i++) {
+          fs.writeFileSync(path.join(tempDir, 'config.json'), broken);
+          config.saveConfig({ default: 'gpt' });
+        }
+      } finally {
+        nowSpy.mockRestore();
+        stderrSpy.mockRestore();
+      }
+      const backups = fs.readdirSync(tempDir).filter((f) => f.startsWith('config.json.corrupt-'));
+      expect(backups).toHaveLength(2);
+    });
   });
 
   describe('getDefaultAliases', () => {
@@ -355,18 +386,6 @@ describe('Sidecar Config Module', () => {
       expect(result).toBe('provider/model');
     });
 
-    it('should handle computeConfigHash with large config file', () => {
-      const largeAliases = {};
-      for (let i = 0; i < 100; i++) {
-        largeAliases[`alias${i}`] = `openrouter/provider/model-${i}`;
-      }
-      const data = { default: 'alias0', aliases: largeAliases };
-      fs.writeFileSync(path.join(tempDir, 'config.json'), JSON.stringify(data, null, 2));
-      const config = loadModule();
-      const hash = config.computeConfigHash();
-      expect(hash).toMatch(/^[0-9a-f]{8}$/);
-    });
-
     it('should handle saveConfig with special characters in values', () => {
       const config = loadModule();
       const data = {
@@ -559,7 +578,7 @@ describe('Sidecar Config Module', () => {
    * Cost-aware per-provider defaults (Part 2, Task 1): a global cost-tier
    * preference stored at config.routing.tier.
    */
-  describe('getCostTier / setCostTier', () => {
+  describe('getCostTier', () => {
     it('exports COST_TIERS as the three known tiers', () => {
       const config = loadModule();
       expect(config.COST_TIERS).toEqual(['frontier', 'balanced', 'economy']);
@@ -595,35 +614,6 @@ describe('Sidecar Config Module', () => {
       );
       const config = loadModule();
       expect(config.getCostTier()).toBe('balanced');
-    });
-
-    it('setCostTier persists under routing.tier, preserving prefer and migration_notified', () => {
-      fs.writeFileSync(
-        path.join(tempDir, 'config.json'),
-        JSON.stringify({
-          routing: { prefer: 'openrouter', migration_notified: { openai: true } },
-        })
-      );
-      const config = loadModule();
-      config.setCostTier('economy');
-
-      const written = JSON.parse(fs.readFileSync(path.join(tempDir, 'config.json'), 'utf-8'));
-      expect(written.routing.tier).toBe('economy');
-      expect(written.routing.prefer).toBe('openrouter');
-      expect(written.routing.migration_notified).toEqual({ openai: true });
-    });
-
-    it('setCostTier creates routing when absent', () => {
-      const config = loadModule();
-      config.setCostTier('frontier');
-
-      const written = JSON.parse(fs.readFileSync(path.join(tempDir, 'config.json'), 'utf-8'));
-      expect(written.routing).toEqual({ tier: 'frontier' });
-    });
-
-    it('setCostTier throws on an invalid tier', () => {
-      const config = loadModule();
-      expect(() => config.setCostTier('bogus')).toThrow();
     });
   });
 

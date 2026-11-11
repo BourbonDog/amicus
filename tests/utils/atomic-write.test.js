@@ -39,4 +39,25 @@ describe('writeFileAtomic', () => {
     const leftovers = fs.readdirSync(dir).filter(n => n.includes('.tmp'));
     expect(leftovers).toEqual([]);
   });
+
+  it('on win32, retries a rename that a transient lock (EPERM/EBUSY) rejects', () => {
+    const target = path.join(dir, 'out.json');
+    fs.writeFileSync(target, 'old');
+    const realRename = fs.renameSync;
+    let fails = 2;
+    const spy = jest.spyOn(fs, 'renameSync').mockImplementation((a, b) => {
+      if (fails-- > 0) { throw Object.assign(new Error('locked'), { code: fails ? 'EPERM' : 'EBUSY' }); }
+      return realRename.call(fs, a, b);
+    });
+    const desc = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      writeFileAtomic(target, 'new', { mode: 0o600 });
+    } finally {
+      Object.defineProperty(process, 'platform', desc);
+      spy.mockRestore();
+    }
+    expect(fs.readFileSync(target, 'utf-8')).toBe('new');
+    expect(fs.readdirSync(dir).filter(n => n.includes('.tmp'))).toEqual([]);
+  });
 });

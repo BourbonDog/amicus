@@ -476,7 +476,9 @@ async function sessionStatusSafe(readStatus, client, sessionId, dirArgs, ms) {
 async function waitForServer(client, checkHealthFn, maxAttempts = 30) {
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const isHealthy = await checkHealthFn(client);
+      // Bounded: an engine that listens but never answers would hang here,
+      // before the watchdog and signal handlers are installed.
+      const isHealthy = await withTimeout(checkHealthFn(client), 2000, 'health');
       if (isHealthy) {
         return true;
       }
@@ -665,6 +667,18 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
   // One declaration only — a second one inside the try would shadow this and the
   // catch would read `null` forever.
   let backstopRecord = null;
+  // Declared above the try so the outer catch's abort is bounded too. `=== undefined`
+  // rather than `||`: 0 is a legal injection (withTimeout reads it as unbounded).
+  const toolSettleAbortTimeoutMs = options.toolSettleAbortTimeoutMs === undefined
+    ? TOOL_SETTLE_ABORT_TIMEOUT_MS : options.toolSettleAbortTimeoutMs;
+  // Best-effort close of the owned server: a rejection OR a close that never
+  // settles must not discard the result or hang the leg (close's own SIGKILL
+  // escalation is ~2s, inside this bound).
+  const closeOwnedServer = async (where) => {
+    try { await withTimeout(server.close(), toolSettleAbortTimeoutMs, 'server.close()'); } catch (closeErr) {
+      logger.debug(`server.close() failed ${where} (best-effort)`, { taskId, error: closeErr.message });
+    }
+  };
 
   try {
     if (!externalServer) {
@@ -675,7 +689,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       writeProgress(sessionDir, 'server_ready');
 
       if (!serverReady) {
-        await server.close();
+        await closeOwnedServer('on server-not-ready');
         // FR-1: returns out of the outer try — the A3 catch never sees it.
         if (!writeTerminalProgressSafe(sessionDir, 'OpenCode server failed to start')) {
           logger.debug('terminal progress write failed on server-not-ready (best-effort)', { taskId });
@@ -716,7 +730,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         sessionId = await createSession(client, directory, taskId);
       } catch (error) {
         if (watchdog) { watchdog.cancel(); }
-        if (!externalServer) { await server.close(); }
+        if (!externalServer) { await closeOwnedServer('on createSession failure'); }
         // FR-1: the one path a council leg can hit under T0.5's shared server —
         // pre-fix, the Workspace showed the seat perpetually live off a
         // non-terminal 'server_ready' while metadata.json said 'error'.
@@ -1041,8 +1055,6 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // `=== undefined` rather than `||`: 0 is meaningful (disable the deferral).
     const toolSettleGraceMs = options.toolSettleGraceMs === undefined
       ? TOOL_SETTLE_GRACE_MS : options.toolSettleGraceMs;
-    const toolSettleAbortTimeoutMs = options.toolSettleAbortTimeoutMs === undefined
-      ? TOOL_SETTLE_ABORT_TIMEOUT_MS : options.toolSettleAbortTimeoutMs;
     let consecutivePollFailures = 0;
     let pollFailureBail = false;
     let lastAssistantMsgId = null;
@@ -1157,7 +1169,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             logger.info('External abort signal received', { taskId });
             try {
               const { abortSession } = require('./opencode-client');
-              await abortSession(client, sessionId, ...dirArgs);
+              await withTimeout(abortSession(client, sessionId, ...dirArgs),
+                toolSettleAbortTimeoutMs, 'abortSession(external-abort)');
             } catch (abortErr) {
               logger.warn('Failed to abort OpenCode session', { error: abortErr.message });
             }
@@ -1174,7 +1187,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         const remaining = deadline - Date.now();
         const messages = await withTimeout(
           getMessages(client, sessionId, ...dirArgs),
-          Math.min(pollCallTimeoutMs, remaining),
+          // >= 1: the sleep can cross the deadline, and withTimeout reads <= 0 as
+          // UNBOUNDED. Not a `break`: the backstop tick below must still run.
+          Math.max(1, Math.min(pollCallTimeoutMs, remaining)),
           'getMessages'
         );
         consecutivePollFailures = 0;
@@ -1420,7 +1435,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             const remainingForStatus = deadline - Date.now();
             const statusData = await withTimeout(
               getSessionStatus(client, sessionId, ...dirArgs),
-              Math.min(pollCallTimeoutMs, remainingForStatus),
+              // >= 1: getMessages may have run to the deadline, and 0 means unbounded.
+              Math.max(1, Math.min(pollCallTimeoutMs, remainingForStatus)),
               'getSessionStatus'
             );
             const s = (statusData && statusData.type) ? statusData : (statusData && statusData[sessionId]);
@@ -1568,7 +1584,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           toolStalled = true;
           try {
             const { abortSession } = require('./opencode-client');
-            await abortSession(client, sessionId, ...dirArgs);
+            await withTimeout(abortSession(client, sessionId, ...dirArgs),
+              toolSettleAbortTimeoutMs, 'abortSession(tool-stall)');
             logger.info('Session aborted after tool-call stall', { taskId, sessionId });
           } catch (abortErr) {
             logger.warn('Failed to abort session after tool-call stall', { error: abortErr.message });
@@ -1724,7 +1741,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // Abort the OpenCode session on timeout (agent keeps running otherwise)
       try {
         const { abortSession } = require('./opencode-client');
-        await abortSession(client, sessionId, ...dirArgs);
+        await withTimeout(abortSession(client, sessionId, ...dirArgs),
+          toolSettleAbortTimeoutMs, 'abortSession(timeout)');
         logger.info('Session aborted after timeout', { taskId, sessionId });
       } catch (abortErr) {
         logger.warn('Failed to abort session after timeout', { error: abortErr.message });
@@ -1738,7 +1756,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     if (backstopFired && !completed && !aborted) {
       try {
         const { abortSession } = require('./opencode-client');
-        await abortSession(client, sessionId, ...dirArgs);
+        await withTimeout(abortSession(client, sessionId, ...dirArgs),
+          toolSettleAbortTimeoutMs, 'abortSession(backstop)');
         logger.info('Session aborted after no-output backstop', { taskId, sessionId });
       } catch (abortErr) {
         logger.warn('Failed to abort session after backstop', { error: abortErr.message });
@@ -1750,7 +1769,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     if (retryBeyondDeadline && !completed && !aborted) {
       try {
         const { abortSession } = require('./opencode-client');
-        await abortSession(client, sessionId, ...dirArgs);
+        await withTimeout(abortSession(client, sessionId, ...dirArgs),
+          toolSettleAbortTimeoutMs, 'abortSession(retry-beyond-deadline)');
         logger.info('Session aborted after retry-beyond-deadline exit', { taskId, sessionId });
       } catch (abortErr) {
         logger.warn('Failed to abort session after retry-beyond-deadline exit', { error: abortErr.message });
@@ -1925,7 +1945,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       }
     }
 
-    if (!externalServer) { await server.close(); }
+    // Guarded like the outer catch's close: a rejection here must not discard
+    // the usage and summary already gathered above.
+    if (!externalServer) { await closeOwnedServer('after the poll loop'); }
     if (mirror.toolCalls.length > 0) {
       logger.info('Tool calls summary', {
         totalToolCalls: mirror.toolCalls.length,
@@ -2141,7 +2163,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     if (sessionId) {
       try {
         const { abortSession } = require('./opencode-client');
-        await abortSession(client, sessionId, ...dirArgs);
+        await withTimeout(abortSession(client, sessionId, ...dirArgs),
+          toolSettleAbortTimeoutMs, 'abortSession(outer-catch)');
       } catch {
         // Ignore abort errors during error handling
       }
@@ -2156,13 +2179,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // the port by the time we get here; a failure to close cleanly is not this handler's
     // problem to propagate, so it is logged and swallowed, same discipline as every other
     // best-effort close in this file (see the signal handler above).
-    if (!externalServer) {
-      try { await server.close(); } catch (closeErr) {
-        logger.debug('server.close() failed in the outer exception handler (best-effort)', {
-          taskId, error: closeErr.message,
-        });
-      }
-    }
+    if (!externalServer) { await closeOwnedServer('in the outer exception handler'); }
     // ⚠️ v4.4.1 A3 — the last hole in LC-3's story. LC-3 made the SUCCESS path's terminal
     // progress write derive its stage from resolveTerminalState instead of hardcoding 'complete',
     // so an aborted/errored/timed-out leg stopped rendering with a green check. This path — the
@@ -2216,8 +2233,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // v4.9 W13 Task A (PR #203 round 1, A2): emit-when-set, the SAME rule as
       // the two returns in the try body. An exception is not evidence that
       // nothing was served — a leg can stream a first token and explode in the
-      // post-loop finalization (`server.close()` is the one unguarded await on
-      // that path), and throwing away a measurement it already made would be a
+      // post-loop finalization, and throwing away a measurement it already made would be a
       // second, silent loss on top of the first. Nothing is invented: a leg
       // that exploded before any poll observed activity still carries no key.
       ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
