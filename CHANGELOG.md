@@ -5,8 +5,45 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Seven curated pins move to the current generation.** Each new id and price was read from
+  the live catalog on 2026-11-10. The direct Anthropic ids were confirmed against a live
+  `/v1/models` listing; none is derived from the OpenRouter form.
+
+  | alias | was | now | price (per Mtok in/out) |
+  |---|---|---|---|
+  | `gpt` | `gpt-5.6-terra` | `gpt-6.1-terra` | $2/$12 → $1/$5 |
+  | `gpt-pro` | `gpt-5.6-sol-pro` | `gpt-6.1-sol-pro` | $4/$20 → $2/$10 |
+  | `opus` | `claude-opus-5` | `claude-opus-5.5` / `claude-opus-5-5` | $5/$25 → $4/$20 |
+  | `claude`, `sonnet` | `claude-sonnet-5` | `claude-sonnet-5.5` / `claude-sonnet-5-5` | $2/$10, unchanged |
+  | `haiku` | `claude-haiku-4.5` / `claude-haiku-4-5-20251001` | `claude-haiku-5.5` / `claude-haiku-5-5` | $1/$5 → $0.10/$0.50 |
+  | `fable` | `claude-fable-5.1` / `claude-fable-5-1` | `claude-fable-5.2` / `claude-fable-5-2` | $10/$50 → $8/$40 |
+
+  `haiku`'s direct pin is now UNDATED, unlike the dated snapshot it replaces. `gpt-pro` stays
+  gateway-only: the catalog serves no bare `openai/gpt-*-sol-pro` row. Every shipped Anthropic
+  pin now has divergent dot/dash forms, which is why the "same model" fix below lands first.
+  The offline Anthropic floor (`model-fetcher.ANTHROPIC_MODELS`) gains the four new direct ids,
+  so a keyless or OpenRouter-only user does not see the new defaults as stale. The older rows
+  stay. A stored alias that names an old id keeps working, since each one is still served. It
+  is not migrated: `amicus aliases --review` offers the move. The frontier council bench
+  (`gpt-pro`, `opus`, `gemini-pro`) is unchanged, but note that its "priciest per vendor"
+  premise no longer holds: `codex` now out-prices `gpt-pro`, and `fable` out-prices `opus`.
+
 ### Fixed
 
+- **Pinning an Anthropic alias to its shipped OpenRouter form no longer reads as "a different
+  model".** Anthropic ids are dotted on OpenRouter and dashed on the direct API
+  (`openrouter/anthropic/claude-haiku-4.5` and `anthropic/claude-haiku-4-5-20251001` are one
+  model), but five places decided "same model?" by stripping the `openrouter/` prefix and
+  comparing strings. A config pinning `haiku` or `fable` to its own shipped OpenRouter route got
+  a false alias-shadow notice on every council run, the review picker and alias proposals treated
+  it as off the shipped pin, the alias list dropped its "same model as shipped, other gateway"
+  note, and setup could pin the gateway form "because it differs". One shared `sameModel`
+  (`src/utils/curated-models.js`) now also equates the two forms of any SHIPPED route pair, and
+  all five sites use it. It matches a pair only by its exact ids and never rewrites dots to
+  dashes, so neither an uncurated id nor a bare dotted id (served by no gateway) is matched by
+  guesswork.
 - **`amicus models --check --json` now reports shipped-pin drift.** The text path prints a
   "Pinned fallback drift" block when a curated pin is behind the live catalog, but the JSON
   audit document never carried those findings: a script reading `driftedCount: 0` saw a clean
@@ -19,6 +56,9 @@ All notable changes to Amicus are documented here. Format follows
 
 ### CI
 
+- **The CI council's `gpt` seat moves from `gpt-5.6-terra` to `gpt-6.1-terra`**
+  (`.github/amicus-ci-aliases.json`, #295). Its catalog output ceiling is still 128000, so the
+  64000 `outputBudget` lands unclamped. That is a catalog read, not a fresh measurement.
 - **A council round on a release PR is told it is a release cut.** A release diff can never
   contain work that merged to `main` before the branch was cut, so every round on one objected
   that the headline feature had no runtime code (PR #296 round 3). When the PR head is

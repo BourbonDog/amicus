@@ -115,6 +115,21 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(out).not.toContain('⚠');
     expect(out).toContain('nothing to review');
   });
+  // R4 for a DIVERGENT vendor: Anthropic's OpenRouter (dot) and direct (dash)
+  // forms of one shipped model strip to different strings, so a raw strip
+  // comparison in aliases.js and alias-proposals.js called this pin "differs
+  // from shipped" and put it up for review. Data-driven: survives pin refreshes.
+  test('R4 (divergent vendor): haiku pinned to its shipped OpenRouter form is the same model, not a review item', async () => {
+    const { openrouter: or, direct } = require('../../src/utils/curated-models').toGatewayRoutes().haiku;
+    catalogCache = { ...CATALOG, models: [...CATALOG.models, { id: or }, { id: direct }] };
+    cfg.saveConfig({ aliases: { haiku: or } });
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    expect(code).toBe(0);
+    const row = out.split('\n').find(l => /^\s*haiku\s+→/.test(l));
+    expect(row).toContain('same model as shipped, other gateway');
+    expect(row).not.toContain('differs from shipped');
+    expect(out).toContain('nothing to review');
+  });
   test('list with nothing pinned says so and does not network', async () => {
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
     expect(code).toBe(0);

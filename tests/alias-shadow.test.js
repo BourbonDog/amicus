@@ -278,7 +278,7 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
 
     // The same false-positive class tests/alias-drift.test.js already guards for
     // `findDriftedStoredAliases`: a direct-capable vendor's curated pin is the
-    // BARE canonical form (`openai/gpt-5.6-terra`, policy-routed by the gateway
+    // BARE canonical form (`openai/gpt-6.1-terra`, policy-routed by the gateway
     // router), so a config that pins the explicit OpenRouter form of THE SAME
     // MODEL differs as a string and not as a model. Reporting it would put two
     // spurious lines on every CI council run (gpt and deepseek both hit this in
@@ -286,9 +286,22 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
     // out. Gateway ROUTING has its own audit — `models --check`'s per-gateway
     // section; this notice is only about naming a different MODEL.
     test('the same model in the other gateway form is NOT a shadow', () => {
-      writeConfig({ gpt: 'openrouter/openai/gpt-5.6-terra' });
-      expect(CURATED.gpt).toBe('openai/gpt-5.6-terra'); // guards the premise
+      writeConfig({ gpt: 'openrouter/openai/gpt-6.1-terra' });
+      expect(CURATED.gpt).toBe('openai/gpt-6.1-terra'); // guards the premise
       expect(load().findAliasShadows(['gpt'])).toEqual([]);
+    });
+
+    // The divergent-vendor half of the test above. Anthropic's two forms of one
+    // model need not strip to the same string (`claude-haiku-4.5` vs
+    // `claude-haiku-4-5-20251001`), so a raw strip comparison flagged a pin of
+    // the SHIPPED OpenRouter form as a different model. Red on main before
+    // sameModel for haiku and fable; data-driven so a pin refresh cannot rot it.
+    test('pinning ANY curated alias to its own shipped OpenRouter form is never a shadow', () => {
+      const { toGatewayRoutes } = require('../src/utils/curated-models');
+      const paired = Object.entries(toGatewayRoutes()).filter(([, r]) => r.direct && r.openrouter);
+      expect(paired.map(([a]) => a)).toEqual(expect.arrayContaining(['haiku', 'opus', 'gpt'])); // premise
+      writeConfig(Object.fromEntries(paired.map(([a, r]) => [a, r.openrouter])));
+      expect(load().findAliasShadows(paired.map(([a]) => a))).toEqual([]);
     });
 
     test("this repo's own CI alias map raises only genuine model differences", () => {

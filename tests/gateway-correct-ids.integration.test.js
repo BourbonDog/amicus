@@ -72,14 +72,13 @@ const PROVIDER_KEY_VARS = [
 ];
 
 /**
- * The direct executable id `--model opus` must resolve to. Since the pin bump
- * to claude-opus-5 the dot and dash forms coincide (no dotted version segment),
- * so the dot/dash-divergence bite of this guard lives in the haiku unit
- * expectations (tests/curated-models-gateway-routes.test.js); this e2e still
- * proves the direct-gateway pick and that no openrouter/-prefixed or
- * catalog-absent id is handed onward.
+ * The direct executable id `--model opus` must resolve to. Since the
+ * 2026-11-10 pin refresh to claude-opus-5.5 the dot (OpenRouter) and dash
+ * (direct) forms diverge again, so this e2e once more proves the dot/dash
+ * guard end to end, alongside the direct-gateway pick and that no
+ * openrouter/-prefixed or catalog-absent id is handed onward.
  */
-const EXPECTED_DIRECT_ID = 'anthropic/claude-opus-5';
+const EXPECTED_DIRECT_ID = 'anthropic/claude-opus-5-5';
 
 /**
  * Fresh isolated dirs (config/env/home/cwd) plus a pre-seeded, already-fresh
@@ -107,8 +106,8 @@ function makeIsolatedDirs() {
       schemaVersion: 2,
       fetchedAt: Date.now(),
       models: [
-        { id: EXPECTED_DIRECT_ID, name: 'Claude Opus 5 (Anthropic direct)', authoritative: true },
-        { id: 'openrouter/anthropic/claude-opus-5', name: 'Claude Opus 5 (OpenRouter)', authoritative: true },
+        { id: EXPECTED_DIRECT_ID, name: 'Claude Opus 5.5 (Anthropic direct)', authoritative: true },
+        { id: 'openrouter/anthropic/claude-opus-5.5', name: 'Claude Opus 5.5 (OpenRouter)', authoritative: true },
       ],
     })
   );

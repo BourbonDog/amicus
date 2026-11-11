@@ -28,11 +28,10 @@
 const { listAliasRows } = require('./alias-state');
 const { newestSibling } = require('./model-id-siblings');
 const { findStaleAliases, suggestReplacements } = require('./alias-audit');
-const { stripGatewayPrefix } = require('./curated-models');
+const { sameModel } = require('./curated-models');
 
 const own = (obj, key) => !!obj && Object.prototype.hasOwnProperty.call(obj, key);
 const providerOf = (id) => (typeof id === 'string' ? id.split('/')[0] : '');
-const sameModel = (a, b) => typeof a === 'string' && typeof b === 'string' && stripGatewayPrefix(a) === stripGatewayPrefix(b);
 
 /** §5 rules 1–2: rows a proposal may name. */
 function candidateRows(models, failures) {

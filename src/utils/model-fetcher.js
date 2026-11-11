@@ -16,18 +16,24 @@ const { httpGetText } = require('./http-get');
  * verification — /v1/models listed claude-fable-5 and a direct smoke leg
  * served; v4.6.3 spec §3. D3 baseline, 2026-09-15: /v1/models now lists
  * claude-fable-5-1 — the row moved to match, same live-genuinely-served bar.)
+ * 2026-11-10 pin refresh: a live /v1/models fetch listed claude-opus-5-5,
+ * claude-sonnet-5-5, claude-haiku-5-5 and claude-fable-5-2, the new authored
+ * direct routes; they join the floor. The older rows stay: the same fetch
+ * still listed them, and a stored alias may name one.
  */
 const ANTHROPIC_MODELS = [
+  { id: 'anthropic/claude-opus-5-5', name: 'Claude Opus 5.5', contextLength: null, pricing: null },
+  { id: 'anthropic/claude-sonnet-5-5', name: 'Claude Sonnet 5.5', contextLength: null, pricing: null },
+  { id: 'anthropic/claude-fable-5-2', name: 'Claude Fable 5.2', contextLength: null, pricing: null },
+  { id: 'anthropic/claude-haiku-5-5', name: 'Claude Haiku 5.5', contextLength: null, pricing: null },
   { id: 'anthropic/claude-opus-5', name: 'Claude Opus 5', contextLength: null, pricing: null },
   { id: 'anthropic/claude-opus-4-8', name: 'Claude Opus 4.8', contextLength: null, pricing: null },
   { id: 'anthropic/claude-sonnet-5', name: 'Claude Sonnet 5', contextLength: null, pricing: null },
   { id: 'anthropic/claude-fable-5-1', name: 'Claude Fable 5.1', contextLength: null, pricing: null },
   { id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4.5', contextLength: null, pricing: null },
   // Dated snapshot: the id Anthropic's /v1/models actually lists, and the
-  // `haiku` direct route curated-pins.json authors
-  // (`pins.haiku.routes.anthropic`). Without it the floor (the only
-  // anthropic/ rows a keyless or OpenRouter-only user ever has) reports
-  // the shipped `haiku` default as stale.
+  // `haiku` direct route curated-pins.json authored until the 2026-11-10
+  // refresh moved it to claude-haiku-5-5. Kept because stored aliases name it.
   { id: 'anthropic/claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5 (2025-10-01)',
     contextLength: null, pricing: null },
   { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6', contextLength: null, pricing: null }

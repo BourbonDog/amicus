@@ -17,18 +17,18 @@
     },
     "gpt": {
       "routes": {
-        "openrouter": "openrouter/openai/gpt-5.6-terra"
+        "openrouter": "openrouter/openai/gpt-6.1-terra"
       },
-      "verifiedOn": "2026-08-04",
+      "verifiedOn": "2026-11-10",
       "ruling": "tracks the terra (mid) tier — owner ruling; see the idPattern comment in curated-models.js"
     },
     "opus": {
       "routes": {
-        "openrouter": "openrouter/anthropic/claude-opus-5",
-        "anthropic": "anthropic/claude-opus-5"
+        "openrouter": "openrouter/anthropic/claude-opus-5.5",
+        "anthropic": "anthropic/claude-opus-5-5"
       },
-      "verifiedOn": "2026-08-04",
-      "ruling": "anthropic route authored (divergent vendor), never derived; direct id verified against Anthropic docs"
+      "verifiedOn": "2026-11-10",
+      "ruling": "anthropic route authored (divergent vendor), never derived; direct id verified against Anthropic docs. Refreshed 2026-11-10 off claude-opus-5 (live: 5.5, $4/$20 per Mtok against $5/$25). The direct dash id anthropic/claude-opus-5-5 is READ FROM the catalog, not derived from the openrouter form."
     },
     "deepseek": {
       "routes": {
@@ -39,11 +39,11 @@
     },
     "gpt-pro": {
       "routes": {
-        "openrouter": "openrouter/openai/gpt-5.6-sol-pro"
+        "openrouter": "openrouter/openai/gpt-6.1-sol-pro"
       },
-      "verifiedOn": "2026-08-05",
+      "verifiedOn": "2026-11-10",
       "gatewayOnly": true,
-      "ruling": "tracks the SOL (premium) tier's pro sibling, priced at its base tier ($5/$30 per Mtok); retargeted off gpt-5.5-pro 2026-08-04 ($30/$180 — still served, but expected to sunset with the 5.5 line); the gpt family tracks terra. gatewayOnly (owner ruling 2026-08-05, v4.6.3 spec): OpenAI's direct namespace does not serve gpt-5.6-sol-pro — never audit the derived direct form as stale, never suggest a direct pairing."
+      "ruling": "tracks the SOL (premium) tier's pro sibling, priced at its base tier ($2/$10 per Mtok as of 2026-11-10; $5/$30 when first pinned 2026-08-05); retargeted off gpt-5.5-pro 2026-08-04 ($30/$180 — still served, but expected to sunset with the 5.5 line); the gpt family tracks terra. gatewayOnly (owner ruling 2026-08-05, v4.6.3 spec): OpenAI's direct namespace does not serve gpt-5.6-sol-pro — never audit the derived direct form as stale, never suggest a direct pairing. Refreshed 2026-11-10 to gpt-6.1-sol-pro (5.6-sol-pro had fallen to $4/$20 by then). gatewayOnly still holds: the catalog serves no bare openai/gpt-*-sol-pro row."
     },
     "codex": {
       "routes": {
@@ -53,32 +53,35 @@
     },
     "claude": {
       "routes": {
-        "openrouter": "openrouter/anthropic/claude-sonnet-5",
-        "anthropic": "anthropic/claude-sonnet-5"
+        "openrouter": "openrouter/anthropic/claude-sonnet-5.5",
+        "anthropic": "anthropic/claude-sonnet-5-5"
       },
-      "verifiedOn": "2026-08-04"
+      "verifiedOn": "2026-11-10",
+      "ruling": "Refreshed 2026-11-10 off claude-sonnet-5 (live: 5.5, same $2/$10 per Mtok). Both ids read from the catalog; the direct dash form is not derived."
     },
     "sonnet": {
       "routes": {
-        "openrouter": "openrouter/anthropic/claude-sonnet-5",
-        "anthropic": "anthropic/claude-sonnet-5"
+        "openrouter": "openrouter/anthropic/claude-sonnet-5.5",
+        "anthropic": "anthropic/claude-sonnet-5-5"
       },
-      "verifiedOn": "2026-08-04"
+      "verifiedOn": "2026-11-10",
+      "ruling": "Refreshed 2026-11-10 off claude-sonnet-5 (live: 5.5, same $2/$10 per Mtok). Both ids read from the catalog; the direct dash form is not derived."
     },
     "haiku": {
       "routes": {
-        "openrouter": "openrouter/anthropic/claude-haiku-4.5",
-        "anthropic": "anthropic/claude-haiku-4-5-20251001"
+        "openrouter": "openrouter/anthropic/claude-haiku-5.5",
+        "anthropic": "anthropic/claude-haiku-5-5"
       },
-      "verifiedOn": "2026-08-04"
+      "verifiedOn": "2026-11-10",
+      "ruling": "Refreshed 2026-11-10 off claude-haiku-4.5. The successor the catalog serves is UNDATED, unlike the retired direct pin anthropic/claude-haiku-4-5-20251001, so anthropic/claude-haiku-5-5 is read from the catalog and never derived from the dated id. Output ceiling rises 64000 -> 128000 and the price falls $1/$5 -> $0.10/$0.50 per Mtok."
     },
     "fable": {
       "routes": {
-        "openrouter": "openrouter/anthropic/claude-fable-5.1",
-        "anthropic": "anthropic/claude-fable-5-1"
+        "openrouter": "openrouter/anthropic/claude-fable-5.2",
+        "anthropic": "anthropic/claude-fable-5-2"
       },
-      "verifiedOn": "2026-09-15",
-      "ruling": "Calibration for 9.15.2026 — openrouter route moved to 5.1 in the D3 baseline session; direct route anthropic/claude-fable-5-1 authored by hand from the catalog (divergent vendor: the picker cannot compare Anthropic's dash ids). Direct route first authored 2026-08-05 (v4.6.3 spec §3, owner ruling R2)."
+      "verifiedOn": "2026-11-10",
+      "ruling": "Calibration for 9.15.2026 — openrouter route moved to 5.1 in the D3 baseline session; direct route anthropic/claude-fable-5-1 authored by hand from the catalog (divergent vendor: the picker cannot compare Anthropic's dash ids). Direct route first authored 2026-08-05 (v4.6.3 spec §3, owner ruling R2). Refreshed 2026-11-10 off 5.1 (live: 5.2, $8/$40 per Mtok against $10/$50); anthropic/claude-fable-5-2 is served by the catalog, so the dash id is still authored from it rather than derived."
     },
     "qwen": {
       "routes": {

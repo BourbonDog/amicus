@@ -520,7 +520,7 @@ async function runReadlineSetup() {
     }
 
     const { resolveQuickPicks, toStorableRoute } = require('../utils/quick-picks');
-    const { stripGatewayPrefix } = require('../utils/curated-models');
+    const { sameModel } = require('../utils/curated-models');
     const picks = resolveQuickPicks(catalog);
 
     console.log('Choose your default model:');
@@ -557,7 +557,7 @@ async function runReadlineSetup() {
       if (pick && !chosen.noUpgrade && !vendorAliasesWritten.has(chosen.alias)) {
         const live = toStorableRoute(pick, { models: catalog, providerFailures });
         const shipped = getDefaultAliases()[chosen.alias];
-        if (live && stripGatewayPrefix(live) !== stripGatewayPrefix(shipped)) {
+        if (live && !sameModel(live, shipped)) {
           cfg.aliases[chosen.alias] = live;
           console.log(`${chosen.alias} → ${live} (live flagship differs from the shipped ${shipped} — pinned)`);
         }

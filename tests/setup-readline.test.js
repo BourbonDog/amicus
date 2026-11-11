@@ -149,6 +149,29 @@ describe('runReadlineSetup (live picks, no clobber)', () => {
     console.log.mockRestore();
   });
 
+  // The negative half for a DIVERGENT vendor (PR #298): a live pick that is the
+  // shipped pair's OpenRouter (dot) form names the shipped model, whose pin is
+  // the direct (dash) form. A raw strip comparison saw two strings and pinned it.
+  test('Q9 negative half, divergent vendor: the shipped pair\'s OpenRouter form is not "different", nothing is pinned', async () => {
+    const routes = require('../src/utils/curated-models').toGatewayRoutes().haiku;
+    const { resolveQuickPicks } = require('../src/utils/quick-picks');
+    resolveQuickPicks.mockReturnValueOnce([
+      { alias: 'haiku', label: 'Claude Haiku', blurb: 'fast', vendorPath: 'anthropic',
+        source: 'live', routes: { openrouter: routes.openrouter } },
+    ]);
+    const { loadConfig, saveConfig } = require('../src/utils/config');
+    loadConfig.mockReturnValue(null);
+    mockReadline('1');
+    const logs = [];
+    jest.spyOn(console, 'log').mockImplementation((s) => logs.push(String(s)));
+    const { runReadlineSetup } = require('../src/sidecar/setup');
+    await runReadlineSetup();
+    const written = saveConfig.mock.calls.at(-1)[0];
+    expect(written.aliases.haiku).toBeUndefined();
+    expect(logs.some(l => l.includes('haiku') && l.includes('differs from the shipped'))).toBe(false);
+    console.log.mockRestore();
+  });
+
   test('invalid input does not write config', async () => {
     mockReadline('xyz');
     const { loadConfig, saveConfig } = require('../src/utils/config');

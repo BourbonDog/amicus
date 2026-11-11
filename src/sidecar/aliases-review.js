@@ -30,7 +30,7 @@
 
 'use strict';
 
-const { stripGatewayPrefix } = require('../utils/curated-models');
+const { sameModel } = require('../utils/curated-models');
 const { gatedCatalogIds } = require('../utils/alias-proposals');
 const { safeFragment, collapseExcerpt } = require('../utils/text-sanitize');
 const { menuFor, menuLineText, renderScreen, refreshingCatalogLine } = require('./aliases-review-render');
@@ -59,11 +59,6 @@ function defaultDeps() {
     effectiveAliasNames: () => new Set(Object.keys(d.config.getEffectiveAliases())),
     now: () => Date.now(),
   };
-}
-
-/** @returns {boolean} true when two ids name the same model once gateway prefixes are normalized */
-function sameModel(a, b) {
-  return typeof a === 'string' && typeof b === 'string' && stripGatewayPrefix(a) === stripGatewayPrefix(b);
 }
 
 /** @returns {string} `base`, or the first `${base}-2`, `${base}-3`, … not already in `taken` */
