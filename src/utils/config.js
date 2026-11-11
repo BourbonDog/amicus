@@ -58,7 +58,7 @@ function loadConfig() {
 /**
  * loadConfig() returns null for an unparseable file and callers do
  * `loadConfig() || {}` then saveConfig — so before overwriting, copy a
- * non-empty file that fails JSON.parse to config.json.corrupt-<ms>. Throws
+ * non-empty file that fails JSON.parse to config.json.corrupt-<ms>-<pid>-<hex>. Throws
  * (refusing the write) if the file exists but cannot be read or copied.
  * Same idea as model-validator.js's malformed-config refusal, in one place.
  */
@@ -72,7 +72,8 @@ function preserveUnparseableConfig(filePath) {
   }
   if (!content.trim()) { return; }
   try { JSON.parse(content); return; } catch { /* unparseable — keep a copy below */ }
-  const backup = `${filePath}.corrupt-${Date.now()}`;
+  // pid + random suffix: two saves in the same ms must not collide under COPYFILE_EXCL.
+  const backup = `${filePath}.corrupt-${Date.now()}-${process.pid}-${require('crypto').randomBytes(3).toString('hex')}`;
   fs.copyFileSync(filePath, backup, fs.constants.COPYFILE_EXCL);
   try {
     process.stderr.write(`Warning: ${filePath} was not valid JSON; saved the original to ${backup} before writing a new config.\n`);

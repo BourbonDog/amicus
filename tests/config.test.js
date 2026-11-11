@@ -160,6 +160,24 @@ describe('Sidecar Config Module', () => {
       expect(backups).toHaveLength(1);
       expect(fs.readFileSync(path.join(tempDir, backups[0]), 'utf-8')).toBe(broken);
     });
+
+    it('should keep two corrupt copies made in the same millisecond', () => {
+      const broken = '{ "default": "gemini", }';
+      const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1700000000000);
+      const config = loadModule();
+      try {
+        for (let i = 0; i < 2; i++) {
+          fs.writeFileSync(path.join(tempDir, 'config.json'), broken);
+          config.saveConfig({ default: 'gpt' });
+        }
+      } finally {
+        nowSpy.mockRestore();
+        stderrSpy.mockRestore();
+      }
+      const backups = fs.readdirSync(tempDir).filter((f) => f.startsWith('config.json.corrupt-'));
+      expect(backups).toHaveLength(2);
+    });
   });
 
   describe('getDefaultAliases', () => {
