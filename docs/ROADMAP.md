@@ -13,7 +13,7 @@ lives under **Backlog (tracked, not scheduled)** with everything else that is re
 Nothing about the content changed and no judgment about its value is implied; only its status. When
 an org buyer and the org to support them exist, it earns a number then.
 
-Amicus is at **v4.15.0** (2026-11-10). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.16.0** (2026-11-11). Each 4.x rev below leads with the benefit, not the
 plumbing; the patch releases (v4.9.1–v4.9.8 and v4.14.1–v4.14.3) carry no section of their own, because each corrected a
 defect rather than adding scope — where one added a surface (v4.9.4's `--thinking` refusals and
 `output-budget` doctor row, v4.9.5's Electron digest gate, v4.9.6's artifact custody, v4.9.7's dual name-table rescue boundary, v4.9.8's per-run seat tool allowlist and its unverified/refused seat census, v4.14.1's `none` conformance for a row nothing checked, v4.14.2's refusals of a council folder that already holds a run, of an Electron artifact the trusted table does not list and of a `path.txt` outside `dist/`, v4.14.3's re-test of a stored key from the setup window, which never hands the key to the window) it did so to
@@ -24,9 +24,10 @@ shipped one does (the no-output backstop asks the engine before it kills), and v
 what a council accepts as a review (an answer given only in the reasoning channel is not one),
 and v4.15.0 removed a provider request no reader could see (an unnamed engine session made the
 engine mint its own title, carrying the leg's full prompt at the leg's own output reservation,
-and reporting no usage at all), so each gets a section. See `CHANGELOG.md` for what each one contained.
+and reporting no usage at all), and v4.16.0 changed what a failed read may do (it may no
+longer overwrite the file it failed to read), so each gets a section. See `CHANGELOG.md` for what each one contained.
 
-**Status:** v4.0 through **v4.15.0** have **shipped**, plus the v4.9.1–v4.9.8, v4.14.1, v4.14.2 and v4.14.3 patch releases —
+**Status:** v4.0 through **v4.16.0** have **shipped**, plus the v4.9.1–v4.9.8, v4.14.1, v4.14.2 and v4.14.3 patch releases —
 everything on this page is a record of what landed, not a plan. Composition — the scope that
 carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
 release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
@@ -678,6 +679,41 @@ all blind to it. Every session amicus creates is now named, so the request is ne
 > asked the engine to make. Naming the session is the whole fix; the keyless probe is what
 > keeps it fixed, because the council workflow installs `amicus@latest` and would otherwise
 > notice only when a bill grew.
+
+## v4.16 — "A failed read never costs you the file" *(a whole-repo audit — #299; with the pin refresh and drift fixes of #297 and #298)* — ✅ SHIPPED v4.16.0, 2026-11-11
+**Benefit:** a file amicus could not read is no longer a file amicus may overwrite. One
+trailing comma in `~/.claude.json` used to cost every other MCP server registered there; a
+typo in `config.json` cost every alias and preset; an antivirus lock on `run.json` shrank a
+council's record to a stub. Each now keeps the original (left untouched, or copied aside) and
+says so. The same audit closed two ways out of the project root and turned a default-open
+DevTools port off.
+
+- **★ No overwrite after a failed read** — Claude config registration leaves an unparseable
+  file untouched and fails `amicus init`'s step; `saveConfig` copies an unparseable
+  `config.json` aside before writing; council `run.json` and the session index treat only a
+  missing file as empty; Windows atomic writes retry a briefly locked target; a ledger
+  re-tally appends only the rows it is missing. Each fix carries a test that failed on the old
+  code. *(M)*
+- **★ The project root is a fence again** — MCP project paths are resolved (`..` collapsed,
+  symlinks judged by their target) before the allowed-roots check, `parentSession` must be a
+  session id, and a session file that links outside its directory is refused. Case is ignored
+  only on Windows and on a macOS volume that itself ignores case. *(M)*
+- **Current-generation pins, read as one model across gateways** — seven curated pins move to
+  the live catalog's current ids, and an Anthropic pin's dotted OpenRouter form and dashed
+  direct form now count as the same model, so pinning one no longer raises a false
+  "different model" notice. `models --check --json` now carries the pinned-fallback drift the
+  text output already printed. (#298, #297) *(S)*
+- **No hang on a wedged engine** — every abort, the final poll, the startup health check, the
+  tool listing and each owned-server shutdown are time-bounded. *(S)*
+- **A smaller, honest package surface** — amicus is CLI-only: `exports` named a file that
+  never existed, so `require('amicus')` had failed since v0.3.0; four dead modules, a
+  never-emitted notice, about a dozen uncalled helpers and the `dotenv` dependency are gone.
+  *(S)*
+- **Opt-in DevTools port** — Electron windows open a Chrome DevTools port only when
+  `AMICUS_DEBUG_PORT` is set. *(S)*
+> Why here: these are the failures a user meets once and never forgives: a config file they
+> did not know amicus touched comes back empty. None needed new scope, so they waited for an
+> audit to find them together; the release ships them before any new feature does.
 
 ## Backlog (tracked, not scheduled)
 
