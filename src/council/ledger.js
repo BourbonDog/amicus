@@ -232,8 +232,11 @@ function appendRun(record, opts = {}) {
   const dir = opts.dir || getConfigDir();
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, LEDGER_FILE);
+  // Idempotent per run: a re-tally of a run already in the ledger would double-weight its rows.
+  const runId = record && record.meta && record.meta.runId;
+  if (typeof runId === 'string' && runId && readRows(dir).some(r => r.runId === runId)) { return []; }
   const rows = buildLedgerRows(record);
-  for (const row of rows) { fs.appendFileSync(file, JSON.stringify(row) + '\n'); }
+  if (rows.length) { fs.appendFileSync(file, rows.map(r => JSON.stringify(r) + '\n').join('')); }
   return rows;
 }
 

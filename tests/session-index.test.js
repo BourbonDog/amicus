@@ -82,4 +82,20 @@ describe('session-index (global taskId -> project map)', () => {
     expect(() => recordSession('task-a', '/home/me/projA')).not.toThrow();
     expect(lookupSessionProject('task-a')).toBe('/home/me/projA');
   });
+
+  it('an index it cannot read (EBUSY lock) is left alone, not overwritten with one row', () => {
+    recordSession('task-a', '/home/me/projA');
+    recordSession('task-b', '/home/me/projB');
+    const indexPath = path.join(configDir, INDEX_FILENAME);
+    const before = fs.readFileSync(indexPath, 'utf-8');
+    const real = fs.readFileSync;
+    const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((p, ...rest) => {
+      if (String(p).endsWith(INDEX_FILENAME)) { throw Object.assign(new Error('busy'), { code: 'EBUSY' }); }
+      return real.call(fs, p, ...rest);
+    });
+    try {
+      expect(() => recordSession('task-c', '/home/me/projC')).not.toThrow();
+    } finally { spy.mockRestore(); }
+    expect(fs.readFileSync(indexPath, 'utf-8')).toBe(before);
+  });
 });

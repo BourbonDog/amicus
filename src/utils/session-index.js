@@ -39,15 +39,23 @@ function indexPath() {
  * @returns {Record<string, string>}
  */
 function readIndex() {
-  try {
-    const raw = fs.readFileSync(indexPath(), 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed;
-    }
-  } catch {
-    // Missing / unreadable / corrupt — fall through to a fresh map.
+  try { return parseIndex(readRaw()); } catch { return {}; }
+}
+
+/** Index text, '' when missing; throws on any other read error (e.g. a Windows file lock). */
+function readRaw() {
+  try { return fs.readFileSync(indexPath(), 'utf-8'); } catch (err) {
+    if (err.code === 'ENOENT') { return ''; }
+    throw err;
   }
+}
+
+/** Parse index text; corrupt/non-object content yields a fresh map. */
+function parseIndex(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) { return parsed; }
+  } catch { /* corrupt — fresh map */ }
   return {};
 }
 
@@ -67,7 +75,9 @@ function recordSession(taskId, project) {
   try {
     const dir = getConfigDir();
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const index = readIndex(); // already guarded; corrupt -> {}
+    // corrupt -> {}; an index we cannot READ throws -> write skipped, so the
+    // existing rows are never replaced by a one-entry map.
+    const index = parseIndex(readRaw());
     index[taskId] = canonical;
     const target = path.join(dir, INDEX_FILENAME);
     // Atomic (temp + rename); writeFileAtomic mints a unique temp name per call

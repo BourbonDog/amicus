@@ -208,6 +208,17 @@ test('writeVerdictAtomic writes valid JSON via rename', () => {
   expect(JSON.parse(fs.readFileSync(file, 'utf-8')).runId).toBe('av-receiver-council');
 });
 
+test('writeVerdictAtomic leaves no temp file behind when the rename fails', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verdict-'));
+  const spy = jest.spyOn(fs, 'renameSync').mockImplementation(() => {
+    throw Object.assign(new Error('nope'), { code: 'EXDEV' });
+  });
+  try {
+    expect(() => writeVerdictAtomic(path.join(dir, 'verdict.json'), buildVerdict(record, []))).toThrow('nope');
+  } finally { spy.mockRestore(); }
+  expect(fs.readdirSync(dir)).toEqual([]);
+});
+
 // v4.9 W5.3: buildVerdict forwards the tally record's meta.intent — the same
 // emit-when-'task' idiom as run.json and meta (spec §5.3 as amended by the
 // W4/W5 plan's §7.5 byte-identity ruling). The verdict literal is a RENAMING

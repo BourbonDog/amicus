@@ -317,3 +317,21 @@ describe('otherRunInDir (D-04, SL-4)', () => {
     expect(rs.otherRunInDir(dir, 'r1')).toEqual({ runId: null });
   });
 });
+
+describe('read-merge-write never overwrites a run.json it could not read', () => {
+  test('a locked run.json (EBUSY) makes checkpoint throw and leaves the file intact', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'aborted', bench: ['a'] });
+    const before = fs.readFileSync(path.join(runDirOf(), 'run.json'), 'utf-8');
+    const real = fs.readFileSync;
+    const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((p, ...rest) => {
+      if (String(p).endsWith('run.json')) { throw Object.assign(new Error('busy'), { code: 'EBUSY' }); }
+      return real.call(fs, p, ...rest);
+    });
+    try {
+      expect(() => rs.checkpoint(runDirOf(), { stage: 'x' })).toThrow('busy');
+      expect(() => rs.updateStage(runDirOf(), 's1', { status: 'running' })).toThrow('busy');
+    } finally { spy.mockRestore(); }
+    expect(fs.readFileSync(path.join(runDirOf(), 'run.json'), 'utf-8')).toBe(before);
+    expect(rs.readRun(runDirOf())).toMatchObject({ runId: 'abc123', status: 'aborted' });
+  });
+});

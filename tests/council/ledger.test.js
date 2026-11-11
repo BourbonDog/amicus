@@ -113,7 +113,8 @@ test('peersOnly:null rows are excluded from the average', () => {
   const r2 = { ...record, streetCred: record.streetCred.map(s =>
     s.model === 'gpt' ? { ...s, peersOnly: null } : s) };
   appendRun(record, { dir });   // gpt peersOnly 1.0
-  appendRun(r2, { dir });       // gpt peersOnly null → ignored
+  // a distinct runId: appendRun skips a runId already in the ledger
+  appendRun({ ...r2, meta: { ...r2.meta, runId: 'av-receiver-council-2' } }, { dir }); // gpt peersOnly null → ignored
   const gpt = deriveReliability({ dir }).find(a => a.model === 'gpt');
   expect(gpt.avgStreetCredPeersOnly).toBeCloseTo(1.0);
 });
@@ -1479,4 +1480,14 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     expect(rows[1]).toMatchObject({ model: 'ds', resolvedModel: 'v/ds-turbo', wasChair: true, role: 'chair' });
     expect(rows[2]).toMatchObject({ model: 'gpt', resolvedModel: 'v/gpt', wasChair: false, role: 'seat' });
   });
+});
+
+test('appendRun is idempotent per runId: a re-tally of the same run appends nothing', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-'));
+  const first = appendRun(record, { dir });
+  const file = path.join(dir, 'council-ledger.jsonl');
+  const before = fs.readFileSync(file, 'utf-8');
+  expect(first.length).toBeGreaterThan(0);
+  expect(appendRun(record, { dir })).toEqual([]);
+  expect(fs.readFileSync(file, 'utf-8')).toBe(before);
 });

@@ -16,7 +16,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { writeFileAtomic } = require('../utils/atomic-write');
+const { writeFileAtomic, sleepSync } = require('../utils/atomic-write');
 const { SESSIONS_DIR } = require('../session-manager');
 
 const RUN_FILE = 'run.json';
@@ -52,6 +52,22 @@ function readRun(runDir) {
   catch { return null; }
 }
 
+/**
+ * run.json for a read-merge-write: {} ONLY when the file is missing. Any other
+ * read/parse failure (e.g. Windows antivirus holding the file) is retried
+ * briefly, then thrown — merging a patch into {} would shrink run.json to a
+ * stub and lose runId/bench and an 'aborted' status.
+ */
+function readRunForWrite(runDir) {
+  for (let i = 0; ; i++) {
+    try { return JSON.parse(fs.readFileSync(runPath(runDir), 'utf-8')) || {}; } catch (err) {
+      if (err.code === 'ENOENT') { return {}; }
+      if (i >= 4) { throw err; }
+      sleepSync(25 * (i + 1));
+    }
+  }
+}
+
 /** Abort-wins merge: once status is 'aborted', it cannot change to anything else. */
 function mergeRun(existing, patch) {
   const merged = { ...existing, ...patch };
@@ -77,7 +93,7 @@ function writeRun(runDir, run) {
 /** Create (or merge into) run.json; preserves an existing createdAt. */
 function initRun(runDir, seed) {
   fs.mkdirSync(runDir, { recursive: true, mode: 0o700 });
-  const existing = readRun(runDir) || {};
+  const existing = readRunForWrite(runDir);
   const run = mergeRun(existing, {
     ...seed,
     createdAt: existing.createdAt || seed.createdAt,
@@ -134,13 +150,13 @@ function initCouncilRun(o) {
 
 /** Read-merge-write checkpoint (atomic; abort-wins on status). */
 function checkpoint(runDir, patch) {
-  const existing = readRun(runDir) || {};
+  const existing = readRunForWrite(runDir);
   return writeRun(runDir, mergeRun(existing, patch));
 }
 
 /** Upsert one stages[] entry by name; other stages and order preserved. */
 function updateStage(runDir, name, patch) {
-  const existing = readRun(runDir) || {};
+  const existing = readRunForWrite(runDir);
   const stages = Array.isArray(existing.stages) ? existing.stages.slice() : [];
   const i = stages.findIndex(s => s && s.name === name);
   if (i === -1) { stages.push({ name, ...patch }); }
@@ -156,7 +172,7 @@ function updateStage(runDir, name, patch) {
  * this list to mark every in-flight leg instead of relying on the pid kill.
  */
 function appendStageWave(runDir, name, waveId) {
-  const existing = readRun(runDir) || {};
+  const existing = readRunForWrite(runDir);
   const stage = (existing.stages || []).find(s => s && s.name === name) || {};
   const waveIds = Array.isArray(stage.waveIds) ? stage.waveIds : [];
   if (waveIds.includes(waveId)) { return existing; }

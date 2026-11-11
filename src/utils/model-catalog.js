@@ -14,6 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { writeFileAtomic } = require('./atomic-write');
 
 // Lazy-load these so jest.doMock() in tests can intercept them after
 // this module is first required (the test pattern re-mocks mid-test).
@@ -61,15 +62,10 @@ function readCacheDocLoose() {
 
 /** Write the cache atomically (tmp+rename). Best-effort; never throws. @param {object} doc full cache document */
 function writeCacheDoc(doc) {
-  const target = catalogPath();
-  const tmp = `${target}.${process.pid}.tmp`;
   try {
     fs.mkdirSync(_getConfigDir(), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(tmp, JSON.stringify(doc, null, 2), { mode: 0o600 });
-    fs.renameSync(tmp, target);
-  } catch {
-    try { fs.unlinkSync(tmp); } catch { /* best-effort */ }
-  }
+    writeFileAtomic(catalogPath(), JSON.stringify(doc, null, 2), { mode: 0o600 });
+  } catch { /* best-effort; writeFileAtomic removed its tmp */ }
 }
 
 /**
