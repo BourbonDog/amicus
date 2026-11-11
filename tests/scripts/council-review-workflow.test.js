@@ -747,6 +747,11 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // Echoed branch names are backtick-stripped like the subjects.
       expect(step).toContain("SAFE_HEAD=$(printf '%s' \"$HEAD_REF\" | tr -d '`')");
       expect(step).not.toMatch(/echo .*\$\{HEAD_REF\}/);
+      // Round 3: the tag is echoed backtick-stripped too, and a truncated list
+      // (>80) downgrades an unmatched entry to unverified rather than a blocker.
+      expect(step).toContain("SAFE_TAG=$(printf '%s' \"$LAST_TAG\" | tr -d '`')");
+      expect(step).not.toMatch(/echo .*\$\{LAST_TAG\}/);
+      expect(step).toContain('report it as unverified, not as a blocker');
       expect(step).toContain('Release cut (context, NOT part of the diff)');
       // An API failure is a notice and the framing still ships, never a dead step.
       expect(step).toContain('could not be listed');
