@@ -209,9 +209,9 @@ describe('resolveRouteForLaunch — gatewayIds bridging for curated aliases (Tas
   const { toGatewayRoutes, toDefaultAliases } = require('../src/utils/curated-models');
   const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-5-5', openrouter: 'openrouter/anthropic/claude-opus-5.5' }
   const opusDefault = toDefaultAliases().opus; // whatever config stores as the effective alias today
-  // haiku is the surviving divergent-FORM alias (dash+date direct vs dot OR);
-  // the opus-5 pin (2026-08-04) unified opus's two forms, so the dot-vs-dash
-  // regression tests below ride haiku now.
+  // Since the 2026-11-10 refresh every shipped Anthropic alias has divergent
+  // forms (dash direct vs dot OR); the dot-vs-dash regression tests below ride
+  // opus and haiku.
   const haikuRoutes = toGatewayRoutes().haiku; // { direct: 'anthropic/claude-haiku-5-5', openrouter: 'openrouter/anthropic/claude-haiku-5.5' }
   const haikuDefault = toDefaultAliases().haiku;
 

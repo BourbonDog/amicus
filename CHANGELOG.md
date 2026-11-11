@@ -28,7 +28,7 @@ All notable changes to Amicus are documented here. Format follows
   stay. A stored alias that names an old id keeps working, since each one is still served. It
   is not migrated: `amicus aliases --review` offers the move. The frontier council bench
   (`gpt-pro`, `opus`, `gemini-pro`) is unchanged, but note that its "priciest per vendor"
-  premise no longer holds for OpenAI: `codex` now out-prices `gpt-pro`.
+  premise no longer holds: `codex` now out-prices `gpt-pro`, and `fable` out-prices `opus`.
 
 ### CI
 
@@ -47,7 +47,8 @@ All notable changes to Amicus are documented here. Format follows
   it as off the shipped pin, the alias list dropped its "same model as shipped, other gateway"
   note, and setup could pin the gateway form "because it differs". One shared `sameModel`
   (`src/utils/curated-models.js`) now also equates the two forms of any SHIPPED route pair, and
-  all five sites use it. It never rewrites dots to dashes, so an uncurated id is not matched by
+  all five sites use it. It matches a pair only by its exact ids and never rewrites dots to
+  dashes, so neither an uncurated id nor a bare dotted id (served by no gateway) is matched by
   guesswork.
 
 ## [4.15.0] - 2026-11-10

@@ -275,18 +275,18 @@ function toDefaultAliases() {
  * `openrouter/anthropic/claude-haiku-4.5` and `anthropic/claude-haiku-4-5-20251001`
  * strip to different strings, and comparing raw strips called a pin of the
  * shipped OpenRouter form "a different model" (false shadow notices, review
- * rows and setup pins). Only SHIPPED pairs are equated: no dot/dash rewriting,
- * so an uncurated divergent id is never fabricated into a match.
+ * rows and setup pins). Only SHIPPED pairs are equated, and only by their
+ * EXACT ids: no dot/dash rewriting, and the OpenRouter route is never stripped
+ * here, so a bare dotted `anthropic/claude-haiku-5.5` (served by neither
+ * gateway) is not matched (PR #298 council, D1).
  * @param {*} a @param {*} b @returns {boolean}
  */
 function sameModel(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') { return false; }
-  const sa = stripGatewayPrefix(a);
-  const sb = stripGatewayPrefix(b);
-  if (sa === sb) { return true; }
+  if (stripGatewayPrefix(a) === stripGatewayPrefix(b)) { return true; }
   for (const r of Object.values(toGatewayRoutes())) {
-    const forms = [r.direct, stripGatewayPrefix(r.openrouter)];
-    if (forms.includes(sa) && forms.includes(sb)) { return true; }
+    const forms = [r.direct, r.openrouter];
+    if (forms.includes(a) && forms.includes(b)) { return true; }
   }
   return false;
 }

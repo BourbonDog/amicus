@@ -40,6 +40,18 @@ describe('sameModel', () => {
     expect(sameModel('openrouter/anthropic/claude-zeta-9.9', 'anthropic/claude-zeta-9-9')).toBe(false);
   });
 
+  // PR #298 council D1: the pair rule once compared the STRIPPED OpenRouter
+  // route, so a bare dotted direct id (served by neither gateway) matched.
+  test('a bare dotted id (the stripped OpenRouter form) is NOT the shipped direct id', () => {
+    const { toGatewayRoutes, stripGatewayPrefix, sameModel } = require('../../src/utils/curated-models');
+    for (const alias of ['opus', 'haiku', 'fable']) {
+      const r = toGatewayRoutes()[alias];
+      const bareDotted = stripGatewayPrefix(r.openrouter);
+      expect(bareDotted).not.toBe(r.direct); // premise: the forms diverge
+      expect({ alias, same: sameModel(bareDotted, r.direct) }).toEqual({ alias, same: false });
+    }
+  });
+
   test('two different shipped models are different, whichever gateway form', () => {
     const { toGatewayRoutes, sameModel } = require('../../src/utils/curated-models');
     const r = toGatewayRoutes();

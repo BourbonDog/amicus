@@ -55,9 +55,11 @@ const BUDGET_ALIASES = ['minimax', 'qwen-coder', 'deepseek'];
  * logic above is unchanged.)
  * ⚠️ 2026-11-10 pin refresh (gpt-pro → gpt-6.1-sol-pro, opus → claude-opus-5.5,
  * prices above re-read from the live catalog): the "highest-priced per family"
- * premise no longer holds for OpenAI. `codex` (gpt-5.3-codex, $1.75 / $14 per
- * Mtok) now out-prices gpt-pro ($2 / $10). The bench is a static owner choice,
- * so it was left as is; re-picking it is an open question, not a silent edit.
+ * premise no longer holds for OpenAI or Anthropic: `codex` (gpt-5.3-codex,
+ * $1.75 / $14 per Mtok) out-prices gpt-pro ($2 / $10), and `fable`
+ * (claude-fable-5.2, $8 / $40) out-prices opus ($4 / $20). The bench is a
+ * static owner choice, so it was left as is; re-picking it is an open
+ * question, not a silent edit.
  */
 const FRONTIER_ALIASES = ['gpt-pro', 'opus', 'gemini-pro'];
 
