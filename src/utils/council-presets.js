@@ -42,8 +42,8 @@ const BUDGET_ALIASES = ['minimax', 'qwen-coder', 'deepseek'];
 /**
  * Frontier bench: three premium-flagship DEFAULT_ALIASES entries, one per
  * vendor family, verified against the same catalog snapshot:
- *   gpt-pro     openrouter/openai/gpt-5.6-sol-pro      $0.000005 / $0.00003
- *   opus        openrouter/anthropic/claude-opus-5     $0.000005 / $0.000025
+ *   gpt-pro     openrouter/openai/gpt-6.1-sol-pro      $0.000002 / $0.00001
+ *   opus        openrouter/anthropic/claude-opus-5.5   $0.000004 / $0.00002
  *   gemini-pro  openrouter/google/gemini-3.1-pro-preview  $0.000002 / $0.000012
  * These are the three highest total (prompt+completion) prices in
  * DEFAULT_ALIASES that are also each a distinct vendor family (OpenAI /
@@ -53,6 +53,13 @@ const BUDGET_ALIASES = ['minimax', 'qwen-coder', 'deepseek'];
  * gpt-pro retargeted to gpt-5.6-sol-pro on 2026-08-04 — cheaper than the
  * old gpt-5.5-pro pin but still OpenAI's premium tier, so the selection
  * logic above is unchanged.)
+ * ⚠️ 2026-11-10 pin refresh (gpt-pro → gpt-6.1-sol-pro, opus → claude-opus-5.5,
+ * prices above re-read from the live catalog): the "highest-priced per family"
+ * premise no longer holds for OpenAI or Anthropic: `codex` (gpt-5.3-codex,
+ * $1.75 / $14 per Mtok) out-prices gpt-pro ($2 / $10), and `fable`
+ * (claude-fable-5.2, $8 / $40) out-prices opus ($4 / $20). The bench is a
+ * static owner choice, so it was left as is; re-picking it is an open
+ * question, not a silent edit.
  */
 const FRONTIER_ALIASES = ['gpt-pro', 'opus', 'gemini-pro'];
 

@@ -266,6 +266,24 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(t.out()).toContain('✓ glm now follows the shipped recommendation (openrouter/z-ai/glm-5.3)');
   });
 
+  // M3 for a DIVERGENT vendor: the shipped haiku pin is Anthropic's dash id;
+  // typing its OpenRouter dot form names the same model and must follow, not
+  // pin a redundant copy. A raw strip comparison saw two different strings.
+  test('M3 (divergent vendor): typing the shipped pair\'s OpenRouter form follows, never pins a copy', async () => {
+    const routes = require('../../src/utils/curated-models').toGatewayRoutes().haiku;
+    const haiku = {
+      alias: 'haiku', state: 'pinned', current: 'openrouter/anthropic/claude-haiku-0.1', shipped: routes.direct, curated: true,
+      reasons: ['differs-from-shipped'],
+      candidates: [{ id: routes.direct, why: 'follow', evidence: {} }],
+      dismissKey: `haiku@${routes.direct}`,
+    };
+    // one candidate → menu: 1 follow, 2 choose another, 3 skip, 4 never ask again
+    const t = makeDeps({ proposals: [haiku], answers: ['2', routes.openrouter], models: [{ id: routes.openrouter }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.writes.removeAlias).toEqual(['haiku']);
+    expect(t.writes.addAlias).toEqual([]);
+  });
+
   // R1 (#249 r2 A1/C2): typing the shipped id IS the menu's `follow` action,
   // exempt from BOTH the §5 display gate and the freshness gate -- it
   // removes a key rather than writing a catalog-vouched one. Mutant

@@ -45,13 +45,23 @@
     "rows, not a reading of the warm deepseek ceiling. tests/ci-council-bench-config.test.js",
     "pins the bound; council-review.yml's pre-flight step fails the run before any",
     "spend on a budget above it, or on one amicus would reject outright (a string, a",
-    "zero, a non-number) and silently replace with the 32000 default."
+    "zero, a non-number) and silently replace with the 32000 default.",
+    "",
+    "2026-11-10: the gpt pin moved 5.6-terra -> 6.1-terra (alias-pin-drift.yml, #295).",
+    "The new id's OpenRouter catalogue row reports maxOutputTokens 128000 -- the same",
+    "number 5.6-terra was measured at -- so outputBudget 64000 still lands unclamped on",
+    "this seat. That is a CATALOGUE READ, not a fresh measurement on the wire. The",
+    "ceilings recorded above were measured 2026-09-09 against the ids named there, so",
+    "the gpt line is left standing as that historical measurement, not rewritten. The",
+    "two rows that actually BIND 64000 -- the chair (google/gemini-3.1-pro-preview) and",
+    "deepseek/deepseek-v4-flash-0731 -- are untouched here, so the 65536 bound and the",
+    "budget both still hold."
   ],
   "outputBudget": 64000,
   "aliases": {
     "glm": "openrouter/z-ai/glm-5.3",
     "qwen": "openrouter/qwen/qwen3.8-27b",
-    "gpt": "openrouter/openai/gpt-5.6-terra",
+    "gpt": "openrouter/openai/gpt-6.1-terra",
     "kimi": "openrouter/moonshotai/kimi-k3",
     "deepseek": "openrouter/deepseek/deepseek-v4-flash-0731",
     "gemini-pro": "openrouter/google/gemini-3.1-pro-preview"

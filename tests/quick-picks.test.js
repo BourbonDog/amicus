@@ -138,14 +138,16 @@ describe('divergent-vendor routes are never derived by prefix-stripping', () => 
   });
 
   test.each([
-    ['openrouter + direct', ['openrouter/anthropic/claude-opus-5', 'anthropic/claude-opus-5'], 'anthropic/claude-opus-5'],
-    ['direct only', ['anthropic/claude-opus-5'], 'anthropic/claude-opus-5'],
-    ['openrouter only', ['openrouter/anthropic/claude-opus-5'], 'anthropic/claude-opus-5'],
+    ['openrouter + direct', ['openrouter/anthropic/claude-opus-5.5', 'anthropic/claude-opus-5-5'], 'anthropic/claude-opus-5-5'],
+    ['direct only', ['anthropic/claude-opus-5-5'], 'anthropic/claude-opus-5-5'],
+    // Since the 2026-11-10 refresh the CURRENT pin is dotted on OpenRouter, so
+    // this row alone exercises the guard: a strip would store claude-opus-5.5.
+    ['openrouter only', ['openrouter/anthropic/claude-opus-5.5'], 'anthropic/claude-opus-5-5'],
     // A catalog still on the dotted 4.8 era (older than the 2026-08-04 pins)
     // keeps this guard's dot/dash bite alive: the seed must be the catalog's
     // own direct dash row — or the authored direct fallback when the catalog
     // offers no direct row — NEVER the prefix-stripped dot id.
-    ['stale dotted openrouter-only', ['openrouter/anthropic/claude-opus-4.8'], 'anthropic/claude-opus-5'],
+    ['stale dotted openrouter-only', ['openrouter/anthropic/claude-opus-4.8'], 'anthropic/claude-opus-5-5'],
     ['stale dotted openrouter + dash direct', ['openrouter/anthropic/claude-opus-4.8', 'anthropic/claude-opus-4-8'], 'anthropic/claude-opus-4-8'],
   ])('resolves opus from a %s catalog as a direct-API id, never a stripped dot id', (_label, ids, expected) => {
     const catalog = ids.map(row);
@@ -153,12 +155,13 @@ describe('divergent-vendor routes are never derived by prefix-stripping', () => 
     const stored = toStorableRoute(opus, { models: catalog });
     expect(stored).toBe(expected);
     expect(stored).not.toBe('anthropic/claude-opus-4.8'); // the fabricated strip
+    expect(stored).not.toBe('anthropic/claude-opus-5.5'); // the fabricated strip of today's pin
   });
 
   test('a live anthropic catalog resolves opus to the exact shipped default, never a stripped id', () => {
     const catalog = [
-      row('openrouter/anthropic/claude-opus-5'),
-      row('anthropic/claude-opus-5'),
+      row('openrouter/anthropic/claude-opus-5.5'),
+      row('anthropic/claude-opus-5-5'),
     ];
     const opus = resolveQuickPicks(catalog).find(p => p.alias === 'opus');
     const stored = toStorableRoute(opus, { models: catalog });

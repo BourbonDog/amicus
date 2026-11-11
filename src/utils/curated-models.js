@@ -268,7 +268,30 @@ function toDefaultAliases() {
   return out;
 }
 
+/**
+ * Do two ids name the SAME model? True when they are equal once the gateway
+ * prefix is stripped, OR when they are the two gateway forms of ONE shipped
+ * route pair. The second rule exists for divergent vendors: Anthropic's
+ * `openrouter/anthropic/claude-haiku-4.5` and `anthropic/claude-haiku-4-5-20251001`
+ * strip to different strings, and comparing raw strips called a pin of the
+ * shipped OpenRouter form "a different model" (false shadow notices, review
+ * rows and setup pins). Only SHIPPED pairs are equated, and only by their
+ * EXACT ids: no dot/dash rewriting, and the OpenRouter route is never stripped
+ * here, so a bare dotted `anthropic/claude-haiku-5.5` (served by neither
+ * gateway) is not matched (PR #298 council, D1).
+ * @param {*} a @param {*} b @returns {boolean}
+ */
+function sameModel(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') { return false; }
+  if (stripGatewayPrefix(a) === stripGatewayPrefix(b)) { return true; }
+  for (const r of Object.values(toGatewayRoutes())) {
+    const forms = [r.direct, r.openrouter];
+    if (forms.includes(a) && forms.includes(b)) { return true; }
+  }
+  return false;
+}
+
 module.exports = {
   getFamilies, toDefaultAliases, stripGatewayPrefix, listCuratedRoutes, toGatewayRoutes,
-  directFormProvenance, DIVERGENT_VENDORS
+  directFormProvenance, DIVERGENT_VENDORS, sameModel
 };

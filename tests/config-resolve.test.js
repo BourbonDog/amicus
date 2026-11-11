@@ -197,7 +197,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('gpt');
-      expect(result).toBe('openai/gpt-5.6-terra');
+      expect(result).toBe('openai/gpt-6.1-terra');
     });
 
     it('returns the stored bare id unchanged when ANTHROPIC_API_KEY is set but OPENROUTER_API_KEY is not', () => {
@@ -205,7 +205,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('opus');
-      expect(result).toBe('anthropic/claude-opus-5');
+      expect(result).toBe('anthropic/claude-opus-5-5');
     });
 
     it('returns the stored bare id unchanged when DEEPSEEK_API_KEY is set but OPENROUTER_API_KEY is not', () => {

@@ -212,9 +212,9 @@ describe('setup-ui-aliases', () => {
       // stored model string is now the bare canonical id, not openrouter/...
       expect(html).toContain('class="alias-model"');
       expect(html).toContain('google/gemini-3.8-flash');
-      expect(html).toContain('openai/gpt-5.6-terra');
+      expect(html).toContain('openai/gpt-6.1-terra');
       // gpt-pro pin, retargeted to the 5.6 premium tier (owner ruling 2026-08-04)
-      expect(html).toContain('openai/gpt-5.6-sol-pro');
+      expect(html).toContain('openai/gpt-6.1-sol-pro');
     });
 
     it('should contain arrow separators', () => {

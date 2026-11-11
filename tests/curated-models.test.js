@@ -32,7 +32,7 @@ describe('curated-models v2 (families)', () => {
     // the gateway router can route direct-first; gateway-only vendors keep
     // their openrouter/ prefix since OpenRouter is their only route.
     expect(defaults.gemini).toBe('google/gemini-3.8-flash');
-    expect(defaults.opus).toBe('anthropic/claude-opus-5');
+    expect(defaults.opus).toBe('anthropic/claude-opus-5-5');
     expect(defaults.deepseek).toBe('deepseek/deepseek-v4-pro');
     expect(defaults.qwen).toBe('openrouter/qwen/qwen3.8-max-0902');
     expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k3');
@@ -42,10 +42,10 @@ describe('curated-models v2 (families)', () => {
     const defaults = toDefaultAliases();
     // Direct-capable (openai/google/deepseek) — bare, policy-routed. These
     // vendors use identical ids on both gateways, so the bare form is derived.
-    expect(defaults.gpt).toBe('openai/gpt-5.6-terra');
+    expect(defaults.gpt).toBe('openai/gpt-6.1-terra');
     // Owner ruling 2026-08-04: gpt-pro tracks the premium (sol) tier's pro
     // sibling — retargeted off gpt-5.5-pro ahead of the 5.5 line's sunset.
-    expect(defaults['gpt-pro']).toBe('openai/gpt-5.6-sol-pro');
+    expect(defaults['gpt-pro']).toBe('openai/gpt-6.1-sol-pro');
     expect(defaults.codex).toBe('openai/gpt-5.3-codex');
     expect(defaults.gemini).toBe('google/gemini-3.8-flash');
     expect(defaults['gemini-pro']).toBe('google/gemini-3.1-pro-preview');
@@ -54,13 +54,13 @@ describe('curated-models v2 (families)', () => {
     // OpenRouter's, so the pinned default is the authored `anthropic:` route
     // verbatim (dash form) — never the openrouter route with the prefix
     // stripped, which would emit ids the direct API rejects.
-    expect(defaults.claude).toBe('anthropic/claude-sonnet-5');
-    expect(defaults.sonnet).toBe('anthropic/claude-sonnet-5');
-    expect(defaults.haiku).toBe('anthropic/claude-haiku-4-5-20251001');
-    expect(defaults.opus).toBe('anthropic/claude-opus-5');
+    expect(defaults.claude).toBe('anthropic/claude-sonnet-5-5');
+    expect(defaults.sonnet).toBe('anthropic/claude-sonnet-5-5');
+    expect(defaults.haiku).toBe('anthropic/claude-haiku-5-5');
+    expect(defaults.opus).toBe('anthropic/claude-opus-5-5');
     // fable: direct route authored 2026-08-05 (ruling R2) — /v1/models lists
     // claude-fable-5 and a live direct leg served. Pinned direct-first.
-    expect(defaults.fable).toBe('anthropic/claude-fable-5-1');
+    expect(defaults.fable).toBe('anthropic/claude-fable-5-2');
     // Gateway-only vendors (no direct integration) — unchanged openrouter/ route.
     expect(defaults.grok).toBe('openrouter/x-ai/grok-4.20');
     expect(defaults.qwen).toBe('openrouter/qwen/qwen3.8-max-0902');
@@ -134,7 +134,7 @@ describe('gpt family idPattern — terra tier (5.6 rename)', () => {
   });
 
   test('fallback pins the terra tier', () => {
-    expect(gptFamily().fallback.openrouter).toBe('openrouter/openai/gpt-5.6-terra');
+    expect(gptFamily().fallback.openrouter).toBe('openrouter/openai/gpt-6.1-terra');
   });
 });
 
