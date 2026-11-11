@@ -29,6 +29,27 @@ All notable changes to Amicus are documented here. Format follows
   is not migrated: `amicus aliases --review` offers the move. The frontier council bench
   (`gpt-pro`, `opus`, `gemini-pro`) is unchanged, but note that its "priciest per vendor"
   premise no longer holds: `codex` now out-prices `gpt-pro`, and `fable` out-prices `opus`.
+- **amicus is CLI-only, with no library API.** `package.json`'s `exports` named
+  `./opencode-client` → `src/opencode-client.mjs`, a file that never existed, so
+  `require('amicus')` has failed since v0.3.0. `exports` now lists only `./package.json`, the
+  unused `main` field is gone, and `src/index.js` exposes only the five functions the CLI calls.
+- The five hand-copied "drop `openrouter/`, take the vendor" parses now share one helper,
+  `splitVendorId` in `src/utils/provider-registry.js`. Behaviour is unchanged.
+
+### Removed
+
+- Unused modules `src/context.js`, `src/context-compression.js`, `src/drift.js` and
+  `src/environment.js`, and the uncalled session CRUD and sub-agent functions in
+  `src/session-manager.js`. Real sessions go through `src/sidecar/session-utils.js`.
+- The never-emitted `[AMICUS_CONFIG_UPDATE]` notice: its helpers (`computeConfigHash`,
+  `buildAliasTable`, `checkConfigChanged`) had no caller, and the sidecar skill's instruction to
+  act on it is gone.
+- Helpers with no caller outside their own tests: `executeMode`, `createChildSession`,
+  `listSessions`, `isToolPartLive`, `extractTimestamp`, `fetchAllModels`, `normalizeModelId`,
+  `isValidPrimaryAgent`, `getProvider`, `getSessionId`, `setCostTier`, and the deprecated
+  `validateBriefingContent` / `validateProjectPath` aliases.
+- The `dotenv` dependency. Only two unshipped benchmark scripts used it; they now call Node's
+  built-in `process.loadEnvFile()`.
 
 ### Fixed
 
@@ -53,6 +74,51 @@ All notable changes to Amicus are documented here. Format follows
   `schemas/alias-audit.schema.json`. Both paths now read one function
   (`src/sidecar/models-fallback-drift.js`), so they cannot fork again. As in the text path,
   this drift never changes the exit code.
+- **`amicus init` and postinstall no longer wipe an unparseable Claude config.** When
+  `~/.claude.json` or `claude_desktop_config.json` failed to parse (one trailing comma was
+  enough), registration started from an empty object and wrote back only the amicus entry,
+  deleting the user's other MCP servers. The file is now left untouched, a warning names it,
+  `amicus init` reports the step as failed, and successful writes are atomic.
+- **Saving amicus config no longer discards a `config.json` that fails to parse.** Every
+  read-modify-write caller (alias picks, onboarding and migration flags, provider and key setup,
+  presets) treated an unparseable file as empty, so one typo cost every alias and preset with
+  no message. `saveConfig` now copies the original to `config.json.corrupt-<timestamp>` first
+  and warns, and refuses to write when the file exists but cannot be read.
+- **A transient read failure no longer shrinks council `run.json` or the global session index
+  to a stub.** On Windows, antivirus often holds a just-written file. Only a missing file now
+  counts as empty: run-state writes retry briefly and then throw rather than overwrite (keeping
+  `runId`, `status` and an `aborted` status), and the session index skips the write.
+- **On Windows, atomic writes retry for about a second** when another process (antivirus,
+  indexer) briefly locks the target, instead of failing at once. `verdict.json` and the
+  model-catalog cache now use the shared atomic writer, so a failed write leaves no temp file.
+- **Re-tallying a council run no longer double-counts it.** `amicus_council_tally`, the CLI
+  tally and the run finish all append to the council ledger; a run already there is now
+  skipped, so its rows are not double-weighted in the reliability averages that pick the
+  fallback chair. A run's rows are written in one append.
+- **A wedged engine can no longer hang a council forever.** Six `abortSession` calls in the
+  headless runner had no time limit, so an engine that stopped answering (the reason for the
+  abort) left the leg, the fanout and the run unresolved with no `run.json`. Every abort now
+  gives up after 5 s. The final poll of a leg could also run unbounded when the sleep crossed
+  the deadline, the startup health check (2 s) and the `--tools` tool list (5 s) are now
+  bounded, and a failed engine shutdown after a finished leg no longer discards its usage.
+- **A leg that hit the tool-settle ceiling no longer lets the run report `costExact: true`.**
+  Its cost is a floor (the parent's last message and the child's later spend are missing), so
+  it now counts as subtree-unknown.
+
+### Security
+
+- **MCP project paths are resolved before the allowed-roots check.** The check compared paths
+  as text and never collapsed `..`, so `<home>/../../Windows` was accepted as a project root and
+  became the session-store parent and the child's working directory. Paths are now resolved
+  (`..` collapsed, symlinks judged by their target), and the resolved path is what is used.
+- **`parentSession` is validated as a session id** on `amicus_start` and `amicus_fanout`
+  (letters, digits, `_`, `-`, optional `.jsonl`), and session resolution refuses an id that
+  escapes the project's session directory. Previously `../other-project/<uuid>` could send
+  another project's transcript to an external model.
+- **Electron windows no longer open a Chrome DevTools port by default.** The MCP server set
+  `AMICUS_DEBUG_PORT=9223` for every child, and interactive mode fell back to 9222, so any
+  local process could drive the key-save and key-remove IPC of an open setup window. The port
+  is now opt-in: set `AMICUS_DEBUG_PORT` yourself.
 
 ### CI
 
