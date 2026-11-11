@@ -193,7 +193,7 @@ describe('Sidecar Config Module', () => {
       expect(aliases.opus).toBe('anthropic/claude-opus-5-5');
     });
 
-    it('should map haiku to its dated direct id and fable to its authored direct id', () => {
+    it('should map haiku and fable to their authored direct ids', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
       expect(aliases.haiku).toBe('anthropic/claude-haiku-5-5');

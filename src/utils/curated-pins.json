@@ -43,7 +43,7 @@
       },
       "verifiedOn": "2026-11-10",
       "gatewayOnly": true,
-      "ruling": "tracks the SOL (premium) tier's pro sibling, priced at its base tier ($5/$30 per Mtok); retargeted off gpt-5.5-pro 2026-08-04 ($30/$180 — still served, but expected to sunset with the 5.5 line); the gpt family tracks terra. gatewayOnly (owner ruling 2026-08-05, v4.6.3 spec): OpenAI's direct namespace does not serve gpt-5.6-sol-pro — never audit the derived direct form as stale, never suggest a direct pairing. Refreshed 2026-11-10 to gpt-6.1-sol-pro at $2/$10 per Mtok; the \"$5/$30\" above records the 2026-08-05 state (5.6-sol-pro had since fallen to $4/$20), not today's. gatewayOnly still holds: the catalog serves no bare openai/gpt-*-sol-pro row."
+      "ruling": "tracks the SOL (premium) tier's pro sibling, priced at its base tier ($2/$10 per Mtok as of 2026-11-10; $5/$30 when first pinned 2026-08-05); retargeted off gpt-5.5-pro 2026-08-04 ($30/$180 — still served, but expected to sunset with the 5.5 line); the gpt family tracks terra. gatewayOnly (owner ruling 2026-08-05, v4.6.3 spec): OpenAI's direct namespace does not serve gpt-5.6-sol-pro — never audit the derived direct form as stale, never suggest a direct pairing. Refreshed 2026-11-10 to gpt-6.1-sol-pro (5.6-sol-pro had fallen to $4/$20 by then). gatewayOnly still holds: the catalog serves no bare openai/gpt-*-sol-pro row."
     },
     "codex": {
       "routes": {
