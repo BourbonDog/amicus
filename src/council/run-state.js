@@ -16,7 +16,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { writeFileAtomic, sleepSync } = require('../utils/atomic-write');
+const crypto = require('crypto');
+const { writeFileAtomic, sleepSync, LOCK_CODES } = require('../utils/atomic-write');
 const { SESSIONS_DIR } = require('../session-manager');
 
 const RUN_FILE = 'run.json';
@@ -53,18 +54,29 @@ function readRun(runDir) {
 }
 
 /**
- * run.json for a read-merge-write: {} ONLY when the file is missing. Any other
- * read/parse failure (e.g. Windows antivirus holding the file) is retried
- * briefly, then thrown — merging a patch into {} would shrink run.json to a
- * stub and lose runId/bench and an 'aborted' status.
+ * run.json for a read-merge-write: {} when the file is missing. A lock-type read
+ * error (e.g. Windows antivirus holding the file) is retried briefly, then
+ * thrown — merging a patch into {} would shrink run.json to a stub and lose
+ * runId/bench and an 'aborted' status. Content that does not parse (or is empty)
+ * is already lost: it is copied aside to run.json.corrupt-<id> and {} is used, so
+ * one bad write cannot fail every later checkpoint forever.
  */
 function readRunForWrite(runDir) {
+  const p = runPath(runDir);
   for (let i = 0; ; i++) {
-    try { return JSON.parse(fs.readFileSync(runPath(runDir), 'utf-8')) || {}; } catch (err) {
+    let text;
+    try { text = fs.readFileSync(p, 'utf-8'); } catch (err) {
       if (err.code === 'ENOENT') { return {}; }
-      if (i >= 4) { throw err; }
+      if (!LOCK_CODES.has(err.code) || i >= 4) { throw err; }
       sleepSync(25 * (i + 1));
+      continue;
     }
+    try { return JSON.parse(text) || {}; } catch { /* unparseable: keep a copy below */ }
+    const backup = `${p}.corrupt-${Date.now()}-${process.pid}-${crypto.randomBytes(3).toString('hex')}`;
+    fs.copyFileSync(p, backup, fs.constants.COPYFILE_EXCL);
+    try { process.stderr.write(`Warning: ${p} was not valid JSON; saved it to ${backup} and started a new record.\n`); }
+    catch { /* a dead stderr must not block the write; the copy is already on disk */ }
+    return {};
   }
 }
 

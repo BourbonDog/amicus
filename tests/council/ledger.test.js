@@ -1491,3 +1491,16 @@ test('appendRun is idempotent per runId: a re-tally of the same run appends noth
   expect(appendRun(record, { dir })).toEqual([]);
   expect(fs.readFileSync(file, 'utf-8')).toBe(before);
 });
+
+test('appendRun after a torn first append writes only the rows that never landed', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-'));
+  const file = path.join(dir, 'council-ledger.jsonl');
+  const all = buildLedgerRows(record).map(r => JSON.stringify(r));
+  expect(all.length).toBeGreaterThan(1);
+  // A crash mid-write: the first row landed whole, the second is cut off with no newline.
+  fs.writeFileSync(file, all[0] + '\n' + all[1].slice(0, 20));
+  const added = appendRun(record, { dir });
+  expect(added.map(r => JSON.stringify(r))).toEqual(all.slice(1));
+  const lines = fs.readFileSync(file, 'utf-8').split('\n').filter(Boolean);
+  expect(lines.filter(l => all.includes(l))).toEqual(all);
+});

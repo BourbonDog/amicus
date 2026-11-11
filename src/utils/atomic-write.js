@@ -24,6 +24,7 @@ const crypto = require('crypto');
  * @param {{mode?: number}} [opts] - Write options; `mode` sets file permissions.
  */
 /** Block the thread for `ms` (callers here are all synchronous). */
+// shortcut: blocks the whole event loop (the MCP server's too) for up to ~0.9 s of win32 rename retries, make the write path async if that stall is ever seen.
 function sleepSync(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
 
 const LOCK_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
@@ -51,4 +52,4 @@ function writeFileAtomic(filePath, data, opts = {}) {
   }
 }
 
-module.exports = { writeFileAtomic, sleepSync };
+module.exports = { writeFileAtomic, sleepSync, LOCK_CODES };

@@ -335,3 +335,29 @@ describe('read-merge-write never overwrites a run.json it could not read', () =>
     expect(rs.readRun(runDirOf())).toMatchObject({ runId: 'abc123', status: 'aborted' });
   });
 });
+
+describe('a durably unparseable run.json does not fail every later write', () => {
+  test.each([['corrupt', '{"runId": "abc1'], ['empty', '']])('%s run.json is copied aside and checkpoint proceeds', (_, body) => {
+    fs.mkdirSync(runDirOf(), { recursive: true });
+    fs.writeFileSync(path.join(runDirOf(), 'run.json'), body);
+    const err = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try { expect(rs.checkpoint(runDirOf(), { status: 'running' })).toEqual({ status: 'running' }); }
+    finally { err.mockRestore(); }
+    const copies = fs.readdirSync(runDirOf()).filter(n => n.startsWith('run.json.corrupt-'));
+    expect(copies).toHaveLength(1);
+    expect(fs.readFileSync(path.join(runDirOf(), copies[0]), 'utf-8')).toBe(body);
+    expect(rs.readRun(runDirOf())).toEqual({ status: 'running' });
+  });
+
+  test('a non-lock read error is thrown at once, not retried', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123' });
+    const real = fs.readFileSync;
+    let calls = 0;
+    const spy = jest.spyOn(fs, 'readFileSync').mockImplementation((p, ...rest) => {
+      if (String(p).endsWith('run.json')) { calls++; throw Object.assign(new Error('io'), { code: 'EIO' }); }
+      return real.call(fs, p, ...rest);
+    });
+    try { expect(() => rs.checkpoint(runDirOf(), { x: 1 })).toThrow('io'); } finally { spy.mockRestore(); }
+    expect(calls).toBe(1);
+  });
+});
