@@ -8,11 +8,11 @@ const https = require('https');
 
 jest.mock('https');
 
-// Task 8 fix-pass: fetchAllModels() (v4.2 §4.4) also reads the machine's real
+// Task 8 fix-pass: fetchAllModelsDetailed() (v4.2 §4.4) also reads the machine's real
 // local-provider config via getLocalProviders() -> config.loadConfig(). Sandbox
 // it to an empty map so this suite's assertions never depend on whatever a
 // contributor's dev machine happens to have under `providers` -- a dev box with
-// even one reachable local provider silently adds a row to every fetchAllModels()
+// even one reachable local provider silently adds a row to every fetchAllModelsDetailed()
 // result below (reproduced: "should handle all providers failing gracefully"
 // expects ANTHROPIC_MODELS.length and gets +1). local-probe is never invoked
 // once getLocalProviders() reports no entries, so it needs no mock here.
@@ -23,7 +23,7 @@ jest.mock('../src/utils/local-providers', () => ({
 
 const {
   fetchModelsFromProvider,
-  fetchAllModels,
+  fetchAllModelsDetailed,
   groupModelsByFamily,
   ANTHROPIC_MODELS,
   PROVIDER_FETCH_CONFIG,
@@ -156,7 +156,7 @@ describe('model-fetcher', () => {
     });
   });
 
-  describe('fetchAllModels', () => {
+  describe('fetchAllModelsDetailed rows', () => {
     function mockHttpsGet(statusCode, body) {
       const mockResponse = {
         statusCode,
@@ -175,7 +175,7 @@ describe('model-fetcher', () => {
 
     it('should always include anthropic models even with no keys', async () => {
       mockHttpsGet(200, { data: [] });
-      const result = await fetchAllModels({});
+      const result = (await fetchAllModelsDetailed({})).rows;
       expect(result.length).toBeGreaterThan(0);
       expect(result.some(m => m.id.startsWith('anthropic/'))).toBe(true);
     });
@@ -183,7 +183,7 @@ describe('model-fetcher', () => {
     it('should fetch only from providers with keys', async () => {
       mockHttpsGet(200, { data: [{ id: 'google/gemini', name: 'Gemini' }] });
 
-      const result = await fetchAllModels({ openrouter: 'sk-or-test' });
+      const result = (await fetchAllModelsDetailed({ openrouter: 'sk-or-test' })).rows;
       // Should have anthropic + openrouter models
       expect(result.some(m => m.id.startsWith('anthropic/'))).toBe(true);
       expect(result.some(m => m.id.startsWith('openrouter/'))).toBe(true);
@@ -200,9 +200,9 @@ describe('model-fetcher', () => {
         return req;
       });
 
-      const result = await fetchAllModels({
+      const result = (await fetchAllModelsDetailed({
         openrouter: 'key', google: 'key', openai: 'key'
-      });
+      })).rows;
       // Should still have anthropic models at minimum
       expect(result.length).toBe(ANTHROPIC_MODELS.length);
     });
@@ -379,14 +379,14 @@ describe('model-fetcher', () => {
       });
     });
 
-    describe('fetchAllModels with deepseek key', () => {
+    describe('fetchAllModelsDetailed with deepseek key', () => {
       it('includes deepseek/deepseek-chat in results', async () => {
         mockHttpsGet(200, {
           object: 'list',
           data: [{ id: 'deepseek-chat', object: 'model' }]
         });
 
-        const result = await fetchAllModels({ deepseek: 'sk-ds-test' });
+        const result = (await fetchAllModelsDetailed({ deepseek: 'sk-ds-test' })).rows;
         expect(result.some(m => m.id === 'deepseek/deepseek-chat')).toBe(true);
       });
     });

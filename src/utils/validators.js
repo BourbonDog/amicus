@@ -69,9 +69,6 @@ function validatePromptContent(prompt) {
   return { valid: true };
 }
 
-/** @deprecated Use validatePromptContent instead */
-const validateBriefingContent = validatePromptContent;
-
 /**
  * Validate cwd directory exists
  * @param {string} cwdPath
@@ -98,9 +95,6 @@ function validateCwdPath(cwdPath) {
 
   return { valid: true };
 }
-
-/** @deprecated Use validateCwdPath instead */
-const validateProjectPath = validateCwdPath;
 
 /**
  * Find a session file in Claude's project directories
@@ -268,9 +262,6 @@ module.exports = {
   safeSessionDir,
   validatePromptContent,
   validateCwdPath,
-  // Backward-compatible aliases
-  validateBriefingContent,
-  validateProjectPath,
   validateExplicitSession,
   validateAgentMode,
   validateHeadlessAgent,

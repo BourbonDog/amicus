@@ -9,19 +9,6 @@
 const readline = require('readline');
 const { loadConfig, saveConfig, getConfigPath } = require('./config');
 
-/**
- * Normalize a model ID to include the provider prefix.
- * @param {string} provider - e.g. 'google', 'openai'
- * @param {string} id - Model ID, may or may not have provider prefix
- * @returns {string} Normalized ID with provider prefix
- */
-function normalizeModelId(provider, id) {
-  if (id.startsWith(provider + '/')) {
-    return id;
-  }
-  return `${provider}/${id}`;
-}
-
 /** Alias-to-search-term mapping for filtering provider model lists */
 const ALIAS_SEARCH_TERMS = {
   'gemini': 'gemini', 'gemini-pro': 'gemini',
@@ -184,7 +171,6 @@ async function warnIfNotInCatalog(model) {
 
 module.exports = {
   filterRelevantModels,
-  normalizeModelId,
   validateAgainstCatalog,
   warnIfNotInCatalog,
   promptRouteSelection,

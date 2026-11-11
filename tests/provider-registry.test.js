@@ -7,8 +7,9 @@ describe('provider-registry', () => {
   });
 
   test('openrouter is the gateway, not a direct provider', () => {
-    expect(reg.getProvider('openrouter').gateway).toBe(true);
-    expect(reg.getProvider('openrouter').direct).toBe(false);
+    const openrouter = reg.PROVIDERS.find(p => p.id === 'openrouter');
+    expect(openrouter.gateway).toBe(true);
+    expect(openrouter.direct).toBe(false);
     expect(reg.isDirectProvider('openrouter')).toBe(false);
     expect(reg.listDirectProviders().sort())
       .toEqual(['anthropic', 'deepseek', 'google', 'openai']);
@@ -39,5 +40,25 @@ describe('provider-registry', () => {
   test('KNOWN_PROVIDERS is the id list', () => {
     expect(reg.KNOWN_PROVIDERS.sort())
       .toEqual(['anthropic', 'deepseek', 'google', 'openai', 'openrouter']);
+  });
+
+  // The one vendor-from-id parse behind vendorOfId, splitVendorAndModel, vendorOf
+  // (fallback-chains), stripGatewayPrefix and buildGatewayOnlyAliasMap.
+  test.each([
+    ['openrouter/anthropic/claude-opus-5', 'anthropic', 'anthropic/claude-opus-5'],
+    ['anthropic/claude-opus-5', 'anthropic', 'anthropic/claude-opus-5'],
+    ['openrouter/qwen/qwen3/coder', 'qwen', 'qwen/qwen3/coder'],
+    ['openrouter/openrouter/auto', 'openrouter', 'openrouter/auto'],
+    ['google/', 'google', 'google/'],
+    ['opus', '', 'opus'],
+    ['openrouter/opus', '', 'opus'],
+    ['openrouter/', '', ''],
+    ['/x', '', '/x'],
+    ['', '', ''],
+    [null, '', ''],
+    [undefined, '', ''],
+    [42, '', ''],
+  ])('splitVendorId(%p) -> vendor %p, rest %p', (id, vendor, rest) => {
+    expect(reg.splitVendorId(id)).toEqual({ vendor, rest });
   });
 });

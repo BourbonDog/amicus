@@ -680,53 +680,6 @@ describe('OpenCode Client Wrapper', () => {
     });
   });
 
-  describe('createChildSession', () => {
-    it('should create a child session with parent ID', async () => {
-      const mockClient = {
-        session: {
-          create: jest.fn().mockResolvedValue({
-            data: { id: 'child-session-789' }
-          })
-        }
-      };
-
-      const { createChildSession } = require('../src/opencode-client');
-      const sessionId = await createChildSession(mockClient, 'parent-session-123');
-
-      expect(sessionId).toBe('child-session-789');
-      // #267: a child session is titled too, so it cannot trigger title generation.
-      expect(mockClient.session.create).toHaveBeenCalledWith({
-        body: { parentID: 'parent-session-123', title: 'amicus' }
-      });
-    });
-
-    it('should throw if child session creation fails', async () => {
-      const mockClient = {
-        session: {
-          create: jest.fn().mockResolvedValue({
-            error: { message: 'Failed to create child session' }
-          })
-        }
-      };
-
-      const { createChildSession } = require('../src/opencode-client');
-      await expect(createChildSession(mockClient, 'parent-123'))
-        .rejects.toThrow('Failed to create child session');
-    });
-
-    // #294 council round 1, B4/D4: a child names its task like a parent does.
-    it('names the task in a child session title when one is passed (#267)', async () => {
-      const mockClient = {
-        session: { create: jest.fn().mockResolvedValue({ data: { id: 'child-1' } }) }
-      };
-      const { createChildSession } = require('../src/opencode-client');
-      await createChildSession(mockClient, 'parent-1', 'task-7');
-      expect(mockClient.session.create).toHaveBeenCalledWith({
-        body: { parentID: 'parent-1', title: 'amicus task-7' }
-      });
-    });
-  });
-
   describe('getChildren', () => {
     it('should get child sessions for a parent', async () => {
       const mockClient = {
@@ -762,54 +715,6 @@ describe('OpenCode Client Wrapper', () => {
       const children = await getChildren(mockClient, 'parent-123');
 
       expect(children).toEqual([]);
-    });
-  });
-
-  describe('listSessions', () => {
-    it('should list all sessions', async () => {
-      const mockClient = {
-        session: {
-          list: jest.fn().mockResolvedValue({
-            data: [
-              { id: 'ses_abc123', title: 'Session 1' },
-              { id: 'ses_def456', title: 'Session 2' }
-            ]
-          })
-        }
-      };
-
-      const { listSessions } = require('../src/opencode-client');
-      const sessions = await listSessions(mockClient);
-
-      expect(sessions).toHaveLength(2);
-      expect(sessions[0].id).toBe('ses_abc123');
-      expect(mockClient.session.list).toHaveBeenCalled();
-    });
-
-    it('should return empty array if no sessions', async () => {
-      const mockClient = {
-        session: {
-          list: jest.fn().mockResolvedValue({ data: [] })
-        }
-      };
-
-      const { listSessions } = require('../src/opencode-client');
-      const sessions = await listSessions(mockClient);
-
-      expect(sessions).toEqual([]);
-    });
-
-    it('should return empty array on error', async () => {
-      const mockClient = {
-        session: {
-          list: jest.fn().mockRejectedValue(new Error('Connection error'))
-        }
-      };
-
-      const { listSessions } = require('../src/opencode-client');
-      const sessions = await listSessions(mockClient);
-
-      expect(sessions).toEqual([]);
     });
   });
 

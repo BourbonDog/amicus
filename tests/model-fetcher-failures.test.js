@@ -1,7 +1,7 @@
 /**
  * Tests for per-provider fetch failure reporting (issue #209).
  *
- * `fetchAllModels` returns a flat row array, so a provider whose fetch was
+ * In a flat row array (the old `fetchAllModels`), a provider whose fetch was
  * REJECTED (401) is indistinguishable from one that legitimately served zero
  * models. `fetchAllModelsDetailed` adds the missing channel.
  */

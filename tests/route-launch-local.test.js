@@ -20,7 +20,7 @@ describe('resolveRouteForLaunch: local assembly', () => {
     // unconditionally calls buildLaunchKeys() (route-launch.js :: buildLaunchKeys) → the real
     // readApiKeys()/readAuthJsonKeys(), an fs.readFileSync of ~/.config/amicus/.env;
     // and when validateModel !== false (tests 1, 3, 4) it calls the real
-    // getRouteCatalogInfo() → getCatalogInfo() → refreshCatalog() → fetchAllModels(),
+    // getRouteCatalogInfo() → getCatalogInfo() → refreshCatalog() → fetchAllModelsDetailed(),
     // which hits the NETWORK on a machine with no model-catalog.json. The sibling
     // suite tests/route-launch.test.js:22-42 mocks all four for exactly this reason.
     jest.doMock('../src/utils/config', () => ({ getEffectiveAliases: () => ({}) }));

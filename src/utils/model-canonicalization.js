@@ -46,6 +46,7 @@
 
 const { stripGatewayPrefix, DIVERGENT_VENDORS } = require('./curated-models');
 const { classifyModel } = require('./model-classification');
+const { splitVendorId } = require('./provider-registry');
 
 /**
  * @param {string} vendor
@@ -80,12 +81,7 @@ function namespaceFetchFailed(vendor, catalogInfo) {
  * checks while the catalog check kept working. Deriving closes that asymmetry.
  * @param {*} id @returns {string} '' when the id carries no vendor segment
  */
-function vendorOfId(id) {
-  if (typeof id !== 'string') { return ''; }
-  const rest = id.startsWith('openrouter/') ? id.slice('openrouter/'.length) : id;
-  const idx = rest.indexOf('/');
-  return idx > 0 ? rest.slice(0, idx) : '';
-}
+function vendorOfId(id) { return splitVendorId(id).vendor; }
 
 function directFormIfSafe(vendor, orId, catalogInfo) {
   const v = vendor || vendorOfId(orId);

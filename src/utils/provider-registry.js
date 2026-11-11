@@ -30,14 +30,24 @@ const PROVIDERS = [
 
 const _byId = new Map(PROVIDERS.map(p => [p.id, p]));
 
-/** @param {string} id @returns {ProviderDescriptor|undefined} */
-function getProvider(id) { return _byId.get(id); }
-
 /** @param {string} id @returns {boolean} true only for direct-route vendors (never the gateway) */
 function isDirectProvider(id) { const p = _byId.get(id); return !!p && p.direct; }
 
 /** @returns {string[]} ids of direct-route vendors (excludes openrouter) */
 function listDirectProviders() { return PROVIDERS.filter(p => p.direct).map(p => p.id); }
+
+/**
+ * PARSE `[openrouter/]<vendor>/<model>`: `rest` is the id without the gateway
+ * prefix; `vendor` is its first segment, '' when there is none (non-string: both '').
+ * Never use `rest` as an id to call -- see directFormIfSafe (issue 214).
+ * @param {*} id @returns {{vendor:string, rest:string}}
+ */
+function splitVendorId(id) {
+  if (typeof id !== 'string') { return { vendor: '', rest: '' }; }
+  const rest = id.startsWith('openrouter/') ? id.slice('openrouter/'.length) : id;
+  const idx = rest.indexOf('/');
+  return { vendor: idx > 0 ? rest.slice(0, idx) : '', rest };
+}
 
 // --- Derived compatibility maps (do not hand-edit; edit PROVIDERS above) ---
 const PROVIDER_ENV_MAP = Object.fromEntries(PROVIDERS.map(p => [p.id, p.envVar]));
@@ -47,9 +57,9 @@ const PROVIDER_FAMILY_NAMES = Object.fromEntries(PROVIDERS.map(p => [p.id, p.fam
 
 module.exports = {
   PROVIDERS,
-  getProvider,
   isDirectProvider,
   listDirectProviders,
+  splitVendorId,
   PROVIDER_ENV_MAP,
   PROVIDER_KEY_MAP,
   KNOWN_PROVIDERS,
