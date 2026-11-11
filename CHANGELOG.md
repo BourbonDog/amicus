@@ -3,6 +3,20 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **`amicus models --check --json` now reports shipped-pin drift.** The text path prints a
+  "Pinned fallback drift" block when a curated pin is behind the live catalog, but the JSON
+  audit document never carried those findings: a script reading `driftedCount: 0` saw a clean
+  audit while the terminal warned. (`drifted` covers STORED user aliases, a different finding.)
+  The document gains two additive fields, `fallbackDrift` (one row per finding: `kind`
+  `family` or `sibling`, `alias`, `pinned`, `live`) and `fallbackDriftCount`, declared in
+  `schemas/alias-audit.schema.json`. Both paths now read one function
+  (`src/sidecar/models-fallback-drift.js`), so they cannot fork again. As in the text path,
+  this drift never changes the exit code.
+
 ## [4.15.0] - 2026-11-10
 
 ### Security

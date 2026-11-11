@@ -220,15 +220,22 @@ function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null,
  * `--refresh --check --live` skip (runRefresh returns before this is ever
  * called) is announced by the caller instead, since that path emits a
  * model-catalog doc, not this one.
+ * `fallbackDrift` is additive: the SHIPPED pins behind the live catalog
+ * (findFallbackDrift — `kind` 'family' or 'sibling', `alias`, `pinned`, `live`),
+ * the findings the text path prints under "Pinned fallback drift". Distinct
+ * from `drifted`, which is about STORED user aliases. Before it existed the
+ * JSON doc said nothing while the text path warned. Never moves the exit code.
+ * Paired with an additive `fallbackDriftCount`.
  * @param {{stale: Array<{alias,model,source,suggestions}>, catalogAvailable: boolean,
  *   gatewayFindings?: Array<{alias,gateway,kind,model,expected?}>,
  *   drifted?: Array<{alias,stored,current}>,
  *   probe?: Array<{alias,target,outcome,detail,cost}>,
- *   probeSkipped?: string|null}} opts
+ *   probeSkipped?: string|null,
+ *   fallbackDrift?: Array<{kind,alias,pinned,live}>}} opts
  */
 function buildAuditDoc({
   stale, catalogAvailable, gatewayFindings = [], drifted = [], probe = [], probeSkipped = null,
-  providerFailures = []
+  providerFailures = [], fallbackDrift = []
 }) {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -248,6 +255,8 @@ function buildAuditDoc({
     // genuinely serves nothing.
     providerFailuresCount: providerFailures.length,
     providerFailures,
+    fallbackDriftCount: fallbackDrift.length,
+    fallbackDrift,
   };
 }
 
