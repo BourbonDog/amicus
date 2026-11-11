@@ -118,6 +118,40 @@ describe('runCheck drift wiring', () => {
   });
 });
 
+// PR #297 council (qwen): the parity test above has no providerFailures, which is
+// where the two paths historically forked. With the openrouter namespace REJECTED
+// (#238 §5), both must be silent: no text block AND an empty fallbackDrift.
+describe('runCheck drift wiring — rejected openrouter namespace', () => {
+  afterEach(() => { jest.resetModules(); jest.restoreAllMocks(); });
+
+  test('text prints no drift block and --json carries fallbackDrift: [] for the same catalog', async () => {
+    jest.resetModules();
+    jest.doMock('../src/utils/model-catalog', () => ({
+      getCatalogInfo: async () => ({
+        models: [{ id: 'openrouter/google/gemini-9.9-flash' }],
+        providerFailures: [{ provider: 'openrouter', reason: 'http-status', status: 403 }],
+        fetchedAt: Date.now(),
+      }),
+      refreshCatalog: async () => [],
+      catalogPath: () => '/mock/path/model-catalog.json',
+    }));
+    jest.doMock('../src/utils/alias-audit', () => ({
+      collectAliasSources: () => [], findStaleAliases: () => [],
+      findDriftedStoredAliases: () => [], suggestReplacements: () => [],
+    }));
+    const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const { handleModels } = require('../src/sidecar/models');
+    await handleModels({ _: ['models'], check: true });
+    expect(writeSpy.mock.calls.map(c => c[0]).join('')).not.toContain('Pinned fallback drift:');
+    writeSpy.mockClear();
+    await handleModels({ _: ['models'], check: true, json: true });
+    const doc = JSON.parse(writeSpy.mock.calls.map(c => c[0]).join(''));
+    expect(doc.fallbackDrift).toEqual([]);
+    expect(doc.fallbackDriftCount).toBe(0);
+    expect(doc.providerFailuresCount).toBe(1); // premise: the rejection reached the doc
+  });
+});
+
 // Named mutant "SIBLINGGATE": replace `const gated = gatedCatalogIds(info);`
 // in findFallbackDrift (src/sidecar/models-fallback-drift.js) with `const gated = catalog.map(m => m && m.id)
 // .filter(Boolean);` (feeds the sibling scan every catalog id instead of the
