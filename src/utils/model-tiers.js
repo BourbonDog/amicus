@@ -25,7 +25,7 @@
 'use strict';
 
 const { pickCurrent } = require('./quick-picks');
-const { isDirectProvider } = require('./provider-registry');
+const { isDirectProvider, splitVendorId } = require('./provider-registry');
 const { toDefaultAliases, listCuratedRoutes } = require('./curated-models');
 
 /**
@@ -80,9 +80,7 @@ function buildGatewayOnlyAliasMap() {
   const map = {};
   for (const { alias, provider, model } of listCuratedRoutes()) {
     if (provider !== 'openrouter' || !model.startsWith('openrouter/')) { continue; }
-    const rest = model.slice('openrouter/'.length); // '<vendor>/<rest...>'
-    const slash = rest.indexOf('/');
-    const vendor = slash > 0 ? rest.slice(0, slash) : null;
+    const { vendor } = splitVendorId(model);
     if (!vendor || isDirectProvider(vendor) || TIERS[vendor] || map[vendor]) { continue; }
     map[vendor] = alias;
   }

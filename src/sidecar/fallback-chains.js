@@ -14,6 +14,7 @@
  */
 
 const { resolveTier, TIER_ORDER } = require('../utils/model-tiers');
+const { splitVendorId } = require('../utils/provider-registry');
 
 const DEFAULT_MAX_SUBSTITUTIONS = 2;
 
@@ -32,10 +33,8 @@ function resolveFallbackConfig({ flagFallback, config } = {}) {
 
 /** Vendor segment for tier lookup; a bare alias returns itself (config key). */
 function vendorOf(model) {
-  let id = String(model || '');
-  if (id.startsWith('openrouter/')) { id = id.slice('openrouter/'.length); }
-  const slash = id.indexOf('/');
-  return slash > 0 ? id.slice(0, slash) : id;
+  const { vendor, rest } = splitVendorId(String(model || ''));
+  return vendor || rest;
 }
 
 /** Explicit chain, else the tier-walk default. A substitute must be cheaper. */

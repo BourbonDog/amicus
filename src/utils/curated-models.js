@@ -17,7 +17,7 @@
 
 'use strict';
 
-const { isDirectProvider } = require('./provider-registry');
+const { isDirectProvider, splitVendorId } = require('./provider-registry');
 const { loadCuratedPins } = require('./curated-pins');
 
 /**
@@ -128,9 +128,7 @@ function getFamilies() {
  */
 function stripGatewayPrefix(route) {
   if (typeof route === 'string' && route.startsWith('openrouter/')) {
-    const rest = route.slice('openrouter/'.length); // '<vendor>/<rest...>'
-    const slashIdx = rest.indexOf('/');
-    const vendor = slashIdx > 0 ? rest.slice(0, slashIdx) : null;
+    const { vendor, rest } = splitVendorId(route);
     if (vendor && isDirectProvider(vendor)) { return rest; }
   }
   return route;
