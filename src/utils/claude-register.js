@@ -26,6 +26,7 @@ const { execFileSync } = require('child_process');
 // B13: sibling of this file under src/utils/ — was '../src/utils/mcp-self-identity'
 // when this code lived in scripts/postinstall.js.
 const { isAmicusMcpConfig } = require('./mcp-self-identity');
+const { writeFileAtomic } = require('./atomic-write');
 
 // B13: this file now lives at src/utils/, two levels below the repo root
 // (scripts/ was only one level below) — both source paths need an extra '..'.
@@ -68,15 +69,19 @@ const MCP_CONFIG = { command: 'npx', args: ['-y', 'amicus@latest', 'mcp'] };
  * @param {string} configPath - Path to the JSON config file
  * @param {string} name - MCP server name
  * @param {object} config - MCP server config object
- * @returns {string} 'added', 'updated', or 'unchanged'
+ * @returns {string} 'added', 'updated', 'unchanged', or 'unreadable' (the
+ *   file exists but could not be read/parsed — left untouched, nothing written)
  */
 function addMcpToConfigFile(configPath, name, config) {
   let existing = {};
   try {
     existing = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-  } catch {
-    // File doesn't exist or invalid JSON — start fresh
+  } catch (err) {
+    // Only a missing file starts fresh; rewriting an unparseable one would
+    // delete the user's other MCP servers (mirrors legacy-mcp-migration.js).
+    if (!err || err.code !== 'ENOENT') { return 'unreadable'; }
   }
+  if (!existing || typeof existing !== 'object' || Array.isArray(existing)) { return 'unreadable'; }
 
   if (!existing.mcpServers) { existing.mcpServers = {}; }
 
@@ -88,7 +93,7 @@ function addMcpToConfigFile(configPath, name, config) {
   if (status !== 'unchanged') {
     const dir = path.dirname(configPath);
     if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); }
-    fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), { mode: 0o600 });
+    writeFileAtomic(configPath, JSON.stringify(existing, null, 2), { mode: 0o600 });
   }
   return status;
 }
@@ -151,7 +156,7 @@ function readPrevClaudeCodeAmicusEntry() {
 
 /**
  * Register MCP server in Claude Code config.
- * @returns {'added'|'updated'|'unchanged'} the registration status (M18: both
+ * @returns {'added'|'updated'|'unchanged'|'unreadable'} the registration status (M18: both
  *   branches now report a real status instead of discarding it).
  */
 function registerClaudeCode() {
@@ -192,6 +197,8 @@ function registerClaudeCode() {
     console.log('[amicus] MCP registered in Claude Code (~/.claude.json).');
   } else if (status === 'updated') {
     console.log('[amicus] MCP config updated in Claude Code (~/.claude.json).');
+  } else if (status === 'unreadable') {
+    console.warn(`[amicus] Warning: could not parse ${claudeConfigPath} — left it untouched, amicus NOT registered in Claude Code. Fix the JSON, then run: amicus init`);
   } else {
     console.log('[amicus] MCP already registered in Claude Code.');
   }
@@ -200,7 +207,7 @@ function registerClaudeCode() {
 
 /**
  * Register MCP server in Claude Desktop / Cowork config.
- * @returns {'added'|'updated'|'unchanged'} the registration status (M18: was
+ * @returns {'added'|'updated'|'unchanged'|'unreadable'} the registration status (M18: was
  *   computed and used for the console.log branch below, then discarded).
  */
 function registerClaudeDesktop() {
@@ -219,6 +226,8 @@ function registerClaudeDesktop() {
     console.log('[amicus] MCP registered in Claude Desktop.');
   } else if (status === 'updated') {
     console.log('[amicus] MCP config updated in Claude Desktop.');
+  } else if (status === 'unreadable') {
+    console.warn(`[amicus] Warning: could not parse ${configPath} — left it untouched, amicus NOT registered in Claude Desktop. Fix the JSON, then run: amicus init`);
   } else {
     console.log('[amicus] MCP already registered in Claude Desktop.');
   }

@@ -193,13 +193,12 @@ describe('B50 — "Where things live" section (docs/configuration.md)', () => {
  *   - `src/utils/config.js :: COST_TIERS`      — ['frontier','balanced','economy']
  *   - `src/utils/config.js :: getCostTier`     — reads config.routing.tier, coerces
  *                                                anything unrecognized to 'balanced'
- *   - `src/utils/config.js :: setCostTier`     — persists it, throws on an unknown tier
  *   - `src/utils/config.js :: hasTierOnboarded` / `:: markTierOnboarded`
  *                                              — the one-time notice flag
  * MEASURED the same day, and load-bearing for what the docs may claim:
- *   - `setCostTier` has ZERO production callers (grep over src/, electron/,
- *     bin/, scripts/ — only config.js's own export and tests/config.test.js).
- *     `routing.tier` is therefore hand-edited only, like `maxCostPerMtok`.
+ *   - Nothing writes `routing.tier`: the old `setCostTier` setter never had a
+ *     production caller and was deleted (2026-11 audit). `routing.tier` is
+ *     therefore hand-edited only, like `maxCostPerMtok`.
  *   - `getCostTier` has exactly ONE production reader:
  *     `src/utils/provider-default-picker.js :: computePreselectedId`, via
  *     `buildProviderDefaultChoices` — i.e. the tier decides ONLY which row the
@@ -240,8 +239,9 @@ describe('F-5 — the cost-tier surface is documented (docs/configuration.md)', 
     expect(costTier()).toMatch(/coerce|falls back|treated as|anything else/i);
   });
 
-  it('says routing.tier is hand-edited only — no command writes it (setCostTier has no caller)', () => {
+  it('says routing.tier is hand-edited only — no command writes it (config.js exports no tier setter)', () => {
     expect(costTier()).toMatch(/hand-edit/i);
+    expect(require('../src/utils/config').setCostTier).toBeUndefined();
   });
 
   it('says what the tier actually DECIDES — the picker\'s preselected row, not routing', () => {

@@ -247,9 +247,11 @@ describe('skills/sidecar/SKILL.md — dual-token acceptance instruction removed 
     expect(skill).not.toMatch(/legacy files may use `<!-- sidecar-config-hash: \.\.\. -->`/i);
   });
 
-  it('still instructs handling the canonical [AMICUS_CONFIG_UPDATE] marker and amicus-config-hash comment', () => {
-    expect(skill).toMatch(/\[AMICUS_CONFIG_UPDATE\]/);
-    expect(skill).toMatch(/amicus-config-hash/);
+  // The canonical notice was never emitted (checkConfigChanged had no caller)
+  // and was deleted, so the skill must not tell Claude to act on it either.
+  it('no longer documents the never-emitted [AMICUS_CONFIG_UPDATE] notice or amicus-config-hash comment', () => {
+    expect(skill).not.toMatch(/\[AMICUS_CONFIG_UPDATE\]/);
+    expect(skill).not.toMatch(/amicus-config-hash/);
   });
 });
 

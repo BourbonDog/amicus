@@ -47,6 +47,16 @@ describe('claude-register module surface', () => {
     expect(after.mcpServers.amicus.args).toEqual(['-y', 'amicus@latest', 'mcp']); // config refreshed
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  test('addMcpToConfigFile leaves an unparseable config untouched and returns unreadable', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reg-'));
+    const file = path.join(dir, 'claude_desktop_config.json');
+    const broken = '{ "mcpServers": { "other": { "command": "x" } }, }';
+    fs.writeFileSync(file, broken);
+    expect(reg.addMcpToConfigFile(file, 'amicus', reg.MCP_CONFIG)).toBe('unreadable');
+    expect(fs.readFileSync(file, 'utf-8')).toBe(broken); // the user's other servers survive
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 // Everything below touches os.homedir()/APPDATA — ALWAYS redirected to a
