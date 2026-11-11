@@ -3,6 +3,22 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **Pinning an Anthropic alias to its shipped OpenRouter form no longer reads as "a different
+  model".** Anthropic ids are dotted on OpenRouter and dashed on the direct API
+  (`openrouter/anthropic/claude-haiku-4.5` and `anthropic/claude-haiku-4-5-20251001` are one
+  model), but five places decided "same model?" by stripping the `openrouter/` prefix and
+  comparing strings. A config pinning `haiku` or `fable` to its own shipped OpenRouter route got
+  a false alias-shadow notice on every council run, the review picker and alias proposals treated
+  it as off the shipped pin, the alias list dropped its "same model as shipped, other gateway"
+  note, and setup could pin the gateway form "because it differs". One shared `sameModel`
+  (`src/utils/curated-models.js`) now also equates the two forms of any SHIPPED route pair, and
+  all five sites use it. It never rewrites dots to dashes, so an uncurated id is not matched by
+  guesswork.
+
 ## [4.15.0] - 2026-11-10
 
 ### Security

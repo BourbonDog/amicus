@@ -28,7 +28,7 @@
 
 const { SCHEMA_VERSION } = require('../utils/result-schema-version');
 const { refreshState, refreshStateLine, catalogInfoFromCache } = require('../utils/alias-refresh-state');
-const { stripGatewayPrefix } = require('../utils/curated-models');
+const { sameModel } = require('../utils/curated-models');
 const { safeFragment, collapseExcerpt } = require('../utils/text-sanitize');
 
 /** @returns {object} this module's collaborators, gathered so a caller can override them in tests */
@@ -136,7 +136,7 @@ function rowFlag(reasons) {
 function sameGatewayNote(r) {
   if (r.state !== 'pinned' || !r.curated || typeof r.id !== 'string' || typeof r.shipped !== 'string') { return ''; }
   if (r.id === r.shipped) { return ''; }
-  return stripGatewayPrefix(r.id) === stripGatewayPrefix(r.shipped) ? '   same model as shipped, other gateway' : '';
+  return sameModel(r.id, r.shipped) ? '   same model as shipped, other gateway' : '';
 }
 
 /**

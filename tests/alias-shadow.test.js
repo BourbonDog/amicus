@@ -291,6 +291,19 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
       expect(load().findAliasShadows(['gpt'])).toEqual([]);
     });
 
+    // The divergent-vendor half of the test above. Anthropic's two forms of one
+    // model need not strip to the same string (`claude-haiku-4.5` vs
+    // `claude-haiku-4-5-20251001`), so a raw strip comparison flagged a pin of
+    // the SHIPPED OpenRouter form as a different model. Red on main before
+    // sameModel for haiku and fable; data-driven so a pin refresh cannot rot it.
+    test('pinning ANY curated alias to its own shipped OpenRouter form is never a shadow', () => {
+      const { toGatewayRoutes } = require('../src/utils/curated-models');
+      const paired = Object.entries(toGatewayRoutes()).filter(([, r]) => r.direct && r.openrouter);
+      expect(paired.map(([a]) => a)).toEqual(expect.arrayContaining(['haiku', 'opus', 'gpt'])); // premise
+      writeConfig(Object.fromEntries(paired.map(([a, r]) => [a, r.openrouter])));
+      expect(load().findAliasShadows(paired.map(([a]) => a))).toEqual([]);
+    });
+
     test("this repo's own CI alias map raises only genuine model differences", () => {
       // Concrete, non-hypothetical version of the pin above: the map is real,
       // provisioned into every CI council run, and pins the OpenRouter form of
