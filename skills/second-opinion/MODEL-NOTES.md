@@ -4,7 +4,11 @@ This file is the `second-opinion` skill's evolving memory of **how to actually d
 well**. Read it before Stage 0 (council selection and launch); update it, with the user's
 approval, at the end of each run (Stage 6). Keep it tight — merge and prune rather than append.
 
-_Last updated: 2026-09-25 (the #135 record — the CI egress's first-token ranges, the busy tail,
+_Last updated: 2026-11-11 (fold-back, both directions, from three design-spec councils: platform
+facts fail in BOTH tiers, a Confirmed error and a correctly-disputed-then-wrong dispute alike, and
+no chair caught one; inline the derived user guide; deepseek truncating on a ~65 KB briefing;
+kimi at the backstop cliff over ~60 KB; gemini-pro off design-spec benches; a new `gpt-pro` chair
+section; the glm and minimax headings moved to the v4.16.0 pins). Prior: 2026-09-25 (the #135 record — the CI egress's first-token ranges, the busy tail,
 the input-size refutation, the single-upstream pin result — and the promoted-reasoning rule as
 4.14.0 ships it, #257; per-model CI notes for glm, qwen, deepseek and gpt). Prior: 2026-09-18 (the
 once-only extension, #251 item 1 — the backstop now reads `session.status` at its deadline and buys
@@ -181,6 +185,10 @@ peer-consensus≠evidence rule upstreamed)._
   and it makes citation-checking possible, since reviewers can verify line numbers against the
   pack. Trade is a bigger briefing per seat; worth it whenever the question is "are these claims
   true of this code?"
+- **When a spec promises user-facing behaviour, inline the derived user guide as an appendix.**
+  Appending a ~15 KB participant guide to an ~86 KB spec let three seats catch five places where
+  the guide contradicted the spec, including a worked example that failed the spec's own lint rule.
+  No reviewer of the spec alone could have seen them. The cost is about 20% more input.
 - **`--agent Plan` can trigger a literal, hard "planning mode — cannot execute" refusal on some
   models** (terse, near-zero-token responses), not just the intended read-only tool restriction —
   and prompt wording alone has not fixed it; switching that model to `--agent Build` has, immediately.
@@ -202,6 +210,17 @@ peer-consensus≠evidence rule upstreamed)._
   persuasive defense have no more access to the spec sheet than they did the first time. Any
   finding that asserts a published figure (spec, capacity, rating, dimension, date) gets a
   verification pass before you act on it.
+- **Platform facts fail the same way, in BOTH directions — verify every tier, Disputed included.**
+  Claims about plan tiers, permissions and product behaviour (which features a hosting plan
+  includes, how a review rule is evaluated, whether a tool runs hooks) have reached Confirmed 3-0
+  while false in three consecutive councils on one design spec, each time from a different seat,
+  often at "high" confidence. A false Confirmed premise can also **cascade**: judges then disputed
+  a largely-correct finding on the strength of it. And a 3-0 Disputed finding from the
+  lowest-ranked seat was the one that was probably right. A unanimous vote is no more evidence than
+  a single seat on a platform fact. Before Stage 4, check every plan-tier, pricing and
+  platform-behaviour claim against the vendor's docs whatever its tier. The chair's "Contested
+  Claims" / "Open Questions" section is a useful list of targets, but no chair across those runs
+  flagged a Confirmed platform error, so it is not a substitute for the check.
 - **Read spend from `run.json`, never from a provider credit balance.** `usage.cost.amount` is the
   run total; per-leg costs are in `runStats[].usage.cost`. Only OpenRouter-routed legs move the
   OpenRouter balance — gemini/gpt/anthropic bill directly against their own keys, so inferring cost
@@ -312,6 +331,11 @@ peer-consensus≠evidence rule upstreamed)._
   answered once entirely in its reasoning channel, on a Stage-1 retry on
   `openrouter/deepseek/deepseek-v4-flash-0731` (4,095 reasoning / 3 output tokens) — the #257 case
   is not a qwen quirk.
+- **On a very large inlined briefing (~65 KB) it spends its output reservation thinking.** One
+  Stage-1 leg's first token came at 523 s (past the 300 s window, saved by the once-only extension),
+  then it stopped for length after ~30 K reasoning / ~2 K output tokens, and its findings came from
+  a repair the engine marked unverifiable. Raise its output budget for briefings that size, or
+  expect a truncated review.
 
 ### GPT  (`--model gpt` → via OpenRouter)
 - **Strengths:** reachable via the OpenRouter key; resilient; very thorough structured critique
@@ -333,6 +357,10 @@ peer-consensus≠evidence rule upstreamed)._
   one loss was a credit refusal, a different class). When a round loses judges to the wall, gpt is
   usually the judge that survived — read a gpt-only adjudication as `thin-cross-review`, not as
   consensus.
+- **Its calibration-anchor role does not cover platform plan-tier facts.** On a design spec it
+  asserted, at "high" confidence, a hosting-plan feature that the vendor's docs restrict to paid
+  tiers, and the bench confirmed it 3-0. Verify its platform claims like anyone else's (see the
+  platform-facts rule).
 
 ### Grok  (`--model grok` → via OpenRouter)
 - Very fast legs; credible judge and chair (rejected its own weak findings as chair; honest blind self-rank).
@@ -359,10 +387,19 @@ peer-consensus≠evidence rule upstreamed)._
   opposite well: correctly scoping its own blocker-severity finding as *contingent on an unprobed
   precondition* rather than asserting it outright — a genuine calibration improvement worth
   crediting when it shows up.
+- **Top-ranked on process/design-spec reviews too** — #1 or tied #1 by every judge in three
+  consecutive councils on one spec, with the run's deepest security catches (both verified true).
+  The quantifier risk travels with it: in two of those runs its categorical platform claim ("this
+  tool never runs hooks", "one approval from any owner satisfies the rule") reached Confirmed and
+  was wrong, and one drove judges to dispute a correct finding. Weight its structural catches
+  heavily; verify its categorical platform claims.
 - **Its time-to-first-token now sits directly on the `NO_OUTPUT_BACKSTOP` cliff, not comfortably
   under it** — observed legs have run past the 300s default (see the Global `NO_OUTPUT_BACKSTOP`
   rule: 300s default, 480s in CI). Size any override from the run's own slowest observed leg's
-  `ttftMs` × 2 with real headroom; it still gates wave wall-clock either way.
+  `ttftMs` × 2 with real headroom; it still gates wave wall-clock either way. Measured on
+  `kimi-k3`: a ~21 KB briefing ran clean with no override (first tokens 143 s Stage 1, 109 s as
+  judge), but briefings over ~60 KB put the first token at 281 s and then 324 s — the second past
+  the window and saved only by the once-only extension.
 - Stalls on long agentic reads (poller "Incomplete" with only a preamble). Reserve for short-artifact work.
 
 ### Mistral  (`--model mistral` → via OpenRouter)
@@ -371,7 +408,7 @@ peer-consensus≠evidence rule upstreamed)._
 
 ### Claude  (in-council, when toggle on)
 - Consistently the most *calibrated* reviewer (no severity inflation; findings overwhelmingly Confirmed; bench-best street-cred in recent runs) but sometimes the least *original* — it can miss the boldest single catch. Treat as a reliability floor, not a discovery engine — though on some benches its findings have anchored the entire Confirmed tier.
-- Its own checkable, arithmetic-style claims deserve the same **mechanical verification** as everyone else's: one calendar-consistency claim in a Claude first-pass review was a genuine reasoning error, caught only by computing the dates programmatically before submission (see General).
+- Its own checkable, arithmetic-style claims deserve the same **mechanical verification** as everyone else's: one calendar-consistency claim in a Claude first-pass review was a genuine reasoning error, caught only by computing the dates programmatically before submission (see General). The same holds for its claims about Claude Code itself: in two design-spec councils one of its own findings on Claude Code behaviour (permission rules, skill loading) was partly wrong and was corrected against Claude Code's docs before Stage 4.
 
 ### haiku  (`--model haiku`) — **the "hard-404" was the environment, not the model**
 - **The model was never the problem.** The direct-Anthropic route returned an instant `Not Found`
@@ -396,7 +433,7 @@ peer-consensus≠evidence rule upstreamed)._
   with the actual chair checkpointed into `run.json` (see the seat-loss bullet in Global
   operating rules).
 
-### GLM  (`--model glm` → `glm-5.1` via OpenRouter; the recent observations below are from the explicit `openrouter/z-ai/glm-5.2` id)
+### GLM  (`--model glm` → `glm-5.3` via OpenRouter as of v4.16.0; the observations below are from 5.2 except where marked 5.3)
 - The v4.4.0-era "structured-output reliability not established" warning is **withdrawn as
   wrong-cause**: its `unstructured`-conformance results and repair refusals traced to two
   since-fixed engine defects (the unanchored fence extractor that truncated any JSON quoting a
@@ -416,6 +453,11 @@ peer-consensus≠evidence rule upstreamed)._
   peers, but its findings have skewed toward internal-consistency catches (a claim contradicted by
   an earlier section of the same artifact) rather than raw coverage — read them for that, not for
   volume, before discounting a low count.
+- **glm-5.3 on a process/design spec: ranked last by every judge, and a second fact error.** The
+  cheapest and fastest seat (first token ~20 s, clean conformance), but its calibration-over-volume
+  value did not show, and it independently made the same false hosting-plan claim another seat
+  made; that claim reached Confirmed 3-0 and was denied only after verification. Keep treating its
+  confident factual assertions as unverified.
 - **First use as chair was clean and notably good:** recognized when two surviving reviews had
   split the labor rather than duplicated it and synthesized across that seam instead of flattening
   it. A viable chair candidate alongside deepseek.
@@ -447,7 +489,7 @@ peer-consensus≠evidence rule upstreamed)._
   instead of adjudicating. Pinning it to one upstream (`reka`) served the model and did not remove
   the first-token tail (3 of 5 pinned legs failed).
 
-### minimax  (`--model minimax` → minimax-m2.7 via OpenRouter)
+### minimax  (`--model minimax` → `minimax-m3` via OpenRouter as of v4.16.0; earlier notes are from m2.7)
 - Fast (~2 min review legs), cheap, `clean` findings-JSON conformance on debut.
 - Took the **critic seat** brief exceptionally well: unanimously ranked #1 by its bench, full
   coverage on a ground-truth test, zero padded findings under the anti-padding rule. A strong
@@ -455,6 +497,12 @@ peer-consensus≠evidence rule upstreamed)._
 - **Quirks:** occasional CJK character intrusions mid-English prose (cosmetic; the findings JSON
   is unaffected); can invert the direction of an arithmetic detail inside an otherwise-correct
   rationale — see the claim-class-dedup tip in Stage-2 briefing tips.
+- **minimax-m3 as critic on a long design spec: ranked 4th by every judge, including itself, and
+  the cheapest seat by ~10×.** It still raised useful specifics no one else did (an ownership rule
+  that would flag every change, spikes with no fallback, ambiguous cross-repo issue references).
+  Two of its findings rested on false platform premises, and the bench correctly disputed both.
+  Many of its `claim` fields quoted the spec instead of stating the defect, so the defect lived only
+  in the rationale — read the rationales.
 
 ### qwen-coder  (`--model qwen-coder` → via OpenRouter; distinct from `qwen`)
 - Very fast (16–22 s legs, review and judging alike), `clean` conformance, competent
@@ -476,6 +524,26 @@ peer-consensus≠evidence rule upstreamed)._
 - Use the shipped `gemini-pro` alias when you want a real Pro reviewer — it live-resolves to the
   current Pro tier, falling back to `openrouter/google/gemini-3.1-pro-preview`; the bare `gemini`
   alias gives you flash.
+- **Do not seat it on process or design-spec reviews.** In three consecutive councils on one spec
+  it was ranked last by every peer (it self-ranked #1 once). Its failure shapes: **stale platform
+  knowledge stated at "High" confidence** (it denied features a current desktop app has);
+  "categorical impossibility" blockers the bench disputed; and `claim` fields that restated spec
+  text instead of the defect, so the tally and judges saw non-findings until they read the
+  rationale. Its true findings were almost all duplicates of other seats'. Its one unique value was
+  a 3-0 Disputed finding that was probably right — so don't let its rank decide its findings when it
+  is seated, but give the seat to a stronger reviewer.
+
+### GPT Sol Pro  (`gpt-pro` → `openai/gpt-6.1-sol-pro` as of v4.16.0)
+- **A clean, well-structured chair in three consecutive councils** (~50–75 s each): deduplicated
+  large Confirmed tallies into themes, correctly rejected categorical "impossible" claims, and
+  closed with hard questions that each mapped to a real design gap. In its first run it said
+  outright that Confirmed "does not establish technical truth" and named exactly the two platform
+  claims that later proved wrong.
+- **But it is not a fact check.** In the next two runs it named no platform claims as
+  verification targets, accepted a 3-0 dispute that was probably wrong, and upheld a Confirmed
+  platform error as "material despite one peer dissent". Treat its synthesis as structure; verify
+  platform facts independently (see the platform-facts rule).
+- Same family as the `gpt` seat — disclose that when both are seated.
 
 ### (others — add as used)
 - Opus / o-series etc. are reachable via amicus **if their API keys are configured**. Add notes
@@ -591,3 +659,14 @@ This section keeps only per-model **qualitative quirks** and **structural-confor
   never adjudicated. Per-model: glm's slowest first token, qwen's CI seat, deepseek as a judge the
   wall kills and a second reasoning-only seat, gpt as the one fast seat. No run identifiers or
   dollar figures carried in.
+- **2026-11-11 (after v4.16.0; fold-back, both directions)** — Folded in from three field councils
+  on one design spec: the platform-facts rule (false claims reached Confirmed 3-0 in all three, a
+  false premise cascaded into disputing a correct finding, a 3-0 Disputed was probably right, and
+  no chair caught a Confirmed error); inlining the derived user guide. Per-model: deepseek's
+  output-reservation truncation on a ~65 KB briefing; kimi's top rank on design specs with its
+  categorical-platform-claim risk, and its first tokens at the cliff over ~60 KB; gpt's anchor role
+  not covering plan-tier facts; Claude's own Claude-Code claims needing a doc check; glm-5.3's
+  last place and second fact error; minimax-m3 as critic; gemini-pro off design-spec benches; a new
+  `gpt-pro` chair section. The glm and minimax headings follow the v4.16.0 pins. Adopted back into
+  the local ledger: the shipped pins for qwen (3.8-max), `gpt-pro`, glm and minimax. No run
+  identifiers, project material or dollar figures carried in.

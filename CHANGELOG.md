@@ -3,6 +3,18 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Changed
+
+- **The shipped `second-opinion` skill's `MODEL-NOTES.md` seed carries three design-spec councils'
+  lessons.** A new global rule: platform facts (plan tiers, permissions, product behaviour) fail
+  in BOTH tiers, so verify Disputed findings as well as Confirmed ones, and don't rely on the chair
+  to catch them. Also: inline the derived user guide when a spec promises user-facing behaviour.
+  Per-model notes for deepseek, kimi, gpt, Claude, glm-5.3, minimax-m3 and gemini-pro, and a new
+  `gpt-pro` chair section. The glm and minimax headings now name the v4.16.0 pins. The seed is
+  copied only when no `MODEL-NOTES.md` exists, so an existing install keeps its own copy.
+
 ## [4.16.0] - 2026-11-11
 
 ### Changed
