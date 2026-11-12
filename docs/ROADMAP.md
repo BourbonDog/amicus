@@ -13,7 +13,7 @@ lives under **Backlog (tracked, not scheduled)** with everything else that is re
 Nothing about the content changed and no judgment about its value is implied; only its status. When
 an org buyer and the org to support them exist, it earns a number then.
 
-Amicus is at **v4.16.0** (2026-11-11). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.16.1** (2026-11-11). Each 4.x rev below leads with the benefit, not the
 plumbing; the patch releases (v4.9.1–v4.9.8 and v4.14.1–v4.14.3) carry no section of their own, because each corrected a
 defect rather than adding scope — where one added a surface (v4.9.4's `--thinking` refusals and
 `output-budget` doctor row, v4.9.5's Electron digest gate, v4.9.6's artifact custody, v4.9.7's dual name-table rescue boundary, v4.9.8's per-run seat tool allowlist and its unverified/refused seat census, v4.14.1's `none` conformance for a row nothing checked, v4.14.2's refusals of a council folder that already holds a run, of an Electron artifact the trusted table does not list and of a `path.txt` outside `dist/`, v4.14.3's re-test of a stored key from the setup window, which never hands the key to the window) it did so to
@@ -27,7 +27,7 @@ engine mint its own title, carrying the leg's full prompt at the leg's own outpu
 and reporting no usage at all), and v4.16.0 changed what a failed read may do (it may no
 longer overwrite the file it failed to read), so each gets a section. See `CHANGELOG.md` for what each one contained.
 
-**Status:** v4.0 through **v4.16.0** have **shipped**, plus the v4.9.1–v4.9.8, v4.14.1, v4.14.2 and v4.14.3 patch releases —
+**Status:** v4.0 through **v4.16.0** have **shipped**, plus the v4.9.1–v4.9.8, v4.14.1, v4.14.2, v4.14.3 and v4.16.1 patch releases —
 everything on this page is a record of what landed, not a plan. Composition — the scope that
 carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
 release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
