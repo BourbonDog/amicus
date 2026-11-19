@@ -15,14 +15,19 @@
  *   node scripts/build-social-card.js --render         // ...and render site/social-card.png (1200x630)
  *   node scripts/build-social-card.js --render --github <file.png>
  *                                                      // ...and a 1280x640 GitHub social preview
- *   --t <seconds>   frame of the 36 s round-table cycle to render (default 10.5, the verdict)
+ *   --t <seconds>   with --render or --github only: the frame of the 36 s round-table
+ *                   cycle to screenshot (default 10.5, the verdict). The render page
+ *                   itself always opens on the default frame.
  *
  * --render needs Chrome or Edge (set CHROME_PATH to override the lookup) and network
- * access for the page's Google Fonts. The GitHub social preview is not a repository
- * file: upload it under the repository's Settings > General > Social preview.
+ * access for the page's Google Fonts (Outfit, IBM Plex Mono). Before each screenshot it
+ * checks that both fonts loaded and stops with an error if they did not, rather than
+ * save a card in a fallback font. The GitHub social preview is not a repository file:
+ * upload it under the repository's Settings > General > Social preview.
  *
  * Library use:
- *   const { extractHeroAssets, buildCardHtml } = require('./scripts/build-social-card');
+ *   const { extractHeroAssets, buildCardHtml, fontsStatusFromDom, parseArgs } =
+ *     require('./scripts/build-social-card');
  */
 
 const fs = require('node:fs');
@@ -151,6 +156,16 @@ h1 em{font-style:normal;background:linear-gradient(135deg,var(--accent),var(--ac
   var svg = document.querySelector('.art svg');
   svg.pauseAnimations();
   svg.setCurrentTime(parseFloat(q.get('t') || '${t}'));
+  // Report whether the web fonts loaded; scripts/build-social-card.js reads this before
+  // it screenshots, so a card in a fallback font cannot pass silently.
+  document.fonts.ready.then(function () {
+    var loaded = {};
+    document.fonts.forEach(function (f) {
+      if (f.status === 'loaded') { loaded[f.family.split('"').join('').split("'").join('')] = true; }
+    });
+    var missing = ['Outfit', 'IBM Plex Mono'].filter(function (n) { return !loaded[n]; });
+    document.documentElement.setAttribute('data-fonts', missing.length ? 'missing:' + missing.join(',') : 'loaded');
+  });
 </script>
 </body>
 </html>
@@ -187,17 +202,88 @@ function pngSize(file) {
   return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
 }
 
-/** Screenshots the render page at w x h into outPath with headless Chrome. */
+/**
+ * Reads the render page's font report (the data-fonts attribute it sets on <html>)
+ * from a DOM dumped by headless Chrome.
+ * @param {string} dom serialized DOM
+ * @returns {string} 'loaded', 'missing:<families>', or 'unknown' when there is no report
+ */
+function fontsStatusFromDom(dom) {
+  const key = 'data-fonts="';
+  const start = dom.indexOf(key);
+  if (start < 0) {
+    return 'unknown';
+  }
+  const end = dom.indexOf('"', start + key.length);
+  const value = end < 0 ? '' : dom.slice(start + key.length, end);
+  return value || 'unknown';
+}
+
+/**
+ * Parses the CLI arguments; refuses unknown flags, missing values, and a --t that
+ * would have no effect.
+ * @param {string[]} argv
+ * @returns {{render: boolean, github: (string|undefined), t: (string|undefined)}}
+ */
+function parseArgs(argv) {
+  const out = { render: false, github: undefined, t: undefined };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--render') {
+      out.render = true;
+    } else if (arg === '--github' || arg === '--t') {
+      const value = argv[i + 1];
+      if (!value || value.startsWith('--')) {
+        throw new Error(`${arg} needs a value`);
+      }
+      if (arg === '--github') {
+        out.github = value;
+      } else {
+        out.t = value;
+      }
+      i++;
+    } else {
+      throw new Error(`unknown argument ${arg}`);
+    }
+  }
+  if (out.github) {
+    out.render = true;
+  }
+  if (out.t !== undefined) {
+    if (!out.render) {
+      throw new Error('--t only applies with --render or --github (it picks the frame to screenshot; the render page always opens on the default)');
+    }
+    if (!Number.isFinite(Number(out.t))) {
+      throw new Error(`--t must be a number of seconds, got ${out.t}`);
+    }
+  }
+  return out;
+}
+
+/**
+ * Screenshots the render page at w x h into outPath with headless Chrome, after a first
+ * pass confirms the page's web fonts loaded.
+ */
 function renderPng(outPath, w, h, t) {
   const chrome = findChrome();
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-card-'));
   const url = `${pathToFileURL(RENDER_PATH).href}?w=${w}&h=${h}${t === undefined ? '' : `&t=${t}`}`;
+  const common = [
+    '--headless=new', '--disable-gpu', '--hide-scrollbars',
+    `--user-data-dir=${profile}`, `--window-size=${w},${h}`, '--virtual-time-budget=8000',
+  ];
   try {
-    execFileSync(chrome, [
-      '--headless=new', '--disable-gpu', '--hide-scrollbars',
-      `--user-data-dir=${profile}`, `--window-size=${w},${h}`,
-      '--virtual-time-budget=8000', `--screenshot=${path.resolve(outPath)}`, url,
-    ], { stdio: 'pipe', timeout: 90000 });
+    const dom = execFileSync(chrome, [...common, '--dump-dom', url], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 90000,
+    });
+    const fonts = fontsStatusFromDom(dom);
+    if (fonts !== 'loaded') {
+      throw new Error(`web fonts did not load (${fonts}), so the card would render in a fallback font; `
+        + 'the render page loads Outfit and IBM Plex Mono from Google Fonts, so check network access and retry');
+    }
+    execFileSync(chrome, [...common, `--screenshot=${path.resolve(outPath)}`, url], {
+      stdio: 'pipe', timeout: 90000,
+    });
   } finally {
     try { fs.rmSync(profile, { recursive: true, force: true }); } catch { /* a locked profile file is harmless */ }
   }
@@ -209,24 +295,12 @@ function renderPng(outPath, w, h, t) {
 }
 
 function main(argv) {
-  const flag = (name) => argv.includes(name);
-  const value = (name) => {
-    const i = argv.indexOf(name);
-    if (i < 0) {
-      return undefined;
-    }
-    if (!argv[i + 1] || argv[i + 1].startsWith('--')) {
-      throw new Error(`${name} needs a value`);
-    }
-    return argv[i + 1];
-  };
-  const t = value('--t');
-  const github = value('--github');
+  const { render, github, t } = parseArgs(argv);
 
   fs.writeFileSync(RENDER_PATH, buildCardHtml(fs.readFileSync(INDEX_PATH, 'utf8')));
   console.log(`wrote ${path.relative(ROOT, RENDER_PATH)}`);
 
-  if (flag('--render') || github) {
+  if (render) {
     renderPng(CARD_PATH, 1200, 630, t);
     console.log(`rendered ${path.relative(ROOT, CARD_PATH)} (1200x630)`);
   }
@@ -245,4 +319,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { extractHeroAssets, buildCardHtml };
+module.exports = { extractHeroAssets, buildCardHtml, fontsStatusFromDom, parseArgs };

@@ -583,6 +583,16 @@ h1 em{font-style:normal;background:linear-gradient(135deg,var(--accent),var(--ac
   var svg = document.querySelector('.art svg');
   svg.pauseAnimations();
   svg.setCurrentTime(parseFloat(q.get('t') || '10.5'));
+  // Report whether the web fonts loaded; scripts/build-social-card.js reads this before
+  // it screenshots, so a card in a fallback font cannot pass silently.
+  document.fonts.ready.then(function () {
+    var loaded = {};
+    document.fonts.forEach(function (f) {
+      if (f.status === 'loaded') { loaded[f.family.split('"').join('').split("'").join('')] = true; }
+    });
+    var missing = ['Outfit', 'IBM Plex Mono'].filter(function (n) { return !loaded[n]; });
+    document.documentElement.setAttribute('data-fonts', missing.length ? 'missing:' + missing.join(',') : 'loaded');
+  });
 </script>
 </body>
 </html>
