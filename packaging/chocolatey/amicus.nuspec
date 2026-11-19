@@ -59,15 +59,17 @@
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <copyright>Copyright (c) 2026 Christian Wagner; Copyright (c) 2025 John Renaldi</copyright>
     <tags>amicus claude claude-code anthropic llm multi-model council mcp cli nodejs sidecar opencode</tags>
-    <summary>Multi-model LLM Council and parallel AI window for Claude Code.</summary>
+    <summary>Multi-model council for Claude: review your work or do a task, judged blind. Or fork any model.</summary>
     <description><![CDATA[
-Amicus is a multi-model LLM Council and parallel AI window for Claude Code, installed as a
-global npm CLI (`amicus` / `am`) plus an MCP server.
+Amicus is a multi-model AI council and ad-hoc sidecar for Claude, installed as a global
+npm CLI (`amicus` / `am`) plus an MCP server.
 
 Hand Claude a plan, a diff, or a design and say "council review this": Amicus routes it
 through several models from different families, has them anonymously cross-review each
-other, and a non-Claude chair synthesizes a verdict. Or fork a single conversation to
-Gemini, GPT, DeepSeek, or another model, work in parallel, and fold the result back.
+other, and a non-Claude chair synthesizes a verdict. Say "have the council work this out"
+and the same bench does the work instead, with the chair writing the answer. Or fork a
+single conversation to Gemini, GPT, DeepSeek, or another model, work in parallel, and fold
+the result back.
 
 This package installs the `amicus` npm package globally (`npm install -g amicus`) via its
 Node.js LTS dependency (`nodejs-lts`). It currently supports same-account elevation only:

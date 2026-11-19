@@ -443,6 +443,7 @@ electron/
 scripts/
 ├── benchmark-api-direct.js  # Direct OpenRouter API Benchmark for Thinking Levels
 ├── benchmark-thinking.js  # Benchmark Thinking Levels
+├── build-social-card.js  # Builds the site's link-preview card from the hero in site/index.html.
 ├── capture-mcp-schema.js
 ├── check-ci-alias-pins.js  # Drift gate for the CI alias map (.github/amicus-ci-aliases.json).
 ├── check-citations.js  # Cross-file citation enforcement for the pre-commit hook and the whole-tree

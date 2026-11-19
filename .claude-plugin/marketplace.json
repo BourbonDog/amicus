@@ -1,12 +1,12 @@
 {
   "name": "bourbondog-amicus",
   "owner": { "name": "Christian Wagner", "url": "https://github.com/BourbonDog" },
-  "metadata": { "description": "Amicus — multi-model LLM Council + parallel AI window for Claude Code." },
+  "metadata": { "description": "Amicus — a council of models from different families, convened by Claude." },
   "plugins": [
     {
       "name": "amicus",
       "source": "./",
-      "description": "Multi-model LLM Council + parallel AI window. Run structured council reviews across Gemini, GPT, DeepSeek and more — or fork a conversation to any model and fold the results back.",
+      "description": "Multi-model council for Claude: models from different families review your work or do a task, judge each other blind, and a chair writes the verdict. Or fork a conversation to any model and fold it back.",
       "author": { "name": "Christian Wagner" },
       "keywords": ["claude-code", "multi-model", "llm", "council", "second-opinion"]
     }
