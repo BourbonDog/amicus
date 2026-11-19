@@ -2,13 +2,9 @@
 
 # Amicus
 
-**A multi-model LLM Council for Claude — with a parallel AI window underneath.**
+**A council of models from different families, convened by Claude.**
 
 <p align="center"><img src="./docs/cards/council-hero.svg" width="560" alt="The Amicus council ritual across three convenings: independent review spokes, anonymous cross-review, and a non-Claude chair synthesizing the verdict — the third convening seats a local Qwen2.5-Coder on-device alongside cloud peers"></p>
-
-Hand Claude a plan, a design, a diff, an architecture decision, a manuscript — anything — and say *council review this*: Amicus routes it through several models from different families, has them anonymously cross-review each other, and a non-Claude chair synthesizes a verdict you turn into accept/deny edits. Or skip the ceremony and **fork** a single conversation to Gemini, GPT, DeepSeek, or any other model — it works in parallel with full context, and you **fold** the result back when you're ready. Claude orchestrates throughout; you stay in your editor.
-
-**The same council — more ways to run it:** take it **headless in CI** with no Claude runtime, sharpen it with a **debate round**, or run it on **free local models** (Ollama, LM Studio, vLLM) at **$0** — private and offline.
 
 [![npm version](https://img.shields.io/npm/v/amicus?color=D97757&labelColor=1A1C29)](https://www.npmjs.com/package/amicus)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?labelColor=1A1C29)](./LICENSE)
@@ -20,6 +16,14 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 > **Supported clients:** Claude Code CLI, Claude Desktop, and Claude Cowork are fully tested and supported. Claude Code web is experimental.
 
 </div>
+
+Ask Claude the same question twice and you get the same answer twice. Ask four models from four families and you get the disagreement, which is the part worth reading. Amicus seats several models on the same work and has each judge the others' output without knowing whose is whose. The final word goes to a chair that isn't the Claude running your session.
+
+- **Review:** hand Claude a plan, diff, design or manuscript and say *"council review this."* You get the chair's verdict and a tiered list of findings to accept or deny.
+- **Task:** say *"have the council work this out."* Every seat produces the deliverable, the bench ranks which one does the job best, and the chair writes the answer.
+- **Sidecar:** fork your conversation to one other model (Gemini, GPT, DeepSeek, or any other). It works in parallel with your full context, and you fold the result back.
+
+Any seat can be a local model (Ollama, LM Studio, vLLM) at $0, and the same council runs headless in CI with no Claude session.
 
 ---
 
@@ -53,7 +57,7 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 
 One install delivers six things that work together:
 
-- **The `second-opinion` LLM Council skill.** Structured multi-model review: independent reviews → anonymized peer cross-review → a non-Claude chair verdict → tiered accept/deny decisions. This is the hero.
+- **The `second-opinion` LLM Council skill.** Structured multi-model review: independent reviews → anonymized peer cross-review → a non-Claude chair verdict → tiered accept/deny decisions. In task mode the same pipeline produces the work instead: every seat drafts, the bench ranks the drafts, and the chair writes the answer. This is the hero.
 - **The `sidecar` chat skill.** Ad-hoc fork/work/fold — spin up one other model in a real window (or headless), work alongside it, fold the summary back.
 - **The `amicus` CLI (with an `am` alias) and an MCP server.** The engine underneath both skills: launches sessions, shares context, runs parallel waves, and exposes the same surface to Claude as MCP tools.
 - **A self-updating model catalog.** Aliases and validation resolve against a live catalog fetched from provider APIs (cached locally), so model names stay current without a hard-coded table.
@@ -131,7 +135,7 @@ The council is the hero — start with the everyday way, and reach for the more 
 - **Just ask, in Claude Code.** Hand Claude a plan, diff, design, or manuscript and say *"council review this."* The `second-opinion` skill runs the whole ritual above in your session, with no setup beyond your API keys. This is how most people use it. → [Quick start](#quick-start)
 - **Headless, in CI, with no Claude runtime.** `amicus council run --prompt-file plan.md --council free` runs that same pipeline in one command — reviews → cross-review → tally → chair verdict — writing `verdict.json` and `report.html`. It needs no Claude session, so it drops straight into CI. → [Headless council (CI)](#headless-council-ci)
 - **With a debate round.** Add `--debate` and every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw** while the disputing judges re-vote — exactly one rebuttal round, then the final tally. → [The Council](#the-council)
-- **On free, local, private models — at $0.** Point the council (and sidecars) at an OpenAI-compatible server already running on your machine — Ollama, LM Studio, or vLLM — with `amicus provider add`. No API key, no per-token bill, nothing leaves your machine, and it works offline. → [`amicus provider`](./docs/usage.md#amicus-provider)
+- **With local seats, at $0.** Any member, or any sidecar, can be a model on your own machine behind an OpenAI-compatible server (Ollama, LM Studio, or vLLM), added with `amicus provider add`. Local seats are full members: same prompt, same vote, no API key, no per-token bill. A local seat's material never leaves your machine, and a council that is local end to end, chair included, runs offline. → [`amicus provider`](./docs/usage.md#amicus-provider)
 - **Pointed at the work itself, not at a review of it.** Add `--intent task` and the same bench *produces* the deliverable instead of critiquing one. → [Task mode (v4.9)](#task-mode-v49)
 
 <p align="center"><img src="./docs/cards/same-table.svg" width="520" alt="A local Ollama model seated as an equal council member at $0.00 — a member, not a mode"></p>
