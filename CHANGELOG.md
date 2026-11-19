@@ -3,6 +3,23 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [4.16.2] - 2026-11-19
+
+### Changed
+
+- **The README opens with what Amicus does today.** The old opening described the council as a
+  reviewer only (task mode shipped in 4.9.0), framed local models as a separate mode, and put the
+  sidecar "underneath" the council. It now says why several model families beat one, then the
+  three ways to use Amicus (review, task, sidecar), then local seats and headless CI. The
+  "What is Amicus" council entry now covers task mode, and the local-models entry says a local
+  seat is a full member and claims offline only for a council that is local end to end, chair
+  included. (#305)
+- **The package listings describe task work as well as review.** The descriptions in
+  `package.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `server.json`
+  and the Chocolatey `amicus.nuspec` drop "parallel AI window" and say the council can do a task,
+  not only review one. npm, the Claude plugin directory, the MCP Registry and Chocolatey show the
+  new text from this release. (#305)
+
 ## [4.16.1] - 2026-11-11
 
 ### Changed

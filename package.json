@@ -1,6 +1,6 @@
 {
   "name": "amicus",
-  "version": "4.16.1",
+  "version": "4.16.2",
   "mcpName": "io.github.BourbonDog/amicus",
   "description": "Multi-model council for Claude: models from different families review your work or do a task, judge each other blind, and a chair writes the verdict. Or fork a conversation to any model and fold it back.",
   "keywords": [
