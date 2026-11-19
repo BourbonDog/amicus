@@ -17,8 +17,9 @@ All notable changes to Amicus are documented here. Format follows
 - **The package listings describe task work as well as review.** The descriptions in
   `package.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `server.json`
   and the Chocolatey `amicus.nuspec` drop "parallel AI window" and say the council can do a task,
-  not only review one. npm, the Claude plugin directory, the MCP Registry and Chocolatey show the
-  new text from this release. (#305)
+  not only review one. npm and the MCP Registry show the new text from this release. The plugin
+  manifests take effect for anyone who adds the Amicus marketplace from the repository; the
+  Chocolatey package is not published yet and will carry the new text when it is. (#305)
 
 ## [4.16.1] - 2026-11-11
 
